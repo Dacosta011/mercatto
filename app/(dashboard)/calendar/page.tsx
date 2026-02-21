@@ -31,7 +31,7 @@ interface LeagueState {
   currentFixtures: Fixture[];
   allFixtures: Fixture[];
   restMember: MemberInfo | null;
-  myDiscipline: { yellows: number; reds: number; suspended: boolean; yellowsToSuspension: number };
+  myDiscipline: { yellows: number; reds: number; suspended: boolean; yellowsToSuspension: number; suspendedPlayers?: { playerName: string; reason: string; matchesRemaining: number }[] };
   currentMatchdayFinished: boolean;
 }
 
@@ -105,7 +105,7 @@ export default function CalendarPage() {
   const [squads, setSquads] = useState<{ home: SquadData | null; away: SquadData | null } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [closingMatchday, setClosingMatchday] = useState(false);
-  const [suspensionWarning, setSuspensionWarning] = useState<{ fixtureId: string; players: string[] } | null>(null);
+  const [suspensionWarning, setSuspensionWarning] = useState<{ fixtureId: string; players: { playerName: string; reason: string; matchesRemaining: number }[] } | null>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
   const fetchingRef = useRef(false);
 
@@ -431,10 +431,10 @@ export default function CalendarPage() {
               </div>
 
               <div className="flex flex-col gap-2">
-                {suspensionWarning.players.map((name, i) => (
+                {suspensionWarning.players.map((p, i) => (
                   <div key={i} className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-[#EF4444]/8 border border-[#EF4444]/20">
                     <div className="w-3 h-4 bg-[#EF4444] rounded-sm shrink-0" />
-                    <span className="text-[#F3F4F6] text-sm font-semibold">{name}</span>
+                    <span className="text-[#F3F4F6] text-sm font-semibold">{p.playerName}</span>
                     <span className="ml-auto text-[#EF4444] text-[10px] font-bold uppercase tracking-wide">Sancionado</span>
                   </div>
                 ))}
