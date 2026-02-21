@@ -15,14 +15,14 @@ interface Member {
   team: { name: string } | null;
 }
 
-interface Tournament {
-  id: string;
-  name: string;
-  code: string;
-  status: "lobby" | "draft" | "market" | "complete";
-  createdAt: string;
-  members: Member[];
-}
+  interface Tournament {
+    id: string;
+    name: string;
+    code: string;
+    status: "lobby" | "draft" | "market" | "league" | "complete";
+    createdAt: string;
+    members: Member[];
+  }
 
 function formatBudget(value: number | null | undefined) {
   if (!value || isNaN(value)) return "—";
@@ -37,10 +37,96 @@ function StatusBadge({ status }: { status: Tournament["status"] }) {
     lobby: { label: "Lobby abierto", status: "active" },
     draft: { label: "Draft", status: "pending" },
     market: { label: "Mercado", status: "assigned" as any },
+    league: { label: "Liga activa", status: "assigned" as any },
     complete: { label: "Finalizado", status: "complete" },
   };
   const cfg = map[status];
   return <Badge status={cfg.status} label={cfg.label} />;
+}
+
+// ── AdminAction card ──────────────────────────────────────────────────────────
+interface AdminActionProps {
+  icon: React.ReactNode;
+  label: string;
+  description: string;
+  color: string;
+  glow?: boolean;
+  available: boolean;
+  unavailableReason?: string;
+  loading?: boolean;
+  danger?: boolean;
+  href?: string;
+  confirmKey?: string;
+  confirmAction?: string | null;
+  setConfirmAction?: (key: string | null) => void;
+  onClick?: () => void;
+}
+
+function AdminAction({
+  icon, label, description, color, glow, available, unavailableReason,
+  loading, danger, href, confirmKey, confirmAction, setConfirmAction, onClick,
+}: AdminActionProps) {
+  const isConfirming = !!confirmKey && confirmAction === confirmKey;
+  const needsConfirm = danger && !!confirmKey;
+
+  const handleClick = () => {
+    if (!available || loading) return;
+    if (needsConfirm && !isConfirming) {
+      setConfirmAction?.(confirmKey!);
+      setTimeout(() => setConfirmAction?.(null), 4000);
+      return;
+    }
+    onClick?.();
+  };
+
+  const inner = (
+    <div
+      className={`relative flex flex-col gap-3 p-4 rounded-2xl border transition-all duration-200 h-full
+        ${available
+          ? isConfirming
+            ? "bg-[#EF4444]/8 border-[#EF4444]/40 cursor-pointer"
+            : "bg-[#131722] border-white/6 hover:bg-[#1A1F2E] hover:border-white/10 cursor-pointer"
+          : "bg-[#0D0F14] border-white/4 opacity-50 cursor-not-allowed"
+        }`}
+      style={glow && available ? { boxShadow: `0 0 20px ${color}18` } : undefined}
+    >
+      {/* Icon */}
+      <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-all duration-200"
+        style={{ background: `${color}18`, color: available ? color : "#6B7280", border: `1px solid ${color}25` }}>
+        {loading ? (
+          <span className="w-4 h-4 border border-current border-t-transparent rounded-full animate-spin" />
+        ) : icon}
+      </div>
+
+      {/* Text */}
+      <div className="flex-1 min-w-0">
+        <p className="text-[#F3F4F6] text-sm font-semibold leading-tight mb-0.5">
+          {isConfirming ? "¿Confirmar?" : label}
+        </p>
+        <p className="text-[10px] leading-relaxed" style={{ color: available ? "#9CA3AF" : "#6B7280" }}>
+          {isConfirming ? "Esta acción no se puede deshacer fácilmente" : unavailableReason ?? description}
+        </p>
+      </div>
+
+      {/* Status dot */}
+      {!available && (
+        <div className="absolute top-3 right-3 w-2 h-2 rounded-full bg-[#374151]" />
+      )}
+      {available && !isConfirming && (
+        <div className="absolute top-3 right-3 w-2 h-2 rounded-full animate-pulse"
+          style={{ background: color, boxShadow: `0 0 6px ${color}` }} />
+      )}
+      {isConfirming && (
+        <div className="absolute top-3 right-3 w-2 h-2 rounded-full bg-[#EF4444] animate-ping" />
+      )}
+    </div>
+  );
+
+  if (href && available) {
+    return <Link href={href} className="h-full">{inner}</Link>;
+  }
+
+  return <div onClick={handleClick}>{inner}</div>;
 }
 
 export default function LobbyPage() {
@@ -51,7 +137,12 @@ export default function LobbyPage() {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [endingTournament, setEndingTournament] = useState(false);
-  const [confirmEnd, setConfirmEnd] = useState(false);
+
+  const [startingMarket, setStartingMarket] = useState(false);
+  const [startingLeague, setStartingLeague] = useState(false);
+  const [resettingMarket, setResettingMarket] = useState(false);
+  const [resettingLeague, setResettingLeague] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
@@ -115,29 +206,83 @@ export default function LobbyPage() {
     }
   };
 
+  // Iniciar liga/torneo
+  const handleStartLeague = async () => {
+    if (!adminToken) return;
+    setStartingLeague(true);
+    try {
+      const res = await fetch(`/api/tournaments/${code}/league/start`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      if (res.ok) {
+        setTournament((t) => (t ? { ...t, status: "league" } : t));
+      }
+    } finally {
+      setStartingLeague(false);
+    }
+  };
+
+  // Iniciar mercado
+  const handleStartMarket = async () => {
+    if (!adminToken) return;
+    setStartingMarket(true);
+    try {
+      const res = await fetch(`/api/tournaments/${code}/market/start`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      if (res.ok) {
+        setTournament((t) => (t ? { ...t, status: "market" } : t));
+      }
+    } finally {
+      setStartingMarket(false);
+    }
+  };
+
+  // Reiniciar mercado
+  const handleResetMarket = async () => {
+    if (!adminToken) return;
+    setResettingMarket(true);
+    try {
+      const res = await fetch(`/api/tournaments/${code}/market/reset`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      if (res.ok) {
+        setTournament((t) => (t ? { ...t, status: "lobby" } : t));
+      }
+    } finally { setResettingMarket(false); setConfirmAction(null); }
+  };
+
+  // Reiniciar liga
+  const handleResetLeague = async () => {
+    if (!adminToken) return;
+    setResettingLeague(true);
+    try {
+      const res = await fetch(`/api/tournaments/${code}/league/reset`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      if (res.ok) {
+        setTournament((t) => (t ? { ...t, status: "lobby" } : t));
+      }
+    } finally { setResettingLeague(false); setConfirmAction(null); }
+  };
+
   // Finalizar torneo
   const handleEndTournament = async () => {
-    if (!confirmEnd) {
-      setConfirmEnd(true);
-      setTimeout(() => setConfirmEnd(false), 4000);
-      return;
-    }
-    setConfirmEnd(false);
     setEndingTournament(true);
     try {
       const res = await fetch(`/api/tournaments/${code}`, {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${adminToken}`,
-        },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
         body: JSON.stringify({ status: "complete" }),
       });
-      if (res.ok) {
-        setTournament((t) => (t ? { ...t, status: "complete" } : t));
-      }
+      if (res.ok) setTournament((t) => (t ? { ...t, status: "complete" } : t));
     } finally {
       setEndingTournament(false);
+      setConfirmAction(null);
     }
   };
 
@@ -239,58 +384,16 @@ export default function LobbyPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            onClick={() => fetchTournament(true)}
-            disabled={refreshing}
-            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-[#131722] border border-white/[0.06] hover:bg-[#1A1F2E] text-[#9CA3AF] hover:text-[#F3F4F6] text-xs font-medium transition-all duration-200 disabled:opacity-50 cursor-pointer"
-          >
-            <svg
-              width="13"
-              height="13"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className={refreshing ? "animate-spin" : ""}
-            >
-              <polyline points="23 4 23 10 17 10" />
-              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
-            </svg>
-            Actualizar
-          </button>
-
-          {isAdmin && tournament.status === "lobby" && (
-            <div className="flex items-center gap-2">
-              <Link href={`/roulette?tournament=${tournament.code}`}>
-                <Button variant="primary" size="sm">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="10" />
-                    <polyline points="12 6 12 12 16 14" />
-                  </svg>
-                  Iniciar Draft
-                </Button>
-              </Link>
-
-              <button
-                onClick={handleEndTournament}
-                disabled={endingTournament}
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition-all duration-200 cursor-pointer border
-                  ${confirmEnd
-                    ? "bg-[#EF4444]/15 border-[#EF4444]/40 text-[#EF4444]"
-                    : "bg-[#131722] border-white/[0.06] text-[#9CA3AF] hover:text-[#EF4444] hover:border-[#EF4444]/30"
-                  }`}
-              >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="3" width="18" height="18" rx="2" />
-                </svg>
-                {confirmEnd ? "¿Confirmar?" : "Finalizar"}
-              </button>
-            </div>
-          )}
-        </div>
+        <button
+          onClick={() => fetchTournament(true)}
+          disabled={refreshing}
+          className="flex items-center gap-2 px-3 py-2 rounded-xl bg-[#131722] border border-white/6 hover:bg-[#1A1F2E] text-[#9CA3AF] hover:text-[#F3F4F6] text-xs font-medium transition-all duration-200 disabled:opacity-50 cursor-pointer shrink-0"
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={refreshing ? "animate-spin" : ""}>
+            <polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+          </svg>
+          Actualizar
+        </button>
       </div>
 
       {/* Progress card */}
@@ -328,6 +431,105 @@ export default function LobbyPage() {
           </span>
         </div>
       </div>
+
+      {/* ── Admin Control Panel ──────────────────────────────────────────── */}
+      {isAdmin && (
+        <div className="mb-6">
+          {/* Panel header */}
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+              style={{ background: "linear-gradient(135deg,#7C3AED,#8B5CF6)", boxShadow: "0 0 12px #8B5CF640" }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+              </svg>
+            </div>
+            <div>
+              <p className="text-[#F3F4F6] text-sm font-bold">Panel de Control</p>
+              <p className="text-[#9CA3AF] text-[10px]">Acciones exclusivas de administrador</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+            {/* Iniciar Mercado */}
+            <AdminAction
+              icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>}
+              label="Iniciar Mercado"
+              description="Abre las rondas de fichajes"
+              color="#22C55E"
+              available={tournament.status === "lobby" && tournament.members.every(m => m.team !== null)}
+              unavailableReason={
+                tournament.status !== "lobby" ? "Solo en fase lobby" :
+                !tournament.members.every(m => m.team !== null) ? "Todos deben tener equipo" : undefined
+              }
+              loading={startingMarket}
+              onClick={handleStartMarket}
+            />
+
+            {/* Reiniciar Mercado */}
+            <AdminAction
+              icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>}
+              label="Reiniciar Mercado"
+              description="Borra el mercado actual y vuelve al lobby"
+              color="#F59E0B"
+              available={tournament.status === "market"}
+              unavailableReason={tournament.status !== "market" ? "Solo durante el mercado" : undefined}
+              loading={resettingMarket}
+              danger
+              confirmKey="reset-market"
+              confirmAction={confirmAction}
+              setConfirmAction={setConfirmAction}
+              onClick={handleResetMarket}
+            />
+
+            {/* Iniciar Torneo */}
+            <AdminAction
+              icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>}
+              label="Iniciar Torneo"
+              description="Genera el calendario de liga"
+              color="#8B5CF6"
+              glow
+              available={(tournament.status === "lobby" || tournament.status === "market") && tournament.members.every(m => m.team !== null)}
+              unavailableReason={
+                tournament.status === "league" ? "Liga ya iniciada" :
+                !tournament.members.every(m => m.team !== null) ? "Todos deben tener equipo" : undefined
+              }
+              loading={startingLeague}
+              onClick={handleStartLeague}
+            />
+
+            {/* Reiniciar Liga */}
+            <AdminAction
+              icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.65"/></svg>}
+              label="Reiniciar Liga"
+              description="Borra la liga y vuelve al lobby"
+              color="#F59E0B"
+              available={tournament.status === "league"}
+              unavailableReason={tournament.status !== "league" ? "Solo durante la liga" : undefined}
+              loading={resettingLeague}
+              danger
+              confirmKey="reset-league"
+              confirmAction={confirmAction}
+              setConfirmAction={setConfirmAction}
+              onClick={handleResetLeague}
+            />
+
+            {/* Finalizar Torneo */}
+            <AdminAction
+              icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>}
+              label="Finalizar Torneo"
+              description="Cierra el torneo definitivamente"
+              color="#EF4444"
+              available={true}
+              loading={endingTournament}
+              danger
+              confirmKey="end-tournament"
+              confirmAction={confirmAction}
+              setConfirmAction={setConfirmAction}
+              onClick={handleEndTournament}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Participants table */}
       <div className="bg-[#131722] rounded-2xl border border-white/[0.04] overflow-hidden">

@@ -14,6 +14,8 @@ interface Player {
   countryName: string;
   price: number;
   clause: number;
+  headshotUrl?: string | null;
+  newSigning?: boolean;
 }
 
 interface SquadData {
@@ -238,16 +240,32 @@ export default function SquadPage() {
                   >
                     {/* Jugador */}
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-xl bg-[#0D0F14] border border-white/5 flex items-center justify-center shrink-0">
-                        <span className="text-[#9CA3AF] text-[10px] font-mono font-bold">
-                          {player.position?.slice(0, 2) ?? "—"}
-                        </span>
+                      <div className="w-8 h-8 rounded-xl bg-[#0D0F14] border border-white/5 flex items-center justify-center shrink-0 overflow-hidden">
+                        {player.headshotUrl ? (
+                          <img src={player.headshotUrl} alt={player.name} className="w-full h-full object-contain object-bottom" />
+                        ) : (
+                          <span className="text-[#9CA3AF] text-[10px] font-mono font-bold">
+                            {player.position?.slice(0, 2) ?? "—"}
+                          </span>
+                        )}
                       </div>
-                      <div>
-                        <p className="text-[#F3F4F6] text-sm font-medium leading-tight">
-                          {player.name}
-                        </p>
-                        <p className="text-[#9CA3AF] text-xs mt-0.5">{player.position}</p>
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="min-w-0">
+                          <p className="text-[#F3F4F6] text-sm font-medium leading-tight truncate">
+                            {player.name}
+                          </p>
+                          <p className="text-[#9CA3AF] text-xs mt-0.5">{player.position}</p>
+                        </div>
+                        {player.newSigning && (
+                          <span className="shrink-0 self-center inline-flex items-center gap-1 text-[11px] font-black px-3 py-1 rounded-full uppercase tracking-widest"
+                            style={{
+                              background: "linear-gradient(135deg, #7C3AED, #8B5CF6)",
+                              color: "#fff",
+                              boxShadow: "0 0 14px #8B5CF670",
+                            }}>
+                            ✦ Fichaje
+                          </span>
+                        )}
                       </div>
                     </div>
 
