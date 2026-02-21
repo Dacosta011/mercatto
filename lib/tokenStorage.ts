@@ -57,9 +57,37 @@ export function getLastTournamentCode(): string | null {
   return localStorage.getItem(LAST_TOURNAMENT_KEY);
 }
 
+// ─── Display name + rol del participante ─────────────────────────────────────
+
+const DISPLAY_NAME_KEY = (tournamentCode: string) =>
+  `mercatto:displayName:${tournamentCode}`;
+
+const ROLE_KEY = (tournamentCode: string) =>
+  `mercatto:role:${tournamentCode}`;
+
+export function saveUserProfile(
+  tournamentCode: string,
+  displayName: string,
+  role: "admin" | "member"
+) {
+  localStorage.setItem(DISPLAY_NAME_KEY(tournamentCode), displayName);
+  localStorage.setItem(ROLE_KEY(tournamentCode), role);
+}
+
+export function getDisplayName(tournamentCode: string): string | null {
+  return localStorage.getItem(DISPLAY_NAME_KEY(tournamentCode));
+}
+
+export function getRole(tournamentCode: string): "admin" | "member" | null {
+  const r = localStorage.getItem(ROLE_KEY(tournamentCode));
+  return r === "admin" || r === "member" ? r : null;
+}
+
 // ─── Limpiar (logout de un torneo) ───────────────────────────────────────────
 
 export function clearTournamentTokens(tournamentCode: string) {
   localStorage.removeItem(ADMIN_KEY(tournamentCode));
   localStorage.removeItem(MEMBER_KEY(tournamentCode));
+  localStorage.removeItem(DISPLAY_NAME_KEY(tournamentCode));
+  localStorage.removeItem(ROLE_KEY(tournamentCode));
 }

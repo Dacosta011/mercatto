@@ -3,27 +3,51 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSyncExternalStore } from "react";
-import { getLastTournamentCode, hasTeamAssignment } from "@/lib/tokenStorage";
+import { getLastTournamentCode, hasTeamAssignment, getDisplayName, getRole } from "@/lib/tokenStorage";
 
 // Cache a nivel de módulo — useSyncExternalStore requiere referencia estable.
 let _lastCode: string | null = undefined as unknown as null;
 let _lastHasTeam: boolean = false;
-let _cachedSession = { lobbyHref: "/lobby", has: false, hasTeam: false };
+let _lastDisplayName: string | null = null;
+let _lastRole: string | null = null;
+let _cachedSession = {
+  lobbyHref: "/lobby",
+  has: false,
+  hasTeam: false,
+  displayName: null as string | null,
+  role: null as string | null,
+};
 
 function getSessionSnapshot() {
   const code = getLastTournamentCode();
   const hasTeam = code ? hasTeamAssignment(code) : false;
-  if (code !== _lastCode || hasTeam !== _lastHasTeam) {
+  const displayName = code ? getDisplayName(code) : null;
+  const role = code ? getRole(code) : null;
+
+  if (
+    code !== _lastCode ||
+    hasTeam !== _lastHasTeam ||
+    displayName !== _lastDisplayName ||
+    role !== _lastRole
+  ) {
     _lastCode = code;
     _lastHasTeam = hasTeam;
+    _lastDisplayName = displayName;
+    _lastRole = role;
     _cachedSession = code
-      ? { lobbyHref: `/lobby/${code}`, has: true, hasTeam }
-      : { lobbyHref: "/lobby", has: false, hasTeam: false };
+      ? { lobbyHref: `/lobby/${code}`, has: true, hasTeam, displayName, role }
+      : { lobbyHref: "/lobby", has: false, hasTeam: false, displayName: null, role: null };
   }
   return _cachedSession;
 }
 
-const SERVER_SESSION = { lobbyHref: "/lobby", has: false, hasTeam: false };
+const SERVER_SESSION = {
+  lobbyHref: "/lobby",
+  has: false,
+  hasTeam: false,
+  displayName: null as string | null,
+  role: null as string | null,
+};
 
 interface NavItem {
   href: string;
@@ -75,18 +99,33 @@ const navItems: NavItem[] = [
     href: "/market",
     label: "Mercado",
     icon: (active) => (
-      <svg
-        width="18"
-        height="18"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke={active ? "#8B5CF6" : "#9CA3AF"}
-        strokeWidth="1.75"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+        stroke={active ? "#8B5CF6" : "#9CA3AF"} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
         <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
         <polyline points="16 7 22 7 22 13" />
+      </svg>
+    ),
+  },
+  {
+    href: "/calendar",
+    label: "Calendario",
+    icon: (active) => (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+        stroke={active ? "#8B5CF6" : "#9CA3AF"} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+        <line x1="16" y1="2" x2="16" y2="6"/>
+        <line x1="8" y1="2" x2="8" y2="6"/>
+        <line x1="3" y1="10" x2="21" y2="10"/>
+      </svg>
+    ),
+  },
+  {
+    href: "/table",
+    label: "Clasificación",
+    icon: (active) => (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+        stroke={active ? "#8B5CF6" : "#9CA3AF"} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/>
       </svg>
     ),
   },
@@ -136,7 +175,7 @@ const quickItems: NavItem[] = [
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const { lobbyHref, has: hasTournament, hasTeam } = useSyncExternalStore(
+  const { lobbyHref, has: hasTournament, hasTeam, displayName, role } = useSyncExternalStore(
     () => () => {},
     getSessionSnapshot,
     () => SERVER_SESSION
@@ -261,32 +300,46 @@ export default function Sidebar() {
 
       {/* User area */}
       <div className="p-3 border-t border-white/4">
-        <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-[#1A1F2E] transition-colors duration-200 cursor-pointer">
-          <div className="w-7 h-7 rounded-full bg-linear-to-br from-[#8B5CF6] to-[#6D28D9] flex items-center justify-center shrink-0">
-            <span className="text-white text-xs font-semibold">D</span>
+        {displayName ? (
+          <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-[#0D0F14]/60">
+            <div className="w-8 h-8 rounded-full bg-linear-to-br from-[#8B5CF6] to-[#6D28D9] flex items-center justify-center shrink-0 shadow-md shadow-[#8B5CF6]/20">
+              <span className="text-white text-xs font-bold">
+                {displayName.charAt(0).toUpperCase()}
+              </span>
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[#F3F4F6] text-xs font-semibold truncate leading-tight">
+                {displayName}
+              </p>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                {role === "admin" ? (
+                  <>
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#F59E0B] shrink-0" />
+                    <span className="text-[#F59E0B] text-[10px] font-medium">Admin</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E] shrink-0" />
+                    <span className="text-[#22C55E] text-[10px] font-medium">Participante</span>
+                  </>
+                )}
+              </div>
+            </div>
           </div>
-          <div className="min-w-0">
-            <p className="text-[#F3F4F6] text-xs font-medium truncate">
-              David
-            </p>
-            <p className="text-[#9CA3AF] text-[10px]">Administrador</p>
+        ) : (
+          <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl">
+            <div className="w-8 h-8 rounded-full bg-white/5 border border-white/8 flex items-center justify-center shrink-0">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
+            </div>
+            <div className="min-w-0">
+              <p className="text-[#9CA3AF] text-xs font-medium">Sin sesión</p>
+              <p className="text-[#9CA3AF]/50 text-[10px]">Crea o únete a un torneo</p>
+            </div>
           </div>
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="#9CA3AF"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="ml-auto shrink-0"
-          >
-            <circle cx="12" cy="12" r="1" />
-            <circle cx="12" cy="5" r="1" />
-            <circle cx="12" cy="19" r="1" />
-          </svg>
-        </div>
+        )}
       </div>
     </aside>
   );

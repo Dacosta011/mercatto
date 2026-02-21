@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "motion/react";
 import Link from "next/link";
 import FormInput from "../../Components/FormInput";
 import Button from "../../Components/Button";
-import { saveMemberToken } from "@/lib/tokenStorage";
+import { saveMemberToken, saveUserProfile } from "@/lib/tokenStorage";
 
 type Phase = "form" | "success";
 
@@ -102,6 +102,7 @@ export default function JoinTournamentPage() {
 
       // Guardar token y redirigir a la ruleta directamente
       saveMemberToken(data.code, data.memberToken);
+      saveUserProfile(data.code, displayName.trim(), "member");
       router.push(`/roulette/${data.code}`);
     } catch {
       setErrors({ api: "No se pudo conectar con el servidor." });

@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "motion/react";
 import Link from "next/link";
 import FormInput from "../../Components/FormInput";
 import Button from "../../Components/Button";
-import { saveAdminToken, saveMemberToken } from "@/lib/tokenStorage";
+import { saveAdminToken, saveMemberToken, saveUserProfile } from "@/lib/tokenStorage";
 
 type Phase = "form" | "success";
 
@@ -105,6 +105,7 @@ export default function CreateTournamentPage() {
       if (tournament.memberToken) {
         saveMemberToken(tournament.code, tournament.memberToken);
       }
+      saveUserProfile(tournament.code, displayName.trim(), "admin");
       // Ir directo a la ruleta para que el admin también gire
       router.push(`/roulette/${tournament.code}`);
     } catch {
