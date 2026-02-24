@@ -63,9 +63,6 @@ export default function PhaseRedirectGuard() {
     }
     fetchStatus();
 
-    // ── Polling fallback: check status every 4s ─────────────────────────
-    const statusPoll = setInterval(fetchStatus, 4_000);
-
     // ── Realtime: instant phase changes ─────────────────────────────────
     const phaseChannel = supabase
       .channel(`phase-redirect-${code}`)
@@ -82,7 +79,6 @@ export default function PhaseRedirectGuard() {
     // ── Self-deletion detection ────────────────────────────────────────────
     const myMemberId = getMemberId(code);
     let kickChannel: ReturnType<typeof supabase.channel> | null = null;
-    let kickPoll: ReturnType<typeof setInterval> | null = null;
 
     function handleKick() {
       clearTournamentTokens(code!);
@@ -103,25 +99,10 @@ export default function PhaseRedirectGuard() {
           handleKick,
         )
         .subscribe();
-
-      kickPoll = setInterval(async () => {
-        try {
-          const token = localStorage.getItem(`mercatto:member:${code}`);
-          if (!token) return;
-          const r = await fetch(`/api/tournaments/${code}/me`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          if (r.status === 401 || r.status === 403) {
-            handleKick();
-          }
-        } catch { /* ignore */ }
-      }, 5_000);
     }
 
     return () => {
       cancelled = true;
-      clearInterval(statusPoll);
-      if (kickPoll) clearInterval(kickPoll);
       supabase.removeChannel(phaseChannel);
       if (kickChannel) supabase.removeChannel(kickChannel);
     };
