@@ -785,7 +785,14 @@ export default function IconAuction({ code, token, adminToken, myMemberId, sessi
                     <input
                       type="number"
                       value={bidAmount}
-                      onChange={(e) => setBidAmount(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "-" || e.key === "e") e.preventDefault(); }}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        if (raw === "") { setBidAmount(""); return; }
+                        const n = parseFloat(raw);
+                        if (isNaN(n) || n < 0) return;
+                        setBidAmount(raw);
+                      }}
                       placeholder={`${minNextBid / 1_000_000}`}
                       className="flex-1 bg-transparent text-[#F3F4F6] text-sm py-3 outline-none"
                     />
@@ -795,13 +802,16 @@ export default function IconAuction({ code, token, adminToken, myMemberId, sessi
                   {bidExceedsBudget && (
                     <p className="text-[#EF4444] text-xs font-medium -mt-1">Supera tu presupuesto de {fmt(myBudget)}</p>
                   )}
+                  {!isNaN(parsedBidAmount) && parsedBidAmount > 0 && parsedBidAmount < minNextBid && !bidExceedsBudget && (
+                    <p className="text-[#F59E0B] text-xs font-medium -mt-1">La puja mínima es {fmt(minNextBid)}</p>
+                  )}
 
                   <div className="flex gap-3">
                     <button onClick={doPass} disabled={actionLoading}
                       className="flex-1 py-3 rounded-xl bg-[#EF4444]/10 hover:bg-[#EF4444]/20 border border-[#EF4444]/30 text-[#EF4444] text-sm font-semibold cursor-pointer transition-colors disabled:opacity-40">
                       {actionLoading ? "Retirando…" : "Retirarme"}
                     </button>
-                    <button onClick={doBid} disabled={!canBid || !bidAmount || actionLoading || !budgetOk || bidExceedsBudget}
+                    <button onClick={doBid} disabled={!canBid || !bidAmount || actionLoading || !budgetOk || bidExceedsBudget || parsedBidAmount < minNextBid}
                       className="flex-1 py-3 rounded-xl bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-sm font-semibold cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
                       {actionLoading ? "Pujando…" : "Pujar"}
                     </button>

@@ -25,6 +25,7 @@ export default function PhaseRedirectGuard() {
   const router      = useRouter();
   const pathname    = usePathname();
   const pathnameRef = useRef(pathname);
+  const prevStatusRef = useRef<TournamentStatus | null>(null);
 
   useEffect(() => { pathnameRef.current = pathname; }, [pathname]);
 
@@ -35,9 +36,14 @@ export default function PhaseRedirectGuard() {
     const supabase = getBrowserClient();
     let cancelled = false;
 
+    // Seed the ref from localStorage so we know the starting point
+    prevStatusRef.current = getTournamentStatus(code) ?? null;
+
     function maybeRedirect(newStatus: TournamentStatus) {
       if (cancelled) return;
-      const prev = getTournamentStatus(code!);
+
+      const prev = prevStatusRef.current;
+      prevStatusRef.current = newStatus;
       saveTournamentStatus(code!, newStatus);
 
       if (prev === newStatus) return;
@@ -52,7 +58,7 @@ export default function PhaseRedirectGuard() {
       router.push(dest);
     }
 
-    // ── Initial fetch: seed localStorage with current status ────────────
+    // ── Initial fetch: seed with current status ─────────────────────────
     async function fetchStatus() {
       try {
         const res = await fetch(`/api/tournaments/${code}`);
@@ -62,9 +68,6 @@ export default function PhaseRedirectGuard() {
       } catch { /* non-blocking */ }
     }
     fetchStatus();
-
-    // ── Polling fallback: check status every 4s ─────────────────────────
-    const statusPoll = setInterval(fetchStatus, 4_000);
 
     // ── Realtime: instant phase changes ─────────────────────────────────
     const phaseChannel = supabase
@@ -79,10 +82,9 @@ export default function PhaseRedirectGuard() {
       )
       .subscribe();
 
-    // ── Self-deletion detection ────────────────────────────────────────────
+    // ── Self-deletion detection (realtime only) ─────────────────────────
     const myMemberId = getMemberId(code);
     let kickChannel: ReturnType<typeof supabase.channel> | null = null;
-    let kickPoll: ReturnType<typeof setInterval> | null = null;
 
     function handleKick() {
       clearTournamentTokens(code!);
@@ -103,25 +105,10 @@ export default function PhaseRedirectGuard() {
           handleKick,
         )
         .subscribe();
-
-      kickPoll = setInterval(async () => {
-        try {
-          const token = localStorage.getItem(`mercatto:member:${code}`);
-          if (!token) return;
-          const r = await fetch(`/api/tournaments/${code}/me`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          if (r.status === 401 || r.status === 403) {
-            handleKick();
-          }
-        } catch { /* ignore */ }
-      }, 5_000);
     }
 
     return () => {
       cancelled = true;
-      clearInterval(statusPoll);
-      if (kickPoll) clearInterval(kickPoll);
       supabase.removeChannel(phaseChannel);
       if (kickChannel) supabase.removeChannel(kickChannel);
     };

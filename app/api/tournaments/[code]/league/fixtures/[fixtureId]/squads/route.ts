@@ -97,6 +97,26 @@ export async function GET(request: NextRequest, { params }: Params) {
     }
   }
 
+  // Get current matchday to determine suspended players
+  const { data: leagueSessionFull } = await supabase
+    .from("league_sessions")
+    .select("current_matchday")
+    .eq("id", sessionId)
+    .single();
+  const currentMatchday = (leagueSessionFull as any)?.current_matchday ?? 1;
+
+  const { data: suspensionsRaw } = await supabase
+    .from("suspensions")
+    .select("player_id, from_matchday, matches_remaining")
+    .eq("session_id", sessionId);
+
+  const suspendedPlayerIds = new Set(
+    (suspensionsRaw ?? [])
+      .filter((s: any) => s.player_id && s.from_matchday <= currentMatchday &&
+        s.from_matchday + s.matches_remaining > currentMatchday)
+      .map((s: any) => s.player_id)
+  );
+
   // Build squads for each member
   const result: Record<string, { memberId: string; displayName: string; teamName: string; players: any[] }> = {};
 
@@ -135,6 +155,7 @@ export async function GET(request: NextRequest, { params }: Params) {
         .order("ovr", { ascending: false });
       players = (playersData ?? []).map((p: any) => ({
         id: p.id, name: p.name, position: p.position ?? "—", ovr: p.ovr,
+        suspended: suspendedPlayerIds.has(p.id),
       }));
     }
 

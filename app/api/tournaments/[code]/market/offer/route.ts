@@ -60,6 +60,19 @@ export async function POST(request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Presupuesto insuficiente para esa oferta." }, { status: 422 });
   }
 
+  // Block if buyer already has a pending offer
+  const { data: existingOffer } = await supabase
+    .from("market_offers")
+    .select("id")
+    .eq("session_id", (session as any).id)
+    .eq("buyer_id", auth.memberId)
+    .eq("status", "pending")
+    .limit(1);
+
+  if ((existingOffer ?? []).length > 0) {
+    return NextResponse.json({ error: "Ya tienes una oferta pendiente. Espera a que sea respondida." }, { status: 409 });
+  }
+
   // Block offers on players already sold in this session
   const { data: alreadySold } = await supabase
     .from("market_transfers")

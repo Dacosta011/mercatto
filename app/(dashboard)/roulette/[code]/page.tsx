@@ -166,33 +166,6 @@ export default function RoulettePage() {
     return () => { supabase.removeChannel(channel); };
   }, [code, markTaken]);
 
-  // Polling fallback: refresh taken teams every 5s in case Realtime misses events
-  useEffect(() => {
-    if (phase === "locked" || phase === "loading") return;
-
-    const poll = async () => {
-      try {
-        const r = await fetch(`/api/tournaments/${code}/teams`);
-        if (!r.ok) return;
-        const available: Team[] = await r.json();
-        const availIds = new Set(available.map((t) => t.id));
-
-        setAllTeams((prev) => {
-          // Any team in our full list but NOT in available is taken
-          for (const t of prev) {
-            if (t.id && !availIds.has(t.id)) {
-              markTaken(t.id);
-            }
-          }
-          return prev;
-        });
-      } catch { /* silent */ }
-    };
-
-    const id = setInterval(poll, 5000);
-    return () => clearInterval(id);
-  }, [code, phase, markTaken]);
-
   // ── SlotStrip callback ────────────────────────────────────────────────────
   const handleTeamSelected = useCallback((winner: Team) => {
     setPendingTeam(winner as Team & { budget?: number });

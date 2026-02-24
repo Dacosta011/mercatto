@@ -95,15 +95,24 @@ export async function GET(request: NextRequest, { params }: Params) {
   // ── 4. My status ──────────────────────────────────────────────────────────
   const myMember = memberById[auth.memberId];
 
-  const { data: clauseOnMyTeam } = myTeamId
-    ? await supabase
-        .from("market_transfers")
-        .select("id")
-        .eq("session_id", (session as any).id)
-        .eq("seller_team_id", myTeamId)
-        .eq("transfer_type", "clause")
-        .limit(1)
-    : { data: [] };
+  const [{ data: clauseOnMyTeam }, { data: myPendingOffer }] = await Promise.all([
+    myTeamId
+      ? supabase
+          .from("market_transfers")
+          .select("id")
+          .eq("session_id", (session as any).id)
+          .eq("seller_team_id", myTeamId)
+          .eq("transfer_type", "clause")
+          .limit(1)
+      : Promise.resolve({ data: [] }),
+    supabase
+      .from("market_offers")
+      .select("id, player_id, amount")
+      .eq("session_id", (session as any).id)
+      .eq("buyer_id", auth.memberId)
+      .eq("status", "pending")
+      .limit(1),
+  ]);
 
   // ── 5. Clause-protected teams ─────────────────────────────────────────────
   const { data: protectedTransfers } = await supabase
@@ -283,6 +292,7 @@ export async function GET(request: NextRequest, { params }: Params) {
       myTeamId,
       myTeamName: myTeamId ? (teamNameById[myTeamId] ?? null) : null,
       teamClauseProtected: ((clauseOnMyTeam as any) ?? []).length > 0,
+      hasPendingOffer: ((myPendingOffer as any) ?? []).length > 0,
     },
     availablePlayers,
     recentTransfers,

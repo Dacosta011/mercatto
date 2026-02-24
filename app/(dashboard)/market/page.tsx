@@ -43,6 +43,7 @@ interface MyStatus {
   myTeamId: string | null;
   myTeamName: string | null;
   teamClauseProtected: boolean;
+  hasPendingOffer: boolean;
 }
 
 interface Offer {
@@ -477,7 +478,11 @@ export default function MarketPage() {
                 }
               </div>
               {data.isMyTurn && (
-                <p className="text-[#9CA3AF] text-xs mt-0.5">Compra una cláusula, haz una oferta o pasa el turno</p>
+                <p className="text-[#9CA3AF] text-xs mt-0.5">
+                  {data.myStatus.hasPendingOffer
+                    ? "Esperando respuesta a tu oferta…"
+                    : "Compra una cláusula, haz una oferta o pasa el turno"}
+                </p>
               )}
             </div>
           </div>
@@ -489,6 +494,14 @@ export default function MarketPage() {
               <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E] animate-pulse" />
               <span className="text-[#22C55E] text-[10px] font-semibold">En vivo</span>
             </div>
+            {data.myStatus.hasPendingOffer && (
+              <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#F59E0B]/10 border border-[#F59E0B]/20">
+                <svg className="animate-pulse w-3 h-3 text-[#F59E0B]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                </svg>
+                <span className="text-[#F59E0B] text-xs font-medium">Oferta enviada</span>
+              </div>
+            )}
             {data.incomingOffers.length > 0 && (
               <button onClick={() => setModal("offers")}
                 className="relative flex items-center gap-2 px-3 py-2 rounded-xl bg-[#F59E0B]/10 border border-[#F59E0B]/25 text-[#F59E0B] text-xs font-medium hover:bg-[#F59E0B]/15 transition-colors cursor-pointer">
@@ -496,7 +509,7 @@ export default function MarketPage() {
                 {data.incomingOffers.length} oferta{data.incomingOffers.length > 1 ? "s" : ""}
               </button>
             )}
-            {data.isMyTurn && (
+            {data.isMyTurn && !data.myStatus.hasPendingOffer && (
               <button onClick={doSkip} disabled={actionLoading}
                 className="px-4 py-2 rounded-xl border border-white/10 text-[#9CA3AF] hover:text-[#F3F4F6] hover:border-white/20 text-xs font-medium transition-all cursor-pointer disabled:opacity-40">
                 Pasar turno
@@ -574,7 +587,7 @@ export default function MarketPage() {
                   <PlayerMarketCard
                     key={p.playerId}
                     player={p}
-                    canAct={data.isMyTurn && data.myStatus.purchasesUsed < 3}
+                    canAct={data.isMyTurn && data.myStatus.purchasesUsed < 3 && !data.myStatus.hasPendingOffer}
                     onClause={() => { setSelectedPlayer(p); setModal("clause"); setActionMsg(""); }}
                     onOffer={() => { setSelectedPlayer(p); setModal("offer"); setActionMsg(""); setOfferAmount(""); }}
                   />
