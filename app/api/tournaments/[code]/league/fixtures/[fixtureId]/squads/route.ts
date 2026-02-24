@@ -74,7 +74,7 @@ export async function GET(request: NextRequest, { params }: Params) {
         .from("market_transfers")
         .select("buyer_id, seller_team_id, player_id, transfer_type")
         .eq("session_id", (marketSession as any).id)
-        .in("transfer_type", ["clause", "offer"]);
+        .in("transfer_type", ["clause", "offer", "icon_auction"]);
 
       // Group by buyer member
       const buyerMap: Record<string, string[]> = {};

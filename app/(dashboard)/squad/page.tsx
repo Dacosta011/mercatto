@@ -19,7 +19,7 @@ interface Player {
 }
 
 interface SquadData {
-  team: { id: string; name: string; squadValue: number; budget: number };
+  team: { id: string; name: string; crestUrl: string | null; squadValue: number; budget: number };
   players: Player[];
   avgOvr: number;
 }
@@ -129,13 +129,18 @@ export default function SquadPage() {
     >
       {/* Header */}
       <div className="flex items-start justify-between mb-8">
-        <div>
-          <p className="text-[#9CA3AF] text-xs uppercase tracking-widest font-medium mb-1">
-            Mi Equipo
-          </p>
-          <h1 className="text-[#F3F4F6] text-2xl font-bold tracking-tight">
-            {team.name}
-          </h1>
+        <div className="flex items-center gap-4">
+          {team.crestUrl && (
+            <img src={team.crestUrl} alt={team.name} className="w-12 h-12 object-contain" />
+          )}
+          <div>
+            <p className="text-[#9CA3AF] text-xs uppercase tracking-widest font-medium mb-1">
+              Mi Equipo
+            </p>
+            <h1 className="text-[#F3F4F6] text-2xl font-bold tracking-tight">
+              {team.name}
+            </h1>
+          </div>
         </div>
       </div>
 

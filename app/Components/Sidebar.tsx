@@ -3,19 +3,25 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSyncExternalStore } from "react";
-import { getLastTournamentCode, hasTeamAssignment, getDisplayName, getRole } from "@/lib/tokenStorage";
+import { getLastTournamentCode, hasTeamAssignment, getDisplayName, getRole, getTeamAssignment, getTeamCrest, getTournamentStatus } from "@/lib/tokenStorage";
 
 // Cache a nivel de módulo — useSyncExternalStore requiere referencia estable.
 let _lastCode: string | null = undefined as unknown as null;
 let _lastHasTeam: boolean = false;
 let _lastDisplayName: string | null = null;
 let _lastRole: string | null = null;
+let _lastTeamName: string | null = null;
+let _lastTeamCrest: string | null = null;
+let _lastStatus: string | null = null;
 let _cachedSession = {
   lobbyHref: "/lobby",
   has: false,
   hasTeam: false,
   displayName: null as string | null,
   role: null as string | null,
+  teamName: null as string | null,
+  teamCrest: null as string | null,
+  status: null as string | null,
 };
 
 function getSessionSnapshot() {
@@ -23,20 +29,29 @@ function getSessionSnapshot() {
   const hasTeam = code ? hasTeamAssignment(code) : false;
   const displayName = code ? getDisplayName(code) : null;
   const role = code ? getRole(code) : null;
+  const teamName = code ? getTeamAssignment(code) : null;
+  const teamCrest = code ? getTeamCrest(code) : null;
+  const status = code ? getTournamentStatus(code) : null;
 
   if (
     code !== _lastCode ||
     hasTeam !== _lastHasTeam ||
     displayName !== _lastDisplayName ||
-    role !== _lastRole
+    role !== _lastRole ||
+    teamName !== _lastTeamName ||
+    teamCrest !== _lastTeamCrest ||
+    status !== _lastStatus
   ) {
     _lastCode = code;
     _lastHasTeam = hasTeam;
     _lastDisplayName = displayName;
     _lastRole = role;
+    _lastTeamName = teamName;
+    _lastTeamCrest = teamCrest;
+    _lastStatus = status;
     _cachedSession = code
-      ? { lobbyHref: `/lobby/${code}`, has: true, hasTeam, displayName, role }
-      : { lobbyHref: "/lobby", has: false, hasTeam: false, displayName: null, role: null };
+      ? { lobbyHref: `/lobby/${code}`, has: true, hasTeam, displayName, role, teamName, teamCrest, status }
+      : { lobbyHref: "/lobby", has: false, hasTeam: false, displayName: null, role: null, teamName: null, teamCrest: null, status: null };
   }
   return _cachedSession;
 }
@@ -47,6 +62,9 @@ const SERVER_SESSION = {
   hasTeam: false,
   displayName: null as string | null,
   role: null as string | null,
+  teamName: null as string | null,
+  teamCrest: null as string | null,
+  status: null as string | null,
 };
 
 interface NavItem {
@@ -175,8 +193,15 @@ const quickItems: NavItem[] = [
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const { lobbyHref, has: hasTournament, hasTeam, displayName, role } = useSyncExternalStore(
-    () => () => {},
+  const { lobbyHref, has: hasTournament, hasTeam, displayName, role, teamName, teamCrest, status } = useSyncExternalStore(
+    (cb) => {
+      window.addEventListener("mercatto:store-change", cb);
+      window.addEventListener("storage", cb);
+      return () => {
+        window.removeEventListener("mercatto:store-change", cb);
+        window.removeEventListener("storage", cb);
+      };
+    },
     getSessionSnapshot,
     () => SERVER_SESSION
   );
@@ -226,13 +251,24 @@ export default function Sidebar() {
 
               // "Mi Equipo" y "Mercado" requieren equipo asignado
               const requiresTeam = href === "/squad" || href === "/market";
-              const locked = requiresTeam && !hasTeam;
+              const noTeam = requiresTeam && !hasTeam;
+
+              // Mercado bloqueado durante liga; Calendario/Clasificación bloqueados durante mercado
+              const marketLocked = href === "/market" && status === "league";
+              const leagueLocked = (href === "/calendar" || href === "/table") && status === "market";
+
+              const locked = noTeam || marketLocked || leagueLocked;
 
               if (locked) {
+                const lockReason = noTeam
+                  ? "Debes girar la ruleta primero"
+                  : marketLocked
+                  ? "No disponible durante la liga"
+                  : "No disponible durante el mercado";
                 return (
                   <div
                     key={href}
-                    title="Debes girar la ruleta primero"
+                    title={lockReason}
                     className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium
                       text-[#9CA3AF]/30 cursor-not-allowed select-none"
                   >
@@ -302,15 +338,22 @@ export default function Sidebar() {
       <div className="p-3 border-t border-white/4">
         {displayName ? (
           <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-[#0D0F14]/60">
-            <div className="w-8 h-8 rounded-full bg-linear-to-br from-[#8B5CF6] to-[#6D28D9] flex items-center justify-center shrink-0 shadow-md shadow-[#8B5CF6]/20">
-              <span className="text-white text-xs font-bold">
-                {displayName.charAt(0).toUpperCase()}
-              </span>
-            </div>
+            {teamCrest ? (
+              <img src={teamCrest} alt={teamName ?? ""} className="w-8 h-8 object-contain shrink-0" />
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-linear-to-br from-[#8B5CF6] to-[#6D28D9] flex items-center justify-center shrink-0 shadow-md shadow-[#8B5CF6]/20">
+                <span className="text-white text-xs font-bold">
+                  {displayName.charAt(0).toUpperCase()}
+                </span>
+              </div>
+            )}
             <div className="min-w-0 flex-1">
               <p className="text-[#F3F4F6] text-xs font-semibold truncate leading-tight">
                 {displayName}
               </p>
+              {teamName && (
+                <p className="text-[#9CA3AF] text-[10px] truncate">{teamName}</p>
+              )}
               <div className="flex items-center gap-1.5 mt-0.5">
                 {role === "admin" ? (
                   <>

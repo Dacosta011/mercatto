@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "motion/react";
 import Link from "next/link";
 import FormInput from "../../Components/FormInput";
 import Button from "../../Components/Button";
-import { saveMemberToken, saveUserProfile } from "@/lib/tokenStorage";
+import { saveMemberToken, saveMemberId, saveUserProfile } from "@/lib/tokenStorage";
 
 type Phase = "form" | "success";
 
@@ -102,6 +102,7 @@ export default function JoinTournamentPage() {
 
       // Guardar token y redirigir a la ruleta directamente
       saveMemberToken(data.code, data.memberToken);
+      if (data.memberId) saveMemberId(data.code, data.memberId);
       saveUserProfile(data.code, displayName.trim(), "member");
       router.push(`/roulette/${data.code}`);
     } catch {

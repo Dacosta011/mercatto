@@ -42,6 +42,45 @@ SESSION.headers.update(HEADERS)
 def sql_escape(s: str) -> str:
     return s.replace("'", "''")
 
+
+def _round500k(v: int) -> int:
+    return round(v / 500_000) * 500_000
+
+
+def _calc_price_clause(ovr: int) -> tuple[int, int]:
+    """Return (price, clause) in euros based on OVR rating."""
+    import random
+    if ovr >= 91:
+        price  = 120_000_000 + (ovr - 91) * 20_000_000 + random.randint(0, 15_000_000)
+        clause = 200_000_000 + (ovr - 91) * 25_000_000 + random.randint(0, 20_000_000)
+    elif ovr >= 88:
+        price  = 70_000_000 + (ovr - 88) * 15_000_000 + random.randint(0, 10_000_000)
+        clause = 120_000_000 + (ovr - 88) * 15_000_000 + random.randint(0, 15_000_000)
+    elif ovr >= 85:
+        price  = 40_000_000 + (ovr - 85) * 10_000_000 + random.randint(0, 8_000_000)
+        clause = 70_000_000 + (ovr - 85) * 12_000_000 + random.randint(0, 10_000_000)
+    elif ovr >= 82:
+        price  = 20_000_000 + (ovr - 82) * 6_000_000 + random.randint(0, 5_000_000)
+        clause = 35_000_000 + (ovr - 82) * 8_000_000 + random.randint(0, 7_000_000)
+    elif ovr >= 79:
+        price  = 10_000_000 + (ovr - 79) * 3_000_000 + random.randint(0, 3_000_000)
+        clause = 18_000_000 + (ovr - 79) * 4_000_000 + random.randint(0, 4_000_000)
+    elif ovr >= 76:
+        price  = 5_000_000 + (ovr - 76) * 1_500_000 + random.randint(0, 2_000_000)
+        clause = 9_000_000 + (ovr - 76) * 2_500_000 + random.randint(0, 3_000_000)
+    elif ovr >= 73:
+        price  = 2_000_000 + (ovr - 73) * 800_000 + random.randint(0, 1_000_000)
+        clause = 4_000_000 + (ovr - 73) * 1_200_000 + random.randint(0, 1_500_000)
+    else:
+        price  = 500_000 + max(ovr - 65, 0) * 150_000 + random.randint(0, 500_000)
+        clause = 1_500_000 + max(ovr - 65, 0) * 250_000 + random.randint(0, 800_000)
+
+    price  = _round500k(price)
+    clause = _round500k(clause)
+    if clause < price * 1.4:
+        clause = _round500k(int(price * 1.5))
+    return price, clause
+
 def walk(obj):
     """Recorre recursivamente dicts/listas y yield (key, value)."""
     if isinstance(obj, dict):
@@ -90,12 +129,51 @@ def find_team_name(data: dict, soup: BeautifulSoup) -> str:
             return clean_team_name(v)
     raise ValueError("No se pudo detectar el nombre del equipo.")
 
-def find_crest(data: dict) -> str | None:
+CREST_KEY_HINTS = (
+    "crest", "logo", "badge", "teamimage", "clubimage",
+    "teamlogo", "clublogo", "emblem", "shield",
+)
+PLAYER_URL_EXCLUSIONS = (
+    "player", "headshot", "avatar", "person", "face",
+)
+EA_CDN = "drop-assets.ea.com"
+
+def find_crest(data: dict, soup: BeautifulSoup | None = None, team_name: str | None = None) -> str | None:
+    # 1) HTML — img con alt igual al nombre del equipo en el CDN de EA
+    #    Estructura detectada: <img alt="Liverpool" class="Picture_image__..." src="https://drop-assets.ea.com/...">
+    if soup and team_name:
+        for img in soup.find_all("img"):
+            src = img.get("src") or img.get("data-src") or ""
+            alt = (img.get("alt") or "").strip()
+            if EA_CDN in src and alt.lower() == team_name.lower():
+                return src
+
+    # 2) HTML — cualquier <img> del CDN de EA que no sea de jugador
+    if soup:
+        for img in soup.find_all("img"):
+            src = img.get("src") or img.get("data-src") or ""
+            css = " ".join(img.get("class") or []).lower()
+            if (
+                EA_CDN in src
+                and not any(ex in src.lower() for ex in PLAYER_URL_EXCLUSIONS)
+                and ("picture_image" in css or "team" in css or "crest" in css or "logo" in css)
+            ):
+                return src
+
+    # 3) JSON — buscar por nombre de key
     for k, v in walk(data):
-        if isinstance(v, str) and v.startswith("http") and (
-            "crest" in k.lower() or "logo" in k.lower() or "badge" in k.lower()
+        if isinstance(v, str) and v.startswith("http") and any(h in k.lower() for h in CREST_KEY_HINTS):
+            return v
+
+    # 4) JSON — buscar por CDN de EA en el valor
+    for k, v in walk(data):
+        if (
+            isinstance(v, str)
+            and EA_CDN in v
+            and not any(ex in v.lower() for ex in PLAYER_URL_EXCLUSIONS)
         ):
             return v
+
     return None
 
 def extract_str(val) -> str | None:
@@ -243,11 +321,16 @@ def build_sql(teams_data: list[dict]) -> str:
             country = f"'{sql_escape(p['country_name'])}'" if p["country_name"] else "null"
             headshot = f"'{sql_escape(p['headshot_url'])}'" if p.get("headshot_url") else "null"
             card     = f"'{sql_escape(p['card_image_url'])}'" if p.get("card_image_url") else "null"
+            price, clause = _calc_price_clause(ovr)
 
             out.append(
                 "insert into players (name, ovr, position, country_name, headshot_url, card_image_url, price, clause) "
-                f"values ('{name}', {ovr}, {pos}, {country}, {headshot}, {card}, 0, 0) "
-                "on conflict do nothing;"
+                f"values ('{name}', {ovr}, {pos}, {country}, {headshot}, {card}, {price}, {clause}) "
+                "on conflict (name, ovr, position) do update set "
+                "headshot_url = coalesce(excluded.headshot_url, players.headshot_url), "
+                "card_image_url = coalesce(excluded.card_image_url, players.card_image_url), "
+                "country_name = coalesce(excluded.country_name, players.country_name), "
+                "price = excluded.price, clause = excluded.clause;"
             )
 
     # ── Team rosters ──
@@ -268,7 +351,7 @@ def build_sql(teams_data: list[dict]) -> str:
                 "insert into team_players (team_id, player_id)\n"
                 f"select t.id, p.id from teams t join players p on {' and '.join(where)}\n"
                 f"where t.name = '{team}'\n"
-                "on conflict do nothing;"
+                "on conflict (team_id, player_id) do nothing;"
             )
 
     out.append("commit;")
@@ -285,10 +368,11 @@ def main():
             soup = BeautifulSoup(html, "html.parser")
             data = parse_next_data(html)
             team_name = find_team_name(data, soup)
-            crest_url = find_crest(data)
+            crest_url = find_crest(data, soup, team_name)
             players   = find_players(data)
 
-            print(f"[OK] {team_name}: {len(players)} jugadores")
+            crest_log = f"  crest={crest_url[:60]}…" if crest_url else "  crest=NOT FOUND"
+            print(f"[OK] {team_name}: {len(players)} jugadores{crest_log}")
             teams_data.append({
                 "url": url,
                 "team_name": team_name,

@@ -40,7 +40,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
   // 3. Buscar asignaciones + equipo para cada miembro
   const memberIds = (members ?? []).map((m: any) => m.id);
-  let assignmentsMap: Record<string, { name: string }> = {};
+  let assignmentsMap: Record<string, { name: string; crestUrl: string | null }> = {};
 
   if (memberIds.length > 0) {
     const { data: assignments, error: assignmentsError } = await supabase
@@ -58,7 +58,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
       const teamIds = assignments.map((a: any) => a.team_id).filter(Boolean);
       const { data: teamsData } = await supabase
         .from("teams")
-        .select("id, name")
+        .select("id, name, crest_url")
         .in("id", teamIds);
 
       const teamsById: Record<string, any> = {};
@@ -69,7 +69,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
       for (const a of assignments as any[]) {
         const team = teamsById[a.team_id];
         if (team) {
-          assignmentsMap[a.member_id] = { name: team.name };
+          assignmentsMap[a.member_id] = { name: team.name, crestUrl: team.crest_url ?? null };
         }
       }
     }
@@ -82,7 +82,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
       id: m.id,
       displayName: m.display_name,
       budget: m.budget ?? null,
-      team: t ? { name: t.name } : null,
+      team: t ? { name: t.name, crestUrl: t.crestUrl ?? null } : null,
     };
   });
 

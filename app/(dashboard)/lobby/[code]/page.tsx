@@ -1,18 +1,19 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
-import { useParams } from "next/navigation";
+import { useEffect, useState, useCallback, useRef } from "react";
+import { useParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import Link from "next/link";
 import Badge from "../../../Components/Badge";
 import Button from "../../../Components/Button";
-import { getAdminToken, getMemberToken } from "@/lib/tokenStorage";
+import { getAdminToken, getMemberToken, saveTournamentStatus, clearTournamentTokens, type TournamentStatus } from "@/lib/tokenStorage";
+import { getBrowserClient } from "@/lib/supabase-browser";
 
 interface Member {
   id: string;
   displayName: string;
   budget: number | null;
-  team: { name: string } | null;
+  team: { name: string; crestUrl: string | null } | null;
 }
 
   interface Tournament {
@@ -131,6 +132,7 @@ function AdminAction({
 
 export default function LobbyPage() {
   const { code } = useParams<{ code: string }>();
+  const router = useRouter();
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const [adminToken, setAdminToken] = useState<string | null>(null);
   // memberId confirmando eliminación (doble click)
@@ -165,6 +167,10 @@ export default function LobbyPage() {
 
         setTournament(data);
         setError("");
+
+        if (data.status) {
+          saveTournamentStatus(code, data.status as TournamentStatus);
+        }
       } catch {
         setError("Error de conexión. Comprueba tu internet.");
       } finally {
@@ -216,6 +222,7 @@ export default function LobbyPage() {
         headers: { Authorization: `Bearer ${adminToken}` },
       });
       if (res.ok) {
+        saveTournamentStatus(code, "league");
         setTournament((t) => (t ? { ...t, status: "league" } : t));
       }
     } finally {
@@ -233,6 +240,7 @@ export default function LobbyPage() {
         headers: { Authorization: `Bearer ${adminToken}` },
       });
       if (res.ok) {
+        saveTournamentStatus(code, "market");
         setTournament((t) => (t ? { ...t, status: "market" } : t));
       }
     } finally {
@@ -250,6 +258,7 @@ export default function LobbyPage() {
         headers: { Authorization: `Bearer ${adminToken}` },
       });
       if (res.ok) {
+        saveTournamentStatus(code, "lobby");
         setTournament((t) => (t ? { ...t, status: "lobby" } : t));
       }
     } finally { setResettingMarket(false); setConfirmAction(null); }
@@ -265,6 +274,7 @@ export default function LobbyPage() {
         headers: { Authorization: `Bearer ${adminToken}` },
       });
       if (res.ok) {
+        saveTournamentStatus(code, "lobby");
         setTournament((t) => (t ? { ...t, status: "lobby" } : t));
       }
     } finally { setResettingLeague(false); setConfirmAction(null); }
@@ -279,7 +289,10 @@ export default function LobbyPage() {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
         body: JSON.stringify({ status: "complete" }),
       });
-      if (res.ok) setTournament((t) => (t ? { ...t, status: "complete" } : t));
+      if (res.ok) {
+        saveTournamentStatus(code, "complete");
+        setTournament((t) => (t ? { ...t, status: "complete" } : t));
+      }
     } finally {
       setEndingTournament(false);
       setConfirmAction(null);
@@ -290,6 +303,24 @@ export default function LobbyPage() {
   useEffect(() => {
     fetchTournament();
   }, [fetchTournament]);
+
+  // ── Supabase Realtime: re-fetch lobby on any relevant DB change ──────────
+  useEffect(() => {
+    if (!tournament?.id) return;
+
+    const supabase = getBrowserClient();
+    const onDbChange = () => fetchTournament(true);
+
+    const channel = supabase
+      .channel(`lobby:${tournament.id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "members",     filter: `tournament_id=eq.${tournament.id}` }, onDbChange)
+      .on("postgres_changes", { event: "*", schema: "public", table: "assignments" }, onDbChange)
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "tournaments", filter: `id=eq.${tournament.id}` }, onDbChange)
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tournament?.id]);
 
   // ── Loading ────────────────────────────────────────────────────────────────
   if (loading) {
@@ -384,16 +415,27 @@ export default function LobbyPage() {
           </div>
         </div>
 
-        <button
-          onClick={() => fetchTournament(true)}
-          disabled={refreshing}
-          className="flex items-center gap-2 px-3 py-2 rounded-xl bg-[#131722] border border-white/6 hover:bg-[#1A1F2E] text-[#9CA3AF] hover:text-[#F3F4F6] text-xs font-medium transition-all duration-200 disabled:opacity-50 cursor-pointer shrink-0"
-        >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={refreshing ? "animate-spin" : ""}>
-            <polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
-          </svg>
-          Actualizar
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={() => fetchTournament(true)}
+            disabled={refreshing}
+            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-[#131722] border border-white/6 hover:bg-[#1A1F2E] text-[#9CA3AF] hover:text-[#F3F4F6] text-xs font-medium transition-all duration-200 disabled:opacity-50 cursor-pointer"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={refreshing ? "animate-spin" : ""}>
+              <polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+            </svg>
+            Actualizar
+          </button>
+          <button
+            onClick={() => { clearTournamentTokens(code); router.replace("/"); }}
+            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-[#131722] border border-[#EF4444]/20 hover:bg-[#EF4444]/10 text-[#EF4444]/70 hover:text-[#EF4444] text-xs font-medium transition-all duration-200 cursor-pointer"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+            </svg>
+            Salir
+          </button>
+        </div>
       </div>
 
       {/* Progress card */}
@@ -638,9 +680,14 @@ export default function LobbyPage() {
                   </div>
 
                   {/* Team */}
-                  <span className={`text-sm ${member.team ? "text-[#F3F4F6]" : "text-[#9CA3AF]/40 italic"}`}>
-                    {member.team?.name ?? "Sin asignar"}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {member.team?.crestUrl && (
+                      <img src={member.team.crestUrl} alt={member.team.name} className="w-5 h-5 object-contain shrink-0" />
+                    )}
+                    <span className={`text-sm ${member.team ? "text-[#F3F4F6]" : "text-[#9CA3AF]/40 italic"}`}>
+                      {member.team?.name ?? "Sin asignar"}
+                    </span>
+                  </div>
 
                   {/* Budget */}
                   <span className={`text-sm font-medium ${member.budget ? "text-[#22C55E]" : "text-[#9CA3AF]/40"}`}>

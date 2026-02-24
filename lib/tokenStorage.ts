@@ -38,13 +38,20 @@ export function getMemberToken(tournamentCode: string): string | null {
 
 const TEAM_KEY = (tournamentCode: string) =>
   `mercatto:team:${tournamentCode}`;
+const TEAM_CREST_KEY = (tournamentCode: string) =>
+  `mercatto:teamCrest:${tournamentCode}`;
 
-export function saveTeamAssignment(tournamentCode: string, teamName: string) {
+export function saveTeamAssignment(tournamentCode: string, teamName: string, crestUrl?: string | null) {
   localStorage.setItem(TEAM_KEY(tournamentCode), teamName);
+  if (crestUrl) localStorage.setItem(TEAM_CREST_KEY(tournamentCode), crestUrl);
 }
 
 export function getTeamAssignment(tournamentCode: string): string | null {
   return localStorage.getItem(TEAM_KEY(tournamentCode));
+}
+
+export function getTeamCrest(tournamentCode: string): string | null {
+  return localStorage.getItem(TEAM_CREST_KEY(tournamentCode));
 }
 
 export function hasTeamAssignment(tournamentCode: string): boolean {
@@ -83,11 +90,64 @@ export function getRole(tournamentCode: string): "admin" | "member" | null {
   return r === "admin" || r === "member" ? r : null;
 }
 
+// ─── Member UUID (guardado al unirse, distinto al token hash) ────────────────
+
+const MEMBER_ID_KEY = (tournamentCode: string) =>
+  `mercatto:memberId:${tournamentCode}`;
+
+export function saveMemberId(tournamentCode: string, memberId: string) {
+  localStorage.setItem(MEMBER_ID_KEY(tournamentCode), memberId);
+}
+
+export function getMemberId(tournamentCode: string): string | null {
+  return localStorage.getItem(MEMBER_ID_KEY(tournamentCode));
+}
+
+// ─── Estado / fase del torneo (caché local para RouteGuard) ──────────────────
+
+export type TournamentStatus =
+  | "lobby"
+  | "draft"
+  | "market"
+  | "league"
+  | "complete";
+
+const STATUS_KEY = (tournamentCode: string) =>
+  `mercatto:status:${tournamentCode}`;
+
+export function saveTournamentStatus(
+  tournamentCode: string,
+  status: TournamentStatus
+) {
+  localStorage.setItem(STATUS_KEY(tournamentCode), status);
+  window.dispatchEvent(new Event("mercatto:store-change"));
+}
+
+export function getTournamentStatus(
+  tournamentCode: string
+): TournamentStatus | null {
+  const v = localStorage.getItem(STATUS_KEY(tournamentCode));
+  return v as TournamentStatus | null;
+}
+
+// ─── Suscripción a cambios del store (para RouteGuard) ───────────────────────
+
+export function subscribeToStore(callback: () => void): () => void {
+  window.addEventListener("mercatto:store-change", callback);
+  return () => window.removeEventListener("mercatto:store-change", callback);
+}
+
 // ─── Limpiar (logout de un torneo) ───────────────────────────────────────────
 
 export function clearTournamentTokens(tournamentCode: string) {
   localStorage.removeItem(ADMIN_KEY(tournamentCode));
   localStorage.removeItem(MEMBER_KEY(tournamentCode));
+  localStorage.removeItem(MEMBER_ID_KEY(tournamentCode));
   localStorage.removeItem(DISPLAY_NAME_KEY(tournamentCode));
   localStorage.removeItem(ROLE_KEY(tournamentCode));
+  localStorage.removeItem(STATUS_KEY(tournamentCode));
+  localStorage.removeItem(TEAM_CREST_KEY(tournamentCode));
+  localStorage.removeItem(TEAM_KEY(tournamentCode));
+  localStorage.removeItem(LAST_TOURNAMENT_KEY);
+  window.dispatchEvent(new Event("mercatto:store-change"));
 }

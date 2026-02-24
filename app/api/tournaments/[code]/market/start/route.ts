@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient, verifyAdminToken } from "@/lib/supabase";
+import { advanceTurn } from "../action/route";
 
 type Params = { params: Promise<{ code: string }> };
 
@@ -74,14 +75,14 @@ export async function POST(request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Error al crear la sesión de mercado." }, { status: 500 });
   }
 
-  // Generate round 1 random turn order
+  // Generate round 1 random turn order — all start as "pending"
   const shuffled = shuffle(memberIds);
   const turnRows = shuffled.map((memberId, idx) => ({
     session_id: (session as any).id,
     round_num: 1,
     position: idx + 1,
     member_id: memberId,
-    status: idx === 0 ? "active" : "pending",
+    status: "pending",
   }));
 
   const { error: turnsErr } = await supabase.from("market_turns").insert(turnRows);
@@ -94,6 +95,9 @@ export async function POST(request: NextRequest, { params }: Params) {
     .from("tournaments")
     .update({ status: "market" })
     .eq("id", auth.tournamentId);
+
+  // Activate the first eligible turn (auto-skips members with 3/3 purchases)
+  await advanceTurn(supabase, { ...session, id: (session as any).id, current_round: 1 });
 
   return NextResponse.json({ ok: true, sessionId: (session as any).id }, { status: 201 });
 }

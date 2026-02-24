@@ -8,7 +8,7 @@ import { getBrowserClient } from "@/lib/supabase-browser";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
-interface MemberInfo { id: string; displayName: string; teamName: string }
+interface MemberInfo { id: string; displayName: string; teamName: string; crestUrl?: string | null }
 interface Fixture {
   id: string; matchday: number; status: string;
   homeMember: MemberInfo; awayMember: MemberInfo;
@@ -117,7 +117,7 @@ export default function CalendarPage() {
   }, []);
 
   const prevMatchdayRef = useRef<number | null>(null);
-  const wasFinishedRef  = useRef(false);
+  const prevStatusRef   = useRef<string | null>(null);
 
   const fetchData = useCallback(async (silent = false) => {
     if (!code || !token) return;
@@ -132,11 +132,11 @@ export default function CalendarPage() {
       const d: LeagueState = await res.json();
       setData(d);
 
-      // Redirect all users to standings when league finishes
-      if (d.status === "finished" && !wasFinishedRef.current) {
-        wasFinishedRef.current = true;
+      // Redirect only if we witnessed the transition to finished (was active → now finished)
+      if (d.status === "finished" && prevStatusRef.current && prevStatusRef.current !== "finished") {
         setTimeout(() => router.push("/table"), 1800);
       }
+      prevStatusRef.current = d.status;
 
       if (d.session) {
         const newMd = d.session.currentMatchday;
@@ -378,13 +378,26 @@ export default function CalendarPage() {
 
       {/* Rest notice */}
       {restForDay && (
-        <div className="mb-5 flex items-center gap-3 px-4 py-3 rounded-xl bg-[#131722] border border-white/5">
-          <div className="w-7 h-7 rounded-lg bg-[#9CA3AF]/10 flex items-center justify-center shrink-0">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
-            </svg>
+        <div className="mb-5 rounded-2xl bg-gradient-to-r from-[#F59E0B]/8 via-[#131722] to-[#F59E0B]/8 border border-[#F59E0B]/20 p-4">
+          <div className="flex items-center gap-4">
+            <div className="w-10 h-10 rounded-xl bg-[#F59E0B]/15 border border-[#F59E0B]/25 flex items-center justify-center shrink-0">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/>
+              </svg>
+            </div>
+            <div className="flex items-center gap-3 flex-1 min-w-0">
+              {restForDay.crestUrl && (
+                <img src={restForDay.crestUrl} alt={restForDay.teamName} className="w-7 h-7 object-contain shrink-0" />
+              )}
+              <div className="min-w-0">
+                <p className="text-[#F59E0B] text-[10px] uppercase tracking-widest font-bold mb-0.5">Descansa esta fecha</p>
+                <p className="text-[#F3F4F6] text-sm font-bold truncate">
+                  {restForDay.displayName}
+                  <span className="text-[#9CA3AF] font-normal ml-1.5">({restForDay.teamName})</span>
+                </p>
+              </div>
+            </div>
           </div>
-          <span className="text-[#9CA3AF] text-sm">Descansa esta fecha: <span className="text-[#F3F4F6] font-semibold">{restForDay.displayName}</span> <span className="text-[#9CA3AF]/60">({restForDay.teamName})</span></span>
         </div>
       )}
 
@@ -512,21 +525,29 @@ function FixtureCard({
         {/* Match header */}
         <div className="flex items-center gap-4">
           {/* Home */}
-          <div className={`flex-1 text-right ${isHome ? "opacity-100" : "opacity-75"}`}>
-            <p className="text-[#F3F4F6] font-bold text-sm leading-tight">{fixture.homeMember.displayName}</p>
-            <p className="text-[#9CA3AF] text-xs mt-0.5">{fixture.homeMember.teamName}</p>
-            {fixture.status === "pending" && isCurrentMatchday && (
-              <div className="flex justify-end mt-1">
-                <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full ${fixture.homeConfirmed ? "bg-[#22C55E]/15 text-[#22C55E]" : "bg-[#9CA3AF]/10 text-[#9CA3AF]"}`}>
-                  {fixture.homeConfirmed ? "✓ Listo" : "Esperando"}
-                </span>
-              </div>
-            )}
-            {/* Card indicators */}
-            {fixture.status === "finished" && (fixture.homeYellow > 0 || fixture.homeRed > 0) && (
-              <div className="flex justify-end gap-1.5 mt-1">
-                {fixture.homeYellow > 0 && <span className="text-[9px] flex items-center gap-0.5"><span className="w-2 h-2.5 bg-[#F59E0B] rounded-sm inline-block" />{fixture.homeYellow}</span>}
-                {fixture.homeRed > 0 && <span className="text-[9px] flex items-center gap-0.5"><span className="w-2 h-2.5 bg-[#EF4444] rounded-sm inline-block" />{fixture.homeRed}</span>}
+          <div className={`flex-1 flex items-center justify-end gap-3 ${isHome ? "opacity-100" : "opacity-75"}`}>
+            <div className="text-right min-w-0">
+              <p className="text-[#F3F4F6] font-bold text-sm leading-tight truncate">{fixture.homeMember.displayName}</p>
+              <p className="text-[#9CA3AF] text-xs mt-0.5 truncate">{fixture.homeMember.teamName}</p>
+              {fixture.status === "pending" && isCurrentMatchday && (
+                <div className="flex justify-end mt-1">
+                  <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full ${fixture.homeConfirmed ? "bg-[#22C55E]/15 text-[#22C55E]" : "bg-[#9CA3AF]/10 text-[#9CA3AF]"}`}>
+                    {fixture.homeConfirmed ? "✓ Listo" : "Esperando"}
+                  </span>
+                </div>
+              )}
+              {fixture.status === "finished" && (fixture.homeYellow > 0 || fixture.homeRed > 0) && (
+                <div className="flex justify-end gap-1.5 mt-1">
+                  {fixture.homeYellow > 0 && <span className="text-[9px] flex items-center gap-0.5"><span className="w-2 h-2.5 bg-[#F59E0B] rounded-sm inline-block" />{fixture.homeYellow}</span>}
+                  {fixture.homeRed > 0 && <span className="text-[9px] flex items-center gap-0.5"><span className="w-2 h-2.5 bg-[#EF4444] rounded-sm inline-block" />{fixture.homeRed}</span>}
+                </div>
+              )}
+            </div>
+            {fixture.homeMember.crestUrl ? (
+              <img src={fixture.homeMember.crestUrl} alt={fixture.homeMember.teamName} className="w-10 h-10 object-contain shrink-0" />
+            ) : (
+              <div className="w-10 h-10 rounded-full bg-[#8B5CF6]/10 flex items-center justify-center shrink-0">
+                <span className="text-[#8B5CF6] text-sm font-bold">{fixture.homeMember.displayName.charAt(0)}</span>
               </div>
             )}
           </div>
@@ -550,22 +571,31 @@ function FixtureCard({
           </div>
 
           {/* Away */}
-          <div className={`flex-1 ${isAway ? "opacity-100" : "opacity-75"}`}>
-            <p className="text-[#F3F4F6] font-bold text-sm leading-tight">{fixture.awayMember.displayName}</p>
-            <p className="text-[#9CA3AF] text-xs mt-0.5">{fixture.awayMember.teamName}</p>
-            {fixture.status === "pending" && isCurrentMatchday && (
-              <div className="mt-1">
-                <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full ${fixture.awayConfirmed ? "bg-[#22C55E]/15 text-[#22C55E]" : "bg-[#9CA3AF]/10 text-[#9CA3AF]"}`}>
-                  {fixture.awayConfirmed ? "✓ Listo" : "Esperando"}
-                </span>
+          <div className={`flex-1 flex items-center gap-3 ${isAway ? "opacity-100" : "opacity-75"}`}>
+            {fixture.awayMember.crestUrl ? (
+              <img src={fixture.awayMember.crestUrl} alt={fixture.awayMember.teamName} className="w-10 h-10 object-contain shrink-0" />
+            ) : (
+              <div className="w-10 h-10 rounded-full bg-[#8B5CF6]/10 flex items-center justify-center shrink-0">
+                <span className="text-[#8B5CF6] text-sm font-bold">{fixture.awayMember.displayName.charAt(0)}</span>
               </div>
             )}
-            {fixture.status === "finished" && (fixture.awayYellow > 0 || fixture.awayRed > 0) && (
-              <div className="flex gap-1.5 mt-1">
-                {fixture.awayYellow > 0 && <span className="text-[9px] flex items-center gap-0.5"><span className="w-2 h-2.5 bg-[#F59E0B] rounded-sm inline-block" />{fixture.awayYellow}</span>}
-                {fixture.awayRed > 0 && <span className="text-[9px] flex items-center gap-0.5"><span className="w-2 h-2.5 bg-[#EF4444] rounded-sm inline-block" />{fixture.awayRed}</span>}
-              </div>
-            )}
+            <div className="min-w-0">
+              <p className="text-[#F3F4F6] font-bold text-sm leading-tight truncate">{fixture.awayMember.displayName}</p>
+              <p className="text-[#9CA3AF] text-xs mt-0.5 truncate">{fixture.awayMember.teamName}</p>
+              {fixture.status === "pending" && isCurrentMatchday && (
+                <div className="mt-1">
+                  <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full ${fixture.awayConfirmed ? "bg-[#22C55E]/15 text-[#22C55E]" : "bg-[#9CA3AF]/10 text-[#9CA3AF]"}`}>
+                    {fixture.awayConfirmed ? "✓ Listo" : "Esperando"}
+                  </span>
+                </div>
+              )}
+              {fixture.status === "finished" && (fixture.awayYellow > 0 || fixture.awayRed > 0) && (
+                <div className="flex gap-1.5 mt-1">
+                  {fixture.awayYellow > 0 && <span className="text-[9px] flex items-center gap-0.5"><span className="w-2 h-2.5 bg-[#F59E0B] rounded-sm inline-block" />{fixture.awayYellow}</span>}
+                  {fixture.awayRed > 0 && <span className="text-[9px] flex items-center gap-0.5"><span className="w-2 h-2.5 bg-[#EF4444] rounded-sm inline-block" />{fixture.awayRed}</span>}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
