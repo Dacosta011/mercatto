@@ -131,27 +131,7 @@ async function completeTurnAndAdvance(supabase: any, session: any, turnId: strin
     .update({ status: "completed", completed_at: new Date().toISOString() })
     .eq("id", turnId);
 
-  const { data: nextTurn } = await supabase
-    .from("market_turns")
-    .select("id")
-    .eq("session_id", session.id)
-    .eq("round_num", session.current_round)
-    .eq("status", "pending")
-    .order("position")
-    .limit(1)
-    .maybeSingle();
-
-  if (nextTurn) {
-    await supabase.from("market_turns").update({ status: "active" }).eq("id", nextTurn.id);
-    return;
-  }
-
-  // All turns in the round done — check if all rounds done
-  const newRound = session.current_round + 1;
-  if (newRound > session.total_rounds) {
-    await supabase
-      .from("market_sessions")
-      .update({ status: "finished", finished_at: new Date().toISOString() })
-      .eq("id", session.id);
-  }
+  // Reuse shared advanceTurn logic (auto-skips 3/3 members)
+  const { advanceTurn } = await import("../../action/route");
+  await advanceTurn(supabase, session);
 }

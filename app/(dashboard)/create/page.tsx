@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "motion/react";
 import Link from "next/link";
 import FormInput from "../../Components/FormInput";
 import Button from "../../Components/Button";
-import { saveAdminToken, saveMemberToken, saveUserProfile } from "@/lib/tokenStorage";
+import { saveAdminToken, saveMemberToken, saveMemberId, saveUserProfile } from "@/lib/tokenStorage";
 
 type Phase = "form" | "success";
 
@@ -104,6 +104,9 @@ export default function CreateTournamentPage() {
       saveAdminToken(tournament.code, tournament.adminToken);
       if (tournament.memberToken) {
         saveMemberToken(tournament.code, tournament.memberToken);
+      }
+      if (tournament.memberId) {
+        saveMemberId(tournament.code, tournament.memberId);
       }
       saveUserProfile(tournament.code, displayName.trim(), "admin");
       // Ir directo a la ruleta para que el admin también gire

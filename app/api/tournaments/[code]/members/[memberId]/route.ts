@@ -31,13 +31,9 @@ export async function DELETE(request: NextRequest, { params }: Params) {
     );
   }
 
-  // Eliminar la asignación de equipo (libera el equipo para que vuelva a estar disponible)
-  await supabase
-    .from("assignments")
-    .delete()
-    .eq("member_id", memberId);
-
-  // Eliminar el miembro
+  // Delete the member first — this is the authoritative event that the client's
+  // PhaseRedirectGuard watches. Deleting assignment first caused a visual glitch
+  // where the lobby briefly showed the member without a team before they disappeared.
   const { error: deleteError } = await supabase
     .from("members")
     .delete()
@@ -50,6 +46,12 @@ export async function DELETE(request: NextRequest, { params }: Params) {
       { status: 500 }
     );
   }
+
+  // Delete the assignment after the member is gone (frees the team slot)
+  await supabase
+    .from("assignments")
+    .delete()
+    .eq("member_id", memberId);
 
   return NextResponse.json({ deleted: memberId });
 }

@@ -43,11 +43,15 @@ export async function GET(request: NextRequest, { params }: Params) {
   // All team names
   const allTeamIds = (allAssignments ?? []).map((a: any) => a.team_id);
   const { data: allTeamsRaw } = allTeamIds.length > 0
-    ? await supabase.from("teams").select("id, name").in("id", allTeamIds)
+    ? await supabase.from("teams").select("id, name, crest_url").in("id", allTeamIds)
     : { data: [] };
 
   const teamNameById: Record<string, string> = {};
-  for (const t of allTeamsRaw ?? []) teamNameById[(t as any).id] = (t as any).name;
+  const teamCrestById: Record<string, string | null> = {};
+  for (const t of allTeamsRaw ?? []) {
+    teamNameById[(t as any).id] = (t as any).name;
+    teamCrestById[(t as any).id] = (t as any).crest_url ?? null;
+  }
 
   const teamIdByMember: Record<string, string> = {};
   const memberIdByTeam: Record<string, string> = {};
@@ -76,6 +80,7 @@ export async function GET(request: NextRequest, { params }: Params) {
       memberId: t.member_id,
       memberName: memberById[t.member_id]?.display_name ?? "—",
       teamName: teamId ? (teamNameById[teamId] ?? "—") : null,
+      teamCrestUrl: teamId ? (teamCrestById[teamId] ?? null) : null,
       position: t.position,
       status: t.status,
       completedAt: t.completed_at,
@@ -121,7 +126,7 @@ export async function GET(request: NextRequest, { params }: Params) {
     .from("market_transfers")
     .select("player_id")
     .eq("session_id", (session as any).id)
-    .in("transfer_type", ["clause", "offer"]);
+    .in("transfer_type", ["clause", "offer", "icon_auction"]);
 
   const soldPlayerIds = new Set((soldTransfers ?? []).map((t: any) => t.player_id));
 
@@ -168,13 +173,14 @@ export async function GET(request: NextRequest, { params }: Params) {
   }
 
   // ── 7. Recent activity: completed transfers + rejected offers ─────────────
+  const isFinished = (session as any).status === "finished";
   const [{ data: recentTransfersRaw }, { data: rejectedOffersRaw }] = await Promise.all([
     supabase
       .from("market_transfers")
       .select("id, buyer_id, seller_id, seller_team_id, player_id, transfer_type, amount, created_at")
       .eq("session_id", (session as any).id)
       .order("created_at", { ascending: false })
-      .limit(30),
+      .limit(isFinished ? 200 : 30),
     supabase
       .from("market_offers")
       .select("id, buyer_id, seller_id, player_id, amount, responded_at")
@@ -199,9 +205,11 @@ export async function GET(request: NextRequest, { params }: Params) {
 
   const completedTransfers = (recentTransfersRaw ?? []).map((t: any) => ({
     id: t.id,
-    transferType: t.transfer_type as string,          // "clause" | "offer" | "skip"
+    transferType: t.transfer_type as string,
     amount: t.amount,
     createdAt: t.created_at,
+    buyerId: t.buyer_id,
+    sellerId: t.seller_id,
     buyerName: memberById[t.buyer_id]?.display_name ?? "—",
     sellerName: memberById[t.seller_id]?.display_name ?? "—",
     sellerTeamName: teamNameById[t.seller_team_id] ?? "—",
@@ -285,6 +293,7 @@ export async function GET(request: NextRequest, { params }: Params) {
         id: m.id,
         displayName: m.display_name,
         teamName: tid ? (teamNameById[tid] ?? null) : null,
+        teamCrestUrl: tid ? (teamCrestById[tid] ?? null) : null,
         budget: m.budget,
         purchasesUsed: m.market_purchases ?? 0,
       };

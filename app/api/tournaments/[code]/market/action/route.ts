@@ -143,6 +143,7 @@ export async function POST(request: NextRequest, { params }: Params) {
       transfer_type: "clause",
       amount: clauseAmount,
     });
+
   }
 
   // ── Complete turn + advance ───────────────────────────────────────────────
@@ -158,19 +159,37 @@ export async function POST(request: NextRequest, { params }: Params) {
 }
 
 // ─── Shared: advance to next pending turn ─────────────────────────────────────
+// Auto-skips members who already reached the 3-purchase limit.
 export async function advanceTurn(supabase: any, session: any) {
-  const { data: nextTurn } = await supabase
-    .from("market_turns")
-    .select("id")
-    .eq("session_id", session.id)
-    .eq("round_num", session.current_round)
-    .eq("status", "pending")
-    .order("position")
-    .limit(1)
-    .maybeSingle();
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const { data: nextTurn } = await supabase
+      .from("market_turns")
+      .select("id, member_id")
+      .eq("session_id", session.id)
+      .eq("round_num", session.current_round)
+      .eq("status", "pending")
+      .order("position")
+      .limit(1)
+      .maybeSingle();
 
-  if (nextTurn) {
-    await supabase.from("market_turns").update({ status: "active" }).eq("id", nextTurn.id);
+    if (!nextTurn) break;
+
+    const { data: member } = await supabase
+      .from("members")
+      .select("market_purchases")
+      .eq("id", (nextTurn as any).member_id)
+      .single();
+
+    if ((member as any)?.market_purchases >= 3) {
+      await supabase.from("market_turns").update({
+        status: "skipped",
+        completed_at: new Date().toISOString(),
+      }).eq("id", (nextTurn as any).id);
+      continue;
+    }
+
+    await supabase.from("market_turns").update({ status: "active" }).eq("id", (nextTurn as any).id);
     return { ok: true, roundDone: false };
   }
 
@@ -181,7 +200,6 @@ export async function advanceTurn(supabase: any, session: any) {
       .from("market_sessions")
       .update({ status: "finished", finished_at: new Date().toISOString() })
       .eq("id", session.id);
-    // Tournament stays in "market" status — admin can reset if needed
     return { ok: true, roundDone: true, marketFinished: true };
   }
 

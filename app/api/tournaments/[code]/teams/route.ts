@@ -42,7 +42,7 @@ export async function GET(_request: NextRequest, { params }: Params) {
   // 4) Equipos disponibles
   let query = supabase
     .from("teams")
-    .select("id, name")
+    .select("id, name, crest_url")
     .order("name");
 
   if (takenIds.length > 0) {
@@ -60,6 +60,7 @@ export async function GET(_request: NextRequest, { params }: Params) {
     (teams ?? []).map((t: any) => ({
       id: t.id,
       name: t.name,
+      crestUrl: t.crest_url ?? null,
       squadValue: t.squad_value ?? t.squadValue ?? 0,
       budget: t.budget ?? 0,
     }))

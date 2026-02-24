@@ -59,20 +59,25 @@ export async function GET(request: NextRequest, { params }: Params) {
     .select("member_id, team_id")
     .eq("tournament_id", auth.tournamentId);
 
-  const { data: teamsRaw } = await supabase.from("teams").select("id, name");
+  const { data: teamsRaw } = await supabase.from("teams").select("id, name, crest_url");
 
   const teamNameById: Record<string, string> = {};
-  for (const t of teamsRaw ?? []) teamNameById[(t as any).id] = (t as any).name;
+  const teamCrestById: Record<string, string | null> = {};
+  for (const t of teamsRaw ?? []) {
+    teamNameById[(t as any).id] = (t as any).name;
+    teamCrestById[(t as any).id] = (t as any).crest_url ?? null;
+  }
 
   const teamByMember: Record<string, string> = {};
   for (const a of assignmentsRaw ?? []) teamByMember[(a as any).member_id] = (a as any).team_id;
 
-  const memberById: Record<string, { displayName: string; teamName: string }> = {};
+  const memberById: Record<string, { displayName: string; teamName: string; crestUrl: string | null }> = {};
   for (const m of membersRaw ?? []) {
     const tid = teamByMember[(m as any).id];
     memberById[(m as any).id] = {
       displayName: (m as any).display_name,
       teamName: tid ? (teamNameById[tid] ?? "—") : "—",
+      crestUrl: tid ? (teamCrestById[tid] ?? null) : null,
     };
   }
 
@@ -122,7 +127,7 @@ export async function GET(request: NextRequest, { params }: Params) {
 
   // ── League table (computed from finished fixtures) ────────────────────────
   interface TableRow {
-    memberId: string; displayName: string; teamName: string;
+    memberId: string; displayName: string; teamName: string; crestUrl: string | null;
     played: number; wins: number; draws: number; losses: number;
     gf: number; ga: number; gd: number; points: number;
   }
@@ -134,6 +139,7 @@ export async function GET(request: NextRequest, { params }: Params) {
       memberId: mid,
       displayName: memberById[mid]?.displayName ?? "—",
       teamName: memberById[mid]?.teamName ?? "—",
+      crestUrl: memberById[mid]?.crestUrl ?? null,
       played: 0, wins: 0, draws: 0, losses: 0,
       gf: 0, ga: 0, gd: 0, points: 0,
     };
@@ -190,13 +196,11 @@ export async function GET(request: NextRequest, { params }: Params) {
   }
 
   // Currently suspended players (for current matchday)
-  const suspendedPlayerIds = new Set(
-    (suspensionsRaw ?? [])
-      .filter((s: any) => s.from_matchday <= currentMatchday &&
-        s.from_matchday + s.matches_remaining > currentMatchday)
-      .map((s: any) => s.player_id)
-      .filter(Boolean)
-  );
+  const activeSuspensions = (suspensionsRaw ?? [])
+    .filter((s: any) => s.player_id && s.from_matchday <= currentMatchday &&
+      s.from_matchday + s.matches_remaining > currentMatchday);
+
+  const suspendedPlayerIds = new Set(activeSuspensions.map((s: any) => s.player_id));
 
   const discipline = Object.entries(disciplineByPlayer).map(([pid, stats]) => ({
     playerId: pid,
@@ -212,11 +216,18 @@ export async function GET(request: NextRequest, { params }: Params) {
 
   // My discipline summary (any of my players suspended?)
   const myPlayersSuspended = discipline.filter(d => d.memberId === auth.memberId && d.suspended);
+  const mySuspensions = activeSuspensions
+    .filter((s: any) => s.member_id === auth.memberId)
+    .map((s: any) => ({
+      playerName: s.player_name ?? "Jugador",
+      reason: s.reason ?? "sanción",
+      matchesRemaining: Math.max(0, (s.from_matchday + s.matches_remaining) - currentMatchday),
+    }));
   const myDiscipline = {
     yellows: discipline.filter(d => d.memberId === auth.memberId).reduce((s, d) => s + d.yellows, 0),
     reds: discipline.filter(d => d.memberId === auth.memberId).reduce((s, d) => s + d.reds, 0),
     suspended: myPlayersSuspended.length > 0,
-    suspendedPlayers: myPlayersSuspended.map(d => d.playerName),
+    suspendedPlayers: mySuspensions,
     yellowsToSuspension: 0,
   };
 

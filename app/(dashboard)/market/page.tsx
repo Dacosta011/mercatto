@@ -2,9 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { getLastTournamentCode, getMemberToken, getAdminToken } from "@/lib/tokenStorage";
+import { getLastTournamentCode, getMemberToken, getAdminToken, getMemberId, saveMemberId, saveTournamentStatus } from "@/lib/tokenStorage";
 import { getBrowserClient } from "@/lib/supabase-browser";
 import type { RealtimeChannel } from "@supabase/supabase-js";
+import IconAuction, { IconAuctionInitiateButton } from "../../Components/IconAuction";
+import RollingNumber from "../../Components/RollingNumber";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -13,6 +15,7 @@ interface TurnInfo {
   memberId: string;
   memberName: string;
   teamName: string | null;
+  teamCrestUrl: string | null;
   position: number;
   status: "pending" | "active" | "completed" | "skipped";
 }
@@ -70,7 +73,7 @@ interface MarketState {
   availablePlayers: PlayerCard[];
   recentTransfers: any[];
   incomingOffers: Offer[];
-  allMembers: { id: string; displayName: string; teamName: string | null; budget: number; purchasesUsed: number }[];
+  allMembers: { id: string; displayName: string; teamName: string | null; teamCrestUrl: string | null; budget: number; purchasesUsed: number }[];
 }
 
 // ── Formatters ────────────────────────────────────────────────────────────────
@@ -106,12 +109,18 @@ export default function MarketPage() {
   const [posFilter,  setPosFilter]  = useState("ALL");
   const [teamFilter, setTeamFilter] = useState("ALL");
   const [searchQ,    setSearchQ]    = useState("");
+  const [showIconAuction, setShowIconAuction] = useState(false);
+  const [roundAuctionDone, setRoundAuctionDone] = useState(false);
+  const [myMemberId, setMyMemberId] = useState<string | null>(null);
+  const [showSummary, setShowSummary] = useState(false);
 
   // Realtime
-  const channelRef    = useRef<RealtimeChannel | null>(null);
-  const sessionIdRef  = useRef<string | null>(null);
-  const prevDataRef   = useRef<MarketState | null>(null);   // for toast diffing
-  const fetchingRef   = useRef(false);                      // debounce concurrent fetches
+  const channelRef      = useRef<RealtimeChannel | null>(null);
+  const sessionIdRef    = useRef<string | null>(null);
+  const prevDataRef     = useRef<MarketState | null>(null);   // for toast diffing
+  const fetchingRef     = useRef(false);                      // debounce concurrent fetches
+  const pendingFetchRef = useRef(false);                      // queue fetch if one is in-flight
+  const adminTokenRef   = useRef<string | null>(null);        // stable ref for fetchData
 
   // Toasts
   interface Toast { id: number; type: "info" | "success" | "warning" | "turn"; message: string; sub?: string }
@@ -129,15 +138,17 @@ export default function MarketPage() {
     const c = getLastTournamentCode();
     const t = c ? getMemberToken(c) : null;
     const a = c ? getAdminToken(c)  : null;
+    const m = c ? getMemberId(c)    : null;
     setCode(c);
     setToken(t);
     setAdminToken(a);
+    setMyMemberId(m);
+    adminTokenRef.current = a;
   }, []);
 
   const fetchData = useCallback(async (silent = false) => {
     if (!code || !token) return;
-    // Prevent concurrent fetches — only one in-flight at a time
-    if (fetchingRef.current) return;
+    if (fetchingRef.current) { pendingFetchRef.current = true; return; }
     fetchingRef.current = true;
 
     if (!silent) setLoading(true);
@@ -198,19 +209,57 @@ export default function MarketPage() {
       setData(d);
       setError("");
 
+      if (code) saveTournamentStatus(code, "market");
+      if (code && d.myStatus?.memberId) {
+        setMyMemberId(d.myStatus.memberId);
+        saveMemberId(code, d.myStatus.memberId);
+      }
+
       // Store session id so the realtime channel can subscribe
       if (d.session?.id) sessionIdRef.current = d.session.id;
 
-      if (d.session?.allRoundDone && d.status === "active") {
-        setModal("round_end");
-      } else {
-        // Nueva ronda iniciada → cerrar el modal si estaba abierto
-        setModal((prev) => prev === "round_end" ? null : prev);
+      // Check icon auction status
+      let auctionActive = false;
+      const authToken = token ?? adminTokenRef.current;
+      if (d.session?.id && authToken) {
+        try {
+          const iaRes = await fetch(`/api/tournaments/${code}/market/icon-auction`, {
+            headers: { Authorization: `Bearer ${authToken}` },
+          });
+          if (iaRes.ok) {
+            const ia = await iaRes.json();
+            const phase = ia?.auction?.phase ?? null;
+            const done = phase === "finished" || phase === "skipped";
+            setRoundAuctionDone(done);
+            if (phase && phase !== "finished" && phase !== "skipped") {
+              auctionActive = true;
+              setShowIconAuction(true);
+              setModal(null);
+            }
+          }
+        } catch { /* icon auction check failed, non-blocking */ }
+      }
+
+      if (!auctionActive) {
+        if (d.session?.allRoundDone && (d.status === "active" || d.status === "finished")) {
+          setShowSummary((prev) => {
+            if (!prev) setModal("round_end");
+            return prev;
+          });
+          setRoundAuctionDone(false);
+        } else {
+          setShowSummary(false);
+          setModal((prev) => prev === "round_end" ? null : prev);
+        }
       }
     } catch { setError("Error de conexión."); }
     finally {
       fetchingRef.current = false;
       setLoading(false);
+      if (pendingFetchRef.current) {
+        pendingFetchRef.current = false;
+        fetchData(true);
+      }
     }
   }, [code, token, pushToast]);
 
@@ -230,6 +279,8 @@ export default function MarketPage() {
         .on("postgres_changes", { event: "INSERT", schema: "public", table: "market_transfers", filter: `session_id=eq.${sessionId}` }, onDbChange)
         .on("postgres_changes", { event: "*",      schema: "public", table: "market_offers",    filter: `session_id=eq.${sessionId}` }, onDbChange)
         .on("postgres_changes", { event: "UPDATE", schema: "public", table: "market_sessions",  filter: `id=eq.${sessionId}`         }, onDbChange)
+        .on("postgres_changes", { event: "INSERT", schema: "public", table: "icon_auctions",    filter: `session_id=eq.${sessionId}` }, onDbChange)
+        .on("postgres_changes", { event: "UPDATE", schema: "public", table: "icon_auctions",    filter: `session_id=eq.${sessionId}` }, onDbChange)
         .subscribe();
     };
 
@@ -259,7 +310,12 @@ export default function MarketPage() {
       body: JSON.stringify({ type: "clause", playerId: selectedPlayer.playerId }),
     });
     const d = await res.json();
-    if (!res.ok) { setActionMsg(d.error); setActionLoading(false); return; }
+    if (!res.ok) {
+      setActionMsg(d.error ?? "Error al ejecutar la acción.");
+      setActionLoading(false);
+      if (res.status === 409) fetchData(true); // session expired — refresh
+      return;
+    }
     setModal(null);
     setSelectedPlayer(null);
     setActionLoading(false);
@@ -289,11 +345,18 @@ export default function MarketPage() {
   const doSkip = async () => {
     if (!code || !token) return;
     setActionLoading(true);
-    await fetch(`/api/tournaments/${code}/market/action`, {
+    const res = await fetch(`/api/tournaments/${code}/market/action`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ type: "skip" }),
     });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      setActionMsg(d.error ?? "Error al pasar turno.");
+      setActionLoading(false);
+      fetchData(true);
+      return;
+    }
     setModal(null);
     fetchData(true);
     setActionLoading(false);
@@ -358,14 +421,14 @@ export default function MarketPage() {
     return <MarketPending code={code} adminToken={adminToken} onStarted={() => fetchData()} />;
   }
 
-  // Market finished
-  if (data.status === "finished") {
+  // Market finished — show summary after round_end modal is acknowledged
+  if (data.status === "finished" && showSummary) {
     return (
       <MarketFinished
         data={data}
         code={code}
         adminToken={adminToken}
-        onReset={() => { setData(null); setLoading(true); fetchData(); }}
+        onReset={() => { setShowSummary(false); setData(null); setLoading(true); fetchData(); }}
       />
     );
   }
@@ -526,7 +589,9 @@ export default function MarketPage() {
           {/* Budget card */}
           <div className="bg-[#131722] rounded-2xl border border-white/6 p-4">
             <p className="text-[#9CA3AF] text-[10px] uppercase tracking-widest mb-3">Mi presupuesto</p>
-            <p className="text-[#22C55E] text-2xl font-bold mb-1">{fmt(data.myStatus.budget)}</p>
+            <p className="text-[#22C55E] text-2xl font-bold mb-1">
+              <RollingNumber value={data.myStatus.budget} format={fmt} />
+            </p>
             <div className="h-1.5 rounded-full bg-white/5 mb-3">
               <div className="h-full rounded-full bg-[#22C55E]"
                 style={{ width: `${Math.min(100, (data.myStatus.budget / 400_000_000) * 100)}%` }} />
@@ -579,13 +644,17 @@ export default function MarketPage() {
                 return (
                   <div key={m.id} className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 min-w-0">
-                      <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${
-                        isMe ? "bg-[#8B5CF6]/20" : "bg-white/8"
-                      }`}>
-                        <span className={`text-[9px] font-bold ${isMe ? "text-[#8B5CF6]" : "text-[#9CA3AF]"}`}>
-                          {m.displayName.slice(0, 1).toUpperCase()}
-                        </span>
-                      </div>
+                      {m.teamCrestUrl ? (
+                        <img src={m.teamCrestUrl} alt={m.teamName ?? ""} className="w-6 h-6 object-contain shrink-0" />
+                      ) : (
+                        <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${
+                          isMe ? "bg-[#8B5CF6]/20" : "bg-white/8"
+                        }`}>
+                          <span className={`text-[9px] font-bold ${isMe ? "text-[#8B5CF6]" : "text-[#9CA3AF]"}`}>
+                            {m.displayName.slice(0, 1).toUpperCase()}
+                          </span>
+                        </div>
+                      )}
                       <div className="min-w-0">
                         <p className={`text-xs font-semibold truncate leading-tight ${
                           isMe ? "text-[#8B5CF6]" : "text-[#F3F4F6]"
@@ -841,7 +910,7 @@ export default function MarketPage() {
 
         {/* Round end */}
         {modal === "round_end" && data.session && (
-          <Modal onClose={() => setModal(null)}>
+          <Modal onClose={() => { setModal(null); if (data.status === "finished") setShowSummary(true); }}>
             <div className="flex flex-col items-center gap-5 text-center">
               <div className="w-16 h-16 rounded-2xl bg-[#8B5CF6]/10 border border-[#8B5CF6]/25 flex items-center justify-center">
                 <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#8B5CF6" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
@@ -859,22 +928,59 @@ export default function MarketPage() {
               <div className="w-full bg-[#0D0F14] rounded-xl p-4 text-left">
                 <p className="text-[#9CA3AF] text-xs uppercase tracking-wider mb-2">Transferencias en esta ronda</p>
                 <p className="text-[#F3F4F6] text-sm font-semibold">
-                  {data.recentTransfers.filter((t: any) => t.transfer_type !== "skip").length} transacciones
+                  {data.recentTransfers.filter((t: any) => t.transferType !== "skip").length} transacciones
                 </p>
               </div>
-              {isAdmin && data.session.currentRound < data.session.totalRounds && (
-                <button onClick={doNextRound} disabled={actionLoading}
-                  className="w-full py-3.5 rounded-xl bg-[#8B5CF6] hover:bg-[#7C3AED] text-white font-semibold text-sm transition-colors cursor-pointer disabled:opacity-40">
-                  {actionLoading ? "Iniciando…" : `Iniciar Ronda ${data.session.currentRound + 1}`}
-                </button>
+              {isAdmin && (
+                <div className="w-full flex flex-col gap-3">
+                  <IconAuctionInitiateButton
+                    code={code}
+                    adminToken={adminToken!}
+                    currentRound={data.session.currentRound}
+                    auctionDone={roundAuctionDone}
+                    onStarted={() => { setShowIconAuction(true); setModal(null); }}
+                  />
+                  {data.session.currentRound < data.session.totalRounds ? (
+                    <button onClick={doNextRound} disabled={actionLoading}
+                      className="w-full py-3.5 rounded-xl bg-[#8B5CF6] hover:bg-[#7C3AED] text-white font-semibold text-sm transition-colors cursor-pointer disabled:opacity-40">
+                      {actionLoading ? "Iniciando…" : `Iniciar Ronda ${data.session.currentRound + 1}`}
+                    </button>
+                  ) : (
+                    <button onClick={() => { setShowSummary(true); setModal(null); }}
+                      className="w-full py-3.5 rounded-xl bg-[#22C55E] hover:bg-[#16A34A] text-white font-semibold text-sm transition-colors cursor-pointer">
+                      Ver Resumen del Mercado
+                    </button>
+                  )}
+                </div>
               )}
               {!isAdmin && (
-                <p className="text-[#9CA3AF] text-xs">Esperando que el administrador inicie la siguiente ronda.</p>
+                <p className="text-[#9CA3AF] text-xs">
+                  {data.session.currentRound < data.session.totalRounds
+                    ? "Esperando que el administrador inicie la siguiente ronda."
+                    : "Esperando que el administrador cierre el mercado."}
+                </p>
               )}
             </div>
           </Modal>
         )}
       </AnimatePresence>
+
+      {/* Icon Auction full-screen overlay */}
+      {showIconAuction && data?.session?.id && (
+        <IconAuction
+          code={code}
+          token={token}
+          adminToken={adminToken}
+          myMemberId={myMemberId ?? ""}
+          sessionId={data.session.id}
+          currentRound={data.session.currentRound}
+          onFinished={() => {
+            setShowIconAuction(false);
+            setRoundAuctionDone(true);
+            fetchData(true);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -1112,6 +1218,9 @@ function TurnChip({ turn, isMe }: { turn: TurnInfo; isMe: boolean }) {
       {turn.status === "active" && <span className="w-1.5 h-1.5 rounded-full bg-[#8B5CF6] animate-pulse shrink-0" />}
       {turn.status === "completed" && <CheckIcon size={10} />}
       {turn.status === "skipped" && <span className="text-[9px] opacity-60">—</span>}
+      {turn.teamCrestUrl && (
+        <img src={turn.teamCrestUrl} alt={turn.teamName ?? ""} className="w-4 h-4 object-contain shrink-0" />
+      )}
       <div className={`flex flex-col leading-none ${done ? "opacity-50" : ""}`}>
         <span className={`text-xs font-medium whitespace-nowrap ${done ? "line-through" : ""}`}>
           {turn.memberName}{isMe ? " (tú)" : ""}
@@ -1206,75 +1315,197 @@ function MarketFinished({ data, code, adminToken, onReset }: {
   onReset: () => void;
 }) {
   const [resetting, setResetting] = useState(false);
-  const [resetError, setResetError] = useState("");
+  const [closing, setClosing] = useState(false);
+  const [actionError, setActionError] = useState("");
 
   const doReset = async () => {
     if (!adminToken) return;
     setResetting(true);
-    setResetError("");
+    setActionError("");
     const res = await fetch(`/api/tournaments/${code}/market/reset`, {
       method: "POST",
       headers: { Authorization: `Bearer ${adminToken}` },
     });
     if (!res.ok) {
       const d = await res.json();
-      setResetError(d.error ?? "Error al reiniciar.");
+      setActionError(d.error ?? "Error al reiniciar.");
       setResetting(false);
       return;
     }
     onReset();
   };
 
+  const doClose = async () => {
+    if (!adminToken) return;
+    setClosing(true);
+    setActionError("");
+    const res = await fetch(`/api/tournaments/${code}/market/close`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    if (!res.ok) {
+      const d = await res.json();
+      setActionError(d.error ?? "Error al cerrar.");
+      setClosing(false);
+    }
+  };
+
+  const realTransfers = data.recentTransfers.filter(
+    (t: any) => t.transferType === "clause" || t.transferType === "offer" || t.transferType === "icon_auction"
+  );
+  const totalSpent = realTransfers.reduce((s: number, t: any) => s + (t.amount ?? 0), 0);
+
+  const transfersByMember: Record<string, { bought: any[]; sold: any[] }> = {};
+  for (const m of data.allMembers) transfersByMember[m.id] = { bought: [], sold: [] };
+  for (const t of realTransfers) {
+    if (t.buyerId && transfersByMember[t.buyerId]) transfersByMember[t.buyerId].bought.push(t);
+    if (t.sellerId && transfersByMember[t.sellerId]) transfersByMember[t.sellerId].sold.push(t);
+  }
+
   return (
-    <div className="min-h-screen flex items-center justify-center p-8">
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="bg-[#131722] rounded-3xl border border-[#22C55E]/20 p-10 max-w-md w-full text-center flex flex-col items-center gap-6"
-      >
-        <div className="w-20 h-20 rounded-3xl bg-[#22C55E]/10 border border-[#22C55E]/20 flex items-center justify-center">
-          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#22C55E" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="p-8 max-w-5xl mx-auto"
+    >
+      {/* Hero */}
+      <div className="text-center mb-10">
+        <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-[#22C55E]/10 border border-[#22C55E]/20 mb-4">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#22C55E" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="20 6 9 17 4 12"/>
           </svg>
         </div>
-        <div>
-          <h1 className="text-[#F3F4F6] text-2xl font-bold mb-2">Mercado cerrado</h1>
-          <p className="text-[#9CA3AF] text-sm">Las {data.session?.totalRounds} rondas han concluido.</p>
+        <h1 className="text-[#F3F4F6] text-3xl font-bold tracking-tight mb-2">Mercado Completado</h1>
+        <p className="text-[#9CA3AF] text-sm">
+          {data.session?.totalRounds} rondas · {realTransfers.length} transferencias · {fmt(totalSpent)} en movimientos
+        </p>
+      </div>
+
+      {/* Stats row */}
+      <div className="grid grid-cols-3 gap-4 mb-8">
+        <div className="bg-[#131722] rounded-2xl border border-white/6 p-5 text-center">
+          <p className="text-[#9CA3AF] text-[10px] uppercase tracking-widest mb-1">Transferencias</p>
+          <p className="text-[#F3F4F6] text-2xl font-bold">{realTransfers.length}</p>
         </div>
-        <div className="w-full bg-[#0D0F14] rounded-2xl p-5 text-left">
-          <p className="text-[#9CA3AF] text-[10px] uppercase tracking-wider mb-3">Presupuestos finales</p>
-          <div className="flex flex-col gap-2">
-            {data.allMembers.map((m) => (
-              <div key={m.id} className="flex items-center justify-between">
-                <div>
-                  <span className="text-[#F3F4F6] text-xs font-medium">{m.displayName}</span>
-                  {m.teamName && <span className="text-[#9CA3AF] text-[10px] ml-2">({m.teamName})</span>}
+        <div className="bg-[#131722] rounded-2xl border border-white/6 p-5 text-center">
+          <p className="text-[#9CA3AF] text-[10px] uppercase tracking-widest mb-1">Total movido</p>
+          <p className="text-[#22C55E] text-2xl font-bold">{fmt(totalSpent)}</p>
+        </div>
+        <div className="bg-[#131722] rounded-2xl border border-white/6 p-5 text-center">
+          <p className="text-[#9CA3AF] text-[10px] uppercase tracking-widest mb-1">Rondas jugadas</p>
+          <p className="text-[#8B5CF6] text-2xl font-bold">{data.session?.totalRounds ?? 3}</p>
+        </div>
+      </div>
+
+      {/* Per-member cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+        {data.allMembers.map((m) => {
+          const tx = transfersByMember[m.id] ?? { bought: [], sold: [] };
+          return (
+            <div key={m.id} className="bg-[#131722] rounded-2xl border border-white/6 p-5 flex flex-col gap-3">
+              <div className="flex items-center gap-3">
+                {m.teamCrestUrl ? (
+                  <img src={m.teamCrestUrl} alt={m.teamName ?? ""} className="w-8 h-8 object-contain shrink-0" />
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-[#8B5CF6]/15 flex items-center justify-center shrink-0">
+                    <span className="text-[#8B5CF6] text-xs font-bold">{m.displayName.charAt(0).toUpperCase()}</span>
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <p className="text-[#F3F4F6] text-sm font-semibold truncate">{m.displayName}</p>
+                  {m.teamName && <p className="text-[#9CA3AF] text-[10px] truncate">{m.teamName}</p>}
                 </div>
-                <span className="text-[#22C55E] text-xs font-bold">{fmt(m.budget)}</span>
+                <span className="ml-auto text-[#22C55E] text-sm font-bold shrink-0">{fmt(m.budget)}</span>
+              </div>
+
+              <div className="flex gap-4 text-xs">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-[#22C55E]" />
+                  <span className="text-[#9CA3AF]">{tx.bought.length} fichajes</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-[#EF4444]" />
+                  <span className="text-[#9CA3AF]">{tx.sold.length} ventas</span>
+                </div>
+              </div>
+
+              {tx.bought.length > 0 && (
+                <div className="flex flex-col gap-1">
+                  {tx.bought.map((t: any, i: number) => (
+                    <div key={i} className="flex items-center justify-between text-[10px] bg-[#22C55E]/5 rounded-lg px-2 py-1.5">
+                      <span className="text-[#F3F4F6] font-medium truncate">{t.playerName}</span>
+                      <span className="text-[#22C55E] font-bold shrink-0 ml-2">{fmt(t.amount)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {tx.sold.length > 0 && (
+                <div className="flex flex-col gap-1">
+                  {tx.sold.map((t: any, i: number) => (
+                    <div key={i} className="flex items-center justify-between text-[10px] bg-[#EF4444]/5 rounded-lg px-2 py-1.5">
+                      <span className="text-[#F3F4F6] font-medium truncate">{t.playerName}</span>
+                      <span className="text-[#EF4444] font-bold shrink-0 ml-2">{fmt(t.amount)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Transfer timeline */}
+      {realTransfers.length > 0 && (
+        <div className="bg-[#131722] rounded-2xl border border-white/6 p-6 mb-8">
+          <p className="text-[#9CA3AF] text-[10px] uppercase tracking-widest mb-4">Historial de transferencias</p>
+          <div className="flex flex-col gap-2">
+            {realTransfers.map((t: any, i: number) => (
+              <div key={i} className="flex items-center gap-3 text-xs py-2 border-b border-white/3 last:border-0">
+                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                  t.transferType === "clause" ? "bg-[#EF4444]" :
+                  t.transferType === "icon_auction" ? "bg-[#F59E0B]" :
+                  "bg-[#8B5CF6]"
+                }`} />
+                <span className="text-[#F3F4F6] font-medium flex-1 truncate">{t.playerName}</span>
+                <span className="text-[#9CA3AF] shrink-0">
+                  {t.buyerName} ← {t.sellerName}
+                </span>
+                <span className={`font-bold shrink-0 ${
+                  t.transferType === "clause" ? "text-[#EF4444]" : "text-[#22C55E]"
+                }`}>{fmt(t.amount)}</span>
+                <span className="text-[#4B5563] text-[9px] uppercase shrink-0">
+                  {t.transferType === "clause" ? "cláusula" : t.transferType === "icon_auction" ? "ícono" : "oferta"}
+                </span>
               </div>
             ))}
           </div>
         </div>
-        {adminToken && (
-          <div className="w-full flex flex-col gap-2">
-            {resetError && <p className="text-[#EF4444] text-xs">{resetError}</p>}
-            <button onClick={doReset} disabled={resetting}
-              className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl
-                border border-[#F59E0B]/30 bg-[#F59E0B]/8 text-[#F59E0B]
-                hover:bg-[#F59E0B]/15 hover:border-[#F59E0B]/50
-                text-sm font-semibold transition-all cursor-pointer disabled:opacity-40">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.51"/>
-              </svg>
-              {resetting ? "Reiniciando…" : "Reiniciar Mercado"}
-            </button>
-            <p className="text-[#9CA3AF] text-[10px]">
-              Revierte todas las transferencias y restaura presupuestos al estado original.
-            </p>
-          </div>
-        )}
-      </motion.div>
-    </div>
+      )}
+
+      {/* Admin actions */}
+      {adminToken && (
+        <div className="flex flex-col items-center gap-3 max-w-md mx-auto">
+          {actionError && <p className="text-[#EF4444] text-xs">{actionError}</p>}
+          <button onClick={doClose} disabled={closing}
+            className="w-full py-3.5 rounded-2xl bg-[#22C55E] hover:bg-[#16A34A] text-white font-semibold text-sm transition-colors cursor-pointer disabled:opacity-40">
+            {closing ? "Cerrando…" : "Cerrar Mercado y volver al Lobby"}
+          </button>
+          <button onClick={doReset} disabled={resetting}
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-2xl
+              border border-[#F59E0B]/20 bg-transparent text-[#F59E0B]/60
+              hover:bg-[#F59E0B]/8 hover:text-[#F59E0B]
+              text-xs font-medium transition-all cursor-pointer disabled:opacity-40">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.51"/>
+            </svg>
+            {resetting ? "Reiniciando…" : "Reiniciar Mercado (testing)"}
+          </button>
+        </div>
+      )}
+      {!adminToken && (
+        <p className="text-center text-[#9CA3AF] text-sm">Esperando que el administrador cierre el mercado.</p>
+      )}
+    </motion.div>
   );
 }
 

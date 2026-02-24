@@ -4,58 +4,38 @@ import { createServerClient, verifyMemberToken } from "@/lib/supabase";
 type Params = { params: Promise<{ code: string }> };
 
 // ─── GET /api/tournaments/[code]/spin ─────────────────────────────────────────
-// Consulta el estado actual del miembro: equipo asignado + intentos restantes.
+// Returns current assignment + reroll config. Used by the frontend to decide
+// how many local spins are still allowed.
 
 export async function GET(request: NextRequest, { params }: Params) {
   const { code } = await params;
 
   const auth = await verifyMemberToken(request, code);
-  if (!auth.ok) {
-    return NextResponse.json({ error: auth.error }, { status: auth.status });
-  }
+  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
   const supabase = createServerClient();
 
-  // Rerolls del torneo
-  const { data: tournament } = await supabase
-    .from("tournaments")
-    .select("rerolls_allowed")
-    .eq("id", auth.tournamentId)
-    .single();
+  const [{ data: tournament }, { data: member }, { data: existing }] = await Promise.all([
+    supabase.from("tournaments").select("rerolls_allowed").eq("id", auth.tournamentId).single(),
+    supabase.from("members").select("rerolls_used, budget").eq("id", auth.memberId).single(),
+    supabase.from("assignments").select("team_id").eq("member_id", auth.memberId).maybeSingle(),
+  ]);
 
-  const rerollsAllowed: number = (tournament as any)?.rerolls_allowed ?? 1;
-
-  // Estado del miembro
-  const { data: member } = await supabase
-    .from("members")
-    .select("rerolls_used, budget")
-    .eq("id", auth.memberId)
-    .single();
-
-  const rerollsUsed: number = (member as any)?.rerolls_used ?? 0;
-  const rerollsRemaining = Math.max(0, rerollsAllowed - rerollsUsed);
-
-  // Asignación actual
-  const { data: existing } = await supabase
-    .from("assignments")
-    .select("team_id")
-    .eq("member_id", auth.memberId)
-    .maybeSingle();
+  const rerollsAllowed: number  = (tournament as any)?.rerolls_allowed ?? 1;
+  const rerollsUsed:    number  = (member as any)?.rerolls_used        ?? 0;
+  const rerollsRemaining        = Math.max(0, rerollsAllowed - rerollsUsed);
 
   if (!existing) {
     return NextResponse.json({ assigned: false, team: null, rerollsAllowed, rerollsUsed, rerollsRemaining });
   }
 
   const { data: teamRow } = await supabase
-    .from("teams")
-    .select("id, name, budget")
-    .eq("id", existing.team_id)
-    .single();
+    .from("teams").select("id, name, crest_url").eq("id", existing.team_id).single();
 
   const t = teamRow as any;
   return NextResponse.json({
     assigned: true,
-    team: { id: t?.id, name: t?.name, squadValue: 0, budget: (member as any)?.budget ?? 0 },
+    team: { id: t?.id, name: t?.name, crestUrl: t?.crest_url ?? null, squadValue: 0, budget: (member as any)?.budget ?? 0 },
     rerollsAllowed,
     rerollsUsed,
     rerollsRemaining,
@@ -63,22 +43,21 @@ export async function GET(request: NextRequest, { params }: Params) {
 }
 
 // ─── POST /api/tournaments/[code]/spin ────────────────────────────────────────
-// Body: { teamId: string, reroll?: boolean }
-// El cliente elige el equipo (lo que cayó en la ruleta) y lo envía aquí para validar y guardar.
+// Called ONCE when the user confirms their chosen team (after all local spins).
+// Body: { teamId: string, rerollsUsed: number }
+//   rerollsUsed = total rerolls consumed (0 = only the initial spin, no rerolls).
 
 export async function POST(request: NextRequest, { params }: Params) {
   const { code } = await params;
 
   const auth = await verifyMemberToken(request, code);
-  if (!auth.ok) {
-    return NextResponse.json({ error: auth.error }, { status: auth.status });
-  }
+  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
-  let body: { teamId?: string; reroll?: boolean } = {};
-  try { body = await request.json(); } catch { /* body vacío es válido */ }
+  let body: { teamId?: string; rerollsUsed?: number } = {};
+  try { body = await request.json(); } catch { /* empty body */ }
 
-  const isReroll = body?.reroll === true;
   const requestedTeamId = body?.teamId;
+  const rerollsUsed     = Math.max(0, body?.rerollsUsed ?? 0);
 
   if (!requestedTeamId) {
     return NextResponse.json({ error: "Se requiere teamId." }, { status: 400 });
@@ -86,138 +65,70 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   const supabase = createServerClient();
 
-  // ── Configuración del torneo ───────────────────────────────────────────────
   const { data: tournament } = await supabase
-    .from("tournaments")
-    .select("rerolls_allowed")
-    .eq("id", auth.tournamentId)
-    .single();
+    .from("tournaments").select("rerolls_allowed").eq("id", auth.tournamentId).single();
 
   const rerollsAllowed: number = (tournament as any)?.rerolls_allowed ?? 1;
 
-  // ── Estado actual del miembro ──────────────────────────────────────────────
-  const { data: memberRow } = await supabase
-    .from("members")
-    .select("rerolls_used, budget")
-    .eq("id", auth.memberId)
-    .single();
-
-  const rerollsUsed: number = (memberRow as any)?.rerolls_used ?? 0;
-
-  // ── Asignación existente ───────────────────────────────────────────────────
-  const { data: existing } = await supabase
-    .from("assignments")
-    .select("id, team_id")
-    .eq("member_id", auth.memberId)
-    .maybeSingle();
-
-  if (existing && !isReroll) {
-    // Ya tiene equipo y no pidió reroll → devolver equipo actual
-    const { data: teamRow } = await supabase
-      .from("teams")
-      .select("id, name, budget")
-      .eq("id", existing.team_id)
-      .single();
-
-    const t = teamRow as any;
-    return NextResponse.json({
-      alreadyAssigned: true,
-      team: { id: t?.id, name: t?.name, squadValue: 0, budget: (memberRow as any)?.budget ?? 0 },
-      rerollsAllowed,
-      rerollsUsed,
-      rerollsRemaining: Math.max(0, rerollsAllowed - rerollsUsed),
-    });
+  if (rerollsUsed > rerollsAllowed) {
+    return NextResponse.json({ error: "Se excedió el límite de rerolls permitidos." }, { status: 403 });
   }
 
-  if (isReroll) {
-    // Verificar que le quedan intentos
-    if (rerollsUsed >= rerollsAllowed) {
-      return NextResponse.json(
-        { error: `No te quedan intentos de reroll. Tienes ${rerollsAllowed} en total.` },
-        { status: 403 }
-      );
-    }
-    // Liberar equipo actual
-    if (existing) {
-      await supabase.from("assignments").delete().eq("id", existing.id);
-    }
-  }
+  // Validate team exists
+  const { data: teamRow } = await supabase
+    .from("teams").select("id, name, crest_url").eq("id", requestedTeamId).maybeSingle();
 
-  // ── Validar que el equipo solicitado existe ───────────────────────────────
-  const { data: teamRow, error: teamFetchErr } = await supabase
-    .from("teams")
-    .select("id, name")
-    .eq("id", requestedTeamId)
-    .maybeSingle();
-
-  if (teamFetchErr || !teamRow) {
+  if (!teamRow) {
     return NextResponse.json({ error: "Equipo no encontrado." }, { status: 404 });
   }
 
-  // ── Verificar que el equipo no está ya tomado por otro miembro ────────────
+  // Ensure no OTHER member in this tournament has the team
   const { data: members } = await supabase
-    .from("members")
-    .select("id")
-    .eq("tournament_id", auth.tournamentId);
+    .from("members").select("id").eq("tournament_id", auth.tournamentId);
 
-  const memberIds = (members ?? [])
+  const otherIds = (members ?? [])
     .map((m: any) => m.id as string)
-    .filter((id) => id !== auth.memberId); // excluir al propio miembro
+    .filter((id) => id !== auth.memberId);
 
-  let takenByOthers = false;
-  if (memberIds.length > 0) {
-    const { data: takenRows } = await supabase
-      .from("assignments")
-      .select("team_id")
-      .in("member_id", memberIds)
-      .eq("team_id", requestedTeamId);
-    takenByOthers = (takenRows ?? []).length > 0;
-  }
-
-  if (takenByOthers) {
-    return NextResponse.json(
-      { error: "Ese equipo ya fue tomado por otro jugador. Intenta de nuevo." },
-      { status: 409 }
-    );
+  if (otherIds.length > 0) {
+    const { data: taken } = await supabase
+      .from("assignments").select("team_id").in("member_id", otherIds).eq("team_id", requestedTeamId);
+    if ((taken ?? []).length > 0) {
+      return NextResponse.json(
+        { error: "Ese equipo ya fue tomado por otro jugador. Intenta de nuevo." },
+        { status: 409 },
+      );
+    }
   }
 
   const team = teamRow as any;
 
+  // Upsert assignment (also handles re-assignments from rerolls)
   const { error: assignErr } = await supabase
     .from("assignments")
     .upsert(
       { tournament_id: auth.tournamentId, member_id: auth.memberId, team_id: team.id },
-      { onConflict: "tournament_id,member_id", ignoreDuplicates: false }
+      { onConflict: "tournament_id,member_id", ignoreDuplicates: false },
     );
 
   if (assignErr) {
-    console.error("[spin] insert", assignErr);
+    console.error("[spin] assign", assignErr);
     return NextResponse.json({ error: "Error al guardar la asignación." }, { status: 500 });
   }
 
-  // ── Incrementar rerolls_used si fue un reroll ──────────────────────────────
-  const newRerollsUsed = isReroll ? rerollsUsed + 1 : rerollsUsed;
-  if (isReroll) {
-    await supabase
-      .from("members")
-      .update({ rerolls_used: newRerollsUsed })
-      .eq("id", auth.memberId);
-  }
-
-  // ── Calcular y guardar presupuesto en el member ────────────────────────────
+  // Persist rerolls_used and calculate budget
+  await supabase.from("members").update({ rerolls_used: rerollsUsed }).eq("id", auth.memberId);
   const budget = await calcAndSaveBudget(supabase, team.id, auth.memberId);
 
   return NextResponse.json({
-    alreadyAssigned: false,
-    team: { id: team.id, name: team.name, squadValue: 0, budget },
+    team: { id: team.id, name: team.name, crestUrl: team.crest_url ?? null, squadValue: 0, budget },
     rerollsAllowed,
-    rerollsUsed: newRerollsUsed,
-    rerollsRemaining: Math.max(0, rerollsAllowed - newRerollsUsed),
+    rerollsUsed,
+    rerollsRemaining: Math.max(0, rerollsAllowed - rerollsUsed),
   });
 }
 
-// ─── Calcular presupuesto inversamente proporcional al OVR medio ──────────────
-// El presupuesto se guarda en members.budget (pertenece al participante).
+// ─── Budget calculation ───────────────────────────────────────────────────────
 
 async function calcAndSaveBudget(supabase: any, teamId: string, memberId: string): Promise<number> {
   const OVR_REF  = 88;
@@ -227,26 +138,20 @@ async function calcAndSaveBudget(supabase: any, teamId: string, memberId: string
   const ROUND_TO = 5_000_000;
 
   const { data: rows } = await supabase
-    .from("team_players")
-    .select("players(ovr)")
-    .eq("team_id", teamId);
+    .from("team_players").select("players(ovr)").eq("team_id", teamId);
 
   const ovrs: number[] = (rows ?? [])
-    .map((r: any) => {
-      const p = r.players;
-      return Array.isArray(p) ? p[0]?.ovr : p?.ovr;
-    })
+    .map((r: any) => { const p = r.players; return Array.isArray(p) ? p[0]?.ovr : p?.ovr; })
     .filter((v: any) => typeof v === "number");
 
   const budget = (() => {
     if (ovrs.length === 0) return MIN_B;
-    const avgOvr  = ovrs.reduce((s, v) => s + v, 0) / ovrs.length;
+    const avgOvr  = ovrs.reduce((s: number, v: number) => s + v, 0) / ovrs.length;
     const raw     = MIN_B + (OVR_REF - avgOvr) * STEP;
     const rounded = Math.round(raw / ROUND_TO) * ROUND_TO;
     return Math.max(MIN_B, Math.min(MAX_B, rounded));
   })();
 
-  // Guardar en el participante, no en el equipo
   await supabase.from("members").update({ budget }).eq("id", memberId);
   return budget;
 }

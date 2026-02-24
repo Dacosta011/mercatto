@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient, verifyAdminToken } from "@/lib/supabase";
+import { advanceTurn } from "../action/route";
 
 type Params = { params: Promise<{ code: string }> };
 
@@ -46,12 +47,13 @@ export async function POST(request: NextRequest, { params }: Params) {
   const memberIds = (members ?? []).map((m: any) => m.id);
   const shuffled = shuffle(memberIds);
 
+  // All turns start as "pending" — advanceTurn will activate the first eligible one
   const turnRows = shuffled.map((memberId, idx) => ({
     session_id: (session as any).id,
     round_num: newRound,
     position: idx + 1,
     member_id: memberId,
-    status: idx === 0 ? "active" : "pending",
+    status: "pending",
   }));
 
   const { error: turnsErr } = await supabase.from("market_turns").insert(turnRows);
@@ -61,6 +63,10 @@ export async function POST(request: NextRequest, { params }: Params) {
     .from("market_sessions")
     .update({ current_round: newRound })
     .eq("id", (session as any).id);
+
+  // Activate the first eligible turn (auto-skips members with 3/3 purchases)
+  const updatedSession = { ...session, current_round: newRound };
+  await advanceTurn(supabase, updatedSession);
 
   return NextResponse.json({ ok: true, round: newRound });
 }
