@@ -1,44 +1,36 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  pointerWithin,
+  rectIntersection,
+  type DragStartEvent,
+  type DragEndEvent,
+  type CollisionDetection,
+} from "@dnd-kit/core";
 import { getLastTournamentCode, getMemberToken } from "@/lib/tokenStorage";
-import StatCard from "../../Components/StatCard";
-import Badge from "../../Components/Badge";
-
-interface Player {
-  id: string;
-  name: string;
-  ovr: number;
-  position: string;
-  countryName: string;
-  price: number;
-  clause: number;
-  headshotUrl?: string | null;
-  newSigning?: boolean;
-}
+import Button from "../../Components/Button";
+import FormationPitch from "./_components/FormationPitch";
+import type { LineupPlayer } from "./_components/FormationPitch";
+import BenchPanel from "./_components/BenchPanel";
+import formations, { FORMATION_IDS, type FormationId } from "./_lib/formations";
 
 interface SquadData {
-  team: { id: string; name: string; crestUrl: string | null; squadValue: number; budget: number };
-  players: Player[];
+  team: {
+    id: string;
+    name: string;
+    crestUrl: string | null;
+    squadValue: number;
+    budget: number;
+  };
+  players: LineupPlayer[];
   avgOvr: number;
-}
-
-type PosFilter = "Todos" | "POR" | "DEF" | "MED" | "DEL";
-
-const POS_GROUPS: Record<PosFilter, string[]> = {
-  Todos: [],
-  POR:   ["POR", "GK"],
-  DEF:   ["DFC", "CB", "LI", "LD", "LB", "RB", "SW", "WB"],
-  MED:   ["MCD", "MC", "MCO", "MI", "MD", "CM", "CDM", "CAM", "LM", "RM"],
-  DEL:   ["DC", "SD", "EI", "ED", "CF", "ST", "LW", "RW", "SS"],
-};
-
-function ovrStyle(ovr: number) {
-  if (ovr >= 90) return { bg: "bg-[#8B5CF6]/10", text: "text-[#8B5CF6]" };
-  if (ovr >= 85) return { bg: "bg-[#22C55E]/10", text: "text-[#22C55E]" };
-  if (ovr >= 80) return { bg: "bg-yellow-400/10", text: "text-yellow-400" };
-  return { bg: "bg-[#9CA3AF]/10", text: "text-[#9CA3AF]" };
 }
 
 function fmtMoney(cents: number) {
@@ -48,12 +40,29 @@ function fmtMoney(cents: number) {
   return `€${cents}`;
 }
 
+function ovrColor(ovr: number) {
+  if (ovr >= 90) return "#8B5CF6";
+  if (ovr >= 85) return "#22C55E";
+  if (ovr >= 80) return "#F59E0B";
+  return "#9CA3AF";
+}
+
 export default function SquadPage() {
   const [squad, setSquad] = useState<SquadData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<PosFilter>("Todos");
 
+  const [formationId, setFormationId] = useState<FormationId>("4-3-3");
+  const [lineup, setLineup] = useState<Record<string, LineupPlayer | null>>({});
+  const [activeDragPlayer, setActiveDragPlayer] = useState<LineupPlayer | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [locked] = useState(false);
+  const [savedLineupLoaded, setSavedLineupLoaded] = useState(false);
+
+  const formation = formations[formationId];
+
+  // ── Data fetching ──────────────────────────────────────────
   useEffect(() => {
     const code = getLastTournamentCode();
     const token = code ? getMemberToken(code) : null;
@@ -64,28 +73,244 @@ export default function SquadPage() {
       return;
     }
 
-    fetch(`/api/tournaments/${code}/squad`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.error) { setError(data.error); return; }
-        setSquad(data as SquadData);
+    const headers = { Authorization: `Bearer ${token}` };
+
+    Promise.all([
+      fetch(`/api/tournaments/${code}/squad`, { headers }).then((r) => r.json()),
+      fetch(`/api/tournaments/${code}/squad/lineup`, { headers }).then((r) => r.json()),
+    ])
+      .then(([squadData, lineupData]) => {
+        if (squadData.error) {
+          setError(squadData.error);
+          return;
+        }
+        const sq = squadData as SquadData;
+        setSquad(sq);
+
+        // Restore saved lineup if available
+        if (lineupData.formation && lineupData.slots) {
+          const savedFormation = lineupData.formation as string;
+          if (["4-3-3", "4-4-2", "4-2-3-1", "3-5-2"].includes(savedFormation)) {
+            setFormationId(savedFormation as FormationId);
+            const savedSlots = lineupData.slots as Record<string, string | null>;
+            const playerMap = new Map(sq.players.map((p) => [p.id, p]));
+            const restoredLineup: Record<string, LineupPlayer | null> = {};
+            const fm = formations[savedFormation as FormationId];
+            for (const slot of fm.slots) {
+              const playerId = savedSlots[slot.id];
+              restoredLineup[slot.id] = playerId ? playerMap.get(playerId) ?? null : null;
+            }
+            setLineup(restoredLineup);
+            setSavedLineupLoaded(true);
+          }
+        }
       })
       .catch(() => setError("Error al cargar la plantilla."))
       .finally(() => setLoading(false));
   }, []);
 
-  const filtered =
-    filter === "Todos"
-      ? squad?.players ?? []
-      : (squad?.players ?? []).filter((p) =>
-          POS_GROUPS[filter].includes((p.position ?? "").toUpperCase())
-        );
+  // ── Initialize empty lineup on formation change (only if no saved lineup was loaded) ──
+  useEffect(() => {
+    if (savedLineupLoaded) {
+      setSavedLineupLoaded(false);
+      return;
+    }
+    const newLineup: Record<string, LineupPlayer | null> = {};
+    formation.slots.forEach((slot) => {
+      newLineup[slot.id] = null;
+    });
+    setLineup(newLineup);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formationId]);
 
-  const totalClause = filtered.reduce((s, p) => s + (p.clause ?? 0), 0);
+  // ── Derived state ──────────────────────────────────────────
+  const lineupPlayerIds = useMemo(() => {
+    const ids = new Set<string>();
+    Object.values(lineup).forEach((p) => {
+      if (p) ids.add(p.id);
+    });
+    return ids;
+  }, [lineup]);
 
-  // ── Loading ─────────────────────────────────────────────────────────────────
+  const lineupCount = lineupPlayerIds.size;
+
+  // ── DnD sensors ────────────────────────────────────────────
+  const pointerSensor = useSensor(PointerSensor, {
+    activationConstraint: { distance: 8 },
+  });
+  const sensors = useSensors(pointerSensor);
+
+  // Prefer pointerWithin so the large bench panel is detected when the
+  // cursor is anywhere inside it; fall back to rectIntersection.
+  const collisionDetection: CollisionDetection = useCallback(
+    (args) => {
+      const pw = pointerWithin(args);
+      if (pw.length > 0) return pw;
+      return rectIntersection(args);
+    },
+    [],
+  );
+
+  // ── DnD handlers ───────────────────────────────────────────
+  const handleDragStart = useCallback((event: DragStartEvent) => {
+    const data = event.active.data.current as {
+      player: LineupPlayer;
+      fromSlot: string | null;
+    };
+    setActiveDragPlayer(data.player);
+  }, []);
+
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+
+      // Always clear drag state first
+      setActiveDragPlayer(null);
+
+      if (!over) return;
+
+      const activeData = active.data.current as {
+        player: LineupPlayer;
+        fromSlot: string | null;
+      };
+      const player = activeData.player;
+      const fromSlot = activeData.fromSlot;
+      const overData = over.data.current as
+        | { type: "slot"; slotId: string }
+        | { type: "bench" };
+
+      // Defer lineup update so dnd-kit fully resets its internal drag
+      // state before React re-renders with different component ownership
+      // of the same draggable ID.
+      requestAnimationFrame(() => {
+        if (overData.type === "slot") {
+          const targetSlotId = overData.slotId;
+
+          if (fromSlot) {
+            setLineup((prev) => ({
+              ...prev,
+              [fromSlot]: prev[targetSlotId] ?? null,
+              [targetSlotId]: player,
+            }));
+          } else {
+            setLineup((prev) => ({
+              ...prev,
+              [targetSlotId]: player,
+            }));
+          }
+        } else if (overData.type === "bench") {
+          if (fromSlot) {
+            setLineup((prev) => ({
+              ...prev,
+              [fromSlot]: null,
+            }));
+          }
+        }
+      });
+    },
+    [],
+  );
+
+  const handleDragCancel = useCallback(() => {
+    setActiveDragPlayer(null);
+  }, []);
+
+  // ── Auto fill best XI ─────────────────────────────────────
+  const autoFill = useCallback(() => {
+    if (!squad) return;
+    const available = [...squad.players].sort((a, b) => b.ovr - a.ovr);
+    const used = new Set<string>();
+    const newLineup: Record<string, LineupPlayer | null> = {};
+
+    // GK first
+    const gkSlot = formation.slots.find((s) => s.id === "gk");
+    if (gkSlot) {
+      const gk = available.find(
+        (p) =>
+          !used.has(p.id) &&
+          gkSlot.compatiblePositions.includes(p.position.toUpperCase())
+      );
+      if (gk) {
+        newLineup[gkSlot.id] = gk;
+        used.add(gk.id);
+      }
+    }
+
+    // Position-compatible pass
+    for (const slot of formation.slots) {
+      if (newLineup[slot.id]) continue;
+      const match = available.find(
+        (p) =>
+          !used.has(p.id) &&
+          slot.compatiblePositions.includes(p.position.toUpperCase())
+      );
+      if (match) {
+        newLineup[slot.id] = match;
+        used.add(match.id);
+      }
+    }
+
+    // Fill remaining with highest OVR regardless of position
+    for (const slot of formation.slots) {
+      if (newLineup[slot.id]) continue;
+      const match = available.find((p) => !used.has(p.id));
+      if (match) {
+        newLineup[slot.id] = match;
+        used.add(match.id);
+      } else {
+        newLineup[slot.id] = null;
+      }
+    }
+
+    setLineup(newLineup);
+  }, [squad, formation.slots]);
+
+  // ── Reset lineup ───────────────────────────────────────────
+  const resetLineup = useCallback(() => {
+    const empty: Record<string, LineupPlayer | null> = {};
+    formation.slots.forEach((s) => {
+      empty[s.id] = null;
+    });
+    setLineup(empty);
+  }, [formation.slots]);
+
+  // ── Save lineup ────────────────────────────────────────────
+  const saveLineup = useCallback(async () => {
+    const code = getLastTournamentCode();
+    const token = code ? getMemberToken(code) : null;
+    if (!code || !token) return;
+
+    setSaving(true);
+    try {
+      const slotsPayload: Record<string, string | null> = {};
+      for (const [slotId, player] of Object.entries(lineup)) {
+        slotsPayload[slotId] = player?.id ?? null;
+      }
+
+      const res = await fetch(`/api/tournaments/${code}/squad/lineup`, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ formation: formationId, slots: slotsPayload }),
+      });
+
+      const data = await res.json();
+      if (data.ok) {
+        setToast("Alineación guardada");
+      } else {
+        setToast(data.error ?? "Error al guardar");
+      }
+    } catch {
+      setToast("Error de conexión");
+    } finally {
+      setSaving(false);
+      setTimeout(() => setToast(null), 2500);
+    }
+  }, [lineup, formationId]);
+
+  // ── Loading ────────────────────────────────────────────────
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -97,7 +322,7 @@ export default function SquadPage() {
     );
   }
 
-  // ── Sin equipo ──────────────────────────────────────────────────────────────
+  // ── Error ──────────────────────────────────────────────────
   if (error) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -121,192 +346,227 @@ export default function SquadPage() {
   const { team, avgOvr } = squad;
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35 }}
-      className="p-8 max-w-6xl mx-auto"
+    <DndContext
+      sensors={sensors}
+      collisionDetection={collisionDetection}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+      onDragCancel={handleDragCancel}
     >
-      {/* Header */}
-      <div className="flex items-start justify-between mb-8">
-        <div className="flex items-center gap-4">
-          {team.crestUrl && (
-            <img src={team.crestUrl} alt={team.name} className="w-12 h-12 object-contain" />
-          )}
-          <div>
-            <p className="text-[#9CA3AF] text-xs uppercase tracking-widest font-medium mb-1">
-              Mi Equipo
-            </p>
-            <h1 className="text-[#F3F4F6] text-2xl font-bold tracking-tight">
-              {team.name}
-            </h1>
-          </div>
-        </div>
-      </div>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.3 }}
+        className="flex h-full"
+      >
+        {/* ── Left: Header + Pitch ────────────────────────── */}
+        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+          {/* Header */}
+          <div className="px-6 pt-5 pb-4 shrink-0">
+            {/* Row 1: Team info + actions */}
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3.5">
+                {team.crestUrl && (
+                  <img
+                    src={team.crestUrl}
+                    alt={team.name}
+                    className="w-10 h-10 object-contain"
+                  />
+                )}
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[#9CA3AF]/60 mb-0.5">
+                    Mi Equipo
+                  </p>
+                  <h1 className="text-[#F3F4F6] text-lg font-bold tracking-tight leading-tight">
+                    {team.name}
+                  </h1>
+                </div>
+              </div>
 
-      {/* Stat cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <StatCard
-          label="Equipo"
-          value={team.name}
-          accent
-          icon={
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-            </svg>
-          }
-        />
-        <StatCard
-          label="Valor plantilla"
-          value={fmtMoney(team.squadValue)}
-          icon={
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
-              <polyline points="16 7 22 7 22 13" />
-            </svg>
-          }
-        />
-        <StatCard
-          label="Presupuesto"
-          value={team.budget > 0 ? fmtMoney(team.budget) : "—"}
-          icon={
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="12" y1="1" x2="12" y2="23" />
-              <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-            </svg>
-          }
-        />
-        <StatCard
-          label="OVR Medio"
-          value={avgOvr > 0 ? String(avgOvr) : "—"}
-          trend={avgOvr >= 85 ? "up" : "neutral"}
-          icon={
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M18 20V10" /><path d="M12 20V4" /><path d="M6 20v-6" />
-            </svg>
-          }
-        />
-      </div>
-
-      {/* Squad table */}
-      <div className="bg-[#131722] rounded-2xl border border-white/4 overflow-hidden">
-        {/* Toolbar */}
-        <div className="px-6 py-4 border-b border-white/4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <h2 className="text-[#F3F4F6] text-sm font-semibold">Plantilla</h2>
-            <span className="text-[#9CA3AF] text-xs bg-[#0D0F14] px-2 py-0.5 rounded-full">
-              {filtered.length} jugadores
-            </span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            {(["Todos", "POR", "DEF", "MED", "DEL"] as PosFilter[]).map((f) => (
-              <button
-                key={f}
-                onClick={() => setFilter(f)}
-                className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors duration-150 cursor-pointer
-                  ${filter === f
-                    ? "bg-[#8B5CF6]/10 text-[#8B5CF6]"
-                    : "text-[#9CA3AF] hover:text-[#F3F4F6] hover:bg-[#1A1F2E]"
-                  }`}
-              >
-                {f}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Column headers */}
-        <div className="grid grid-cols-[2.5fr_1fr_1fr_1fr_1fr] px-6 py-3 border-b border-white/4">
-          {["Jugador", "OVR", "Precio", "Cláusula", "País"].map((col, i) => (
-            <span key={i} className="text-[#9CA3AF] text-[11px] font-semibold uppercase tracking-wider">
-              {col}
-            </span>
-          ))}
-        </div>
-
-        {/* Rows */}
-        <AnimatePresence mode="popLayout">
-          {filtered.length === 0 ? (
-            <div className="px-6 py-12 text-center text-[#9CA3AF] text-sm">
-              No hay jugadores en esta posición.
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={resetLineup}
+                  disabled={locked || lineupCount === 0}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="1 4 1 10 7 10" />
+                    <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+                  </svg>
+                  Resetear
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={saveLineup}
+                  disabled={locked || lineupCount < 11 || saving}
+                >
+                  {saving ? (
+                    <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                      <polyline points="17 21 17 13 7 13 7 21" />
+                      <polyline points="7 3 7 8 15 8" />
+                    </svg>
+                  )}
+                  {saving ? "Guardando…" : "Guardar alineación"}
+                </Button>
+              </div>
             </div>
-          ) : (
-            <div className="divide-y divide-white/3">
-              {filtered.map((player, idx) => {
-                const style = ovrStyle(player.ovr);
-                return (
-                  <motion.div
-                    key={player.id}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.15, delay: idx * 0.02 }}
-                    className="grid grid-cols-[2.5fr_1fr_1fr_1fr_1fr] px-6 py-3.5 hover:bg-[#1A1F2E]/50 transition-colors duration-150 items-center"
-                  >
-                    {/* Jugador */}
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-xl bg-[#0D0F14] border border-white/5 flex items-center justify-center shrink-0 overflow-hidden">
-                        {player.headshotUrl ? (
-                          <img src={player.headshotUrl} alt={player.name} className="w-full h-full object-contain object-bottom" />
-                        ) : (
-                          <span className="text-[#9CA3AF] text-[10px] font-mono font-bold">
-                            {player.position?.slice(0, 2) ?? "—"}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="min-w-0">
-                          <p className="text-[#F3F4F6] text-sm font-medium leading-tight truncate">
-                            {player.name}
-                          </p>
-                          <p className="text-[#9CA3AF] text-xs mt-0.5">{player.position}</p>
-                        </div>
-                        {player.newSigning && (
-                          <span className="shrink-0 self-center inline-flex items-center gap-1 text-[11px] font-black px-3 py-1 rounded-full uppercase tracking-widest"
-                            style={{
-                              background: "linear-gradient(135deg, #7C3AED, #8B5CF6)",
-                              color: "#fff",
-                              boxShadow: "0 0 14px #8B5CF670",
-                            }}>
-                            ✦ Fichaje
-                          </span>
-                        )}
-                      </div>
-                    </div>
 
-                    {/* OVR */}
-                    <div>
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-bold ${style.bg} ${style.text}`}>
-                        {player.ovr}
-                      </span>
-                    </div>
+            {/* Row 2: Stats + Formation selector */}
+            <div className="flex items-center gap-3 flex-wrap">
+              {/* Stat pills */}
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#131722] border border-white/4">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="opacity-50">
+                  <line x1="12" y1="1" x2="12" y2="23" />
+                  <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                </svg>
+                <span className="text-[10px] text-[#9CA3AF]/60 uppercase tracking-wide">Presupuesto</span>
+                <span className="text-[12px] font-semibold text-[#F3F4F6]">
+                  {fmtMoney(team.budget)}
+                </span>
+              </div>
 
-                    {/* Precio */}
-                    <span className="text-[#F3F4F6] text-sm">{fmtMoney(player.price)}</span>
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#131722] border border-white/4">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="opacity-50">
+                  <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
+                  <polyline points="16 7 22 7 22 13" />
+                </svg>
+                <span className="text-[10px] text-[#9CA3AF]/60 uppercase tracking-wide">Valor</span>
+                <span className="text-[12px] font-semibold text-[#F3F4F6]">
+                  {fmtMoney(team.squadValue)}
+                </span>
+              </div>
 
-                    {/* Cláusula */}
-                    <span className="text-[#EF4444] text-sm">{fmtMoney(player.clause)}</span>
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#131722] border border-white/4">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="opacity-50">
+                  <path d="M18 20V10" /><path d="M12 20V4" /><path d="M6 20v-6" />
+                </svg>
+                <span className="text-[10px] text-[#9CA3AF]/60 uppercase tracking-wide">OVR</span>
+                <span
+                  className="text-[12px] font-bold"
+                  style={{ color: ovrColor(avgOvr) }}
+                >
+                  {avgOvr || "—"}
+                </span>
+              </div>
 
-                    {/* País */}
-                    <span className="text-[#9CA3AF] text-xs truncate">{player.countryName}</span>
-                  </motion.div>
-                );
-              })}
+              {/* Spacer */}
+              <div className="flex-1" />
+
+              {/* Formation selector */}
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#131722] border border-white/4">
+                <span className="text-[10px] text-[#9CA3AF]/60 uppercase tracking-wide">
+                  Formación
+                </span>
+                <select
+                  value={formationId}
+                  onChange={(e) => setFormationId(e.target.value as FormationId)}
+                  disabled={locked}
+                  className="bg-transparent text-[12px] font-bold text-[#8B5CF6] outline-none cursor-pointer appearance-none pr-4"
+                  style={{
+                    backgroundImage: `url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%238B5CF6' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`,
+                    backgroundRepeat: "no-repeat",
+                    backgroundPosition: "right center",
+                  }}
+                >
+                  {FORMATION_IDS.map((fId) => (
+                    <option key={fId} value={fId} className="bg-[#131722] text-[#F3F4F6]">
+                      {fId}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
-          )}
-        </AnimatePresence>
-
-        {/* Footer */}
-        {filtered.length > 0 && (
-          <div className="px-6 py-4 border-t border-white/4 flex items-center justify-between">
-            <span className="text-[#9CA3AF] text-xs">
-              Valor total de cláusulas:{" "}
-              <span className="text-[#EF4444] font-medium">{fmtMoney(totalClause)}</span>
-            </span>
-            <Badge status="active" label="Plantilla activa" />
           </div>
+
+          {/* Pitch */}
+          <FormationPitch
+            formation={formation}
+            lineup={lineup}
+            activeDragPlayer={activeDragPlayer}
+            locked={locked}
+          />
+        </div>
+
+        {/* ── Right: Bench panel ──────────────────────────── */}
+        <BenchPanel
+          allPlayers={squad.players}
+          lineupPlayerIds={lineupPlayerIds}
+          onAutoFill={autoFill}
+          locked={locked}
+        />
+      </motion.div>
+
+      {/* ── Drag overlay ──────────────────────────────────── */}
+      <DragOverlay
+        dropAnimation={{
+          duration: 200,
+          easing: "cubic-bezier(0.18, 0.67, 0.6, 1.22)",
+        }}
+      >
+        {activeDragPlayer && (() => {
+          const color = ovrColor(activeDragPlayer.ovr);
+          const ringClass = activeDragPlayer.ovr >= 90 ? "ring-[#8B5CF6]/50" : activeDragPlayer.ovr >= 85 ? "ring-[#22C55E]/50" : activeDragPlayer.ovr >= 80 ? "ring-[#F59E0B]/50" : "ring-white/10";
+          return (
+            <div
+              className="w-[320px] flex items-center gap-5 px-5 py-4 rounded-2xl border bg-[#0D0F14] pointer-events-none"
+              style={{
+                borderColor: `${color}40`,
+                boxShadow: `0 0 30px ${color}25, 0 8px 24px rgba(0,0,0,0.6)`,
+              }}
+            >
+              <div className="relative shrink-0">
+                {activeDragPlayer.headshotUrl ? (
+                  <img src={activeDragPlayer.headshotUrl} alt="" className={`w-16 h-16 rounded-full object-cover object-top ring-[3px] ${ringClass}`} draggable={false} />
+                ) : (
+                  <div className={`w-16 h-16 rounded-full bg-[#131722] ring-[3px] ${ringClass} flex items-center justify-center`}>
+                    <span className="text-xl font-bold text-[#9CA3AF]/50">{activeDragPlayer.name.charAt(0)}</span>
+                  </div>
+                )}
+                <div
+                  className="absolute -bottom-1 -right-1 min-w-[30px] h-[22px] rounded-full flex items-center justify-center text-xs font-black text-white px-1.5"
+                  style={{ background: color, boxShadow: `0 0 10px ${color}60` }}
+                >
+                  {activeDragPlayer.ovr}
+                </div>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-base font-semibold text-[#F3F4F6] truncate leading-tight">{activeDragPlayer.name}</p>
+                <div className="flex items-center gap-2 mt-1.5">
+                  <span className="text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded" style={{ color, background: `${color}15` }}>{activeDragPlayer.position}</span>
+                  {activeDragPlayer.countryName && (
+                    <span className="text-sm text-[#9CA3AF]/60 truncate">{activeDragPlayer.countryName}</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+      </DragOverlay>
+
+      {/* ── Toast ─────────────────────────────────────────── */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: 20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 10, scale: 0.95 }}
+            transition={{ duration: 0.2 }}
+            className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-5 py-3 rounded-xl bg-[#131722] border border-[#8B5CF6]/20 shadow-2xl shadow-[#8B5CF6]/10"
+          >
+            <div className="w-5 h-5 rounded-full bg-[#22C55E]/15 flex items-center justify-center shrink-0">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#22C55E" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            </div>
+            <span className="text-[13px] font-medium text-[#F3F4F6]">{toast}</span>
+          </motion.div>
         )}
-      </div>
-    </motion.div>
+      </AnimatePresence>
+    </DndContext>
   );
 }
