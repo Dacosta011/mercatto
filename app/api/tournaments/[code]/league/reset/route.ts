@@ -18,6 +18,40 @@ export async function POST(request: NextRequest, { params }: Params) {
     .delete()
     .eq("tournament_id", auth.tournamentId);
 
+  // Delete previous market session so a new market can be started
+  const { data: prevSession } = await supabase
+    .from("market_sessions")
+    .select("id")
+    .eq("tournament_id", auth.tournamentId)
+    .maybeSingle();
+
+  if (prevSession) {
+    const sid = (prevSession as any).id;
+    await supabase.from("icon_bids").delete().in(
+      "auction_id",
+      (await supabase.from("icon_auctions").select("id").eq("session_id", sid)).data?.map((a: any) => a.id) ?? [],
+    );
+    await supabase.from("icon_selection_votes").delete().in(
+      "auction_id",
+      (await supabase.from("icon_auctions").select("id").eq("session_id", sid)).data?.map((a: any) => a.id) ?? [],
+    );
+    await supabase.from("icon_activation_votes").delete().in(
+      "auction_id",
+      (await supabase.from("icon_auctions").select("id").eq("session_id", sid)).data?.map((a: any) => a.id) ?? [],
+    );
+    await supabase.from("icon_auctions").delete().eq("session_id", sid);
+    await supabase.from("market_offers").delete().eq("session_id", sid);
+    await supabase.from("market_transfers").delete().eq("session_id", sid);
+    await supabase.from("market_turns").delete().eq("session_id", sid);
+    await supabase.from("market_sessions").delete().eq("id", sid);
+  }
+
+  // Reset member market-related fields for a fresh cycle
+  await supabase
+    .from("members")
+    .update({ budget: 200_000_000, market_purchases: 0 })
+    .eq("tournament_id", auth.tournamentId);
+
   // Reset tournament status to lobby
   await supabase
     .from("tournaments")

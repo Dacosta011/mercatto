@@ -36,7 +36,7 @@ interface LeagueState {
 }
 
 // ── Types ──────────────────────────────────────────────────────────────────────
-interface SquadPlayer { id: string; name: string; position: string; ovr: number }
+interface SquadPlayer { id: string; name: string; position: string; ovr: number; suspended?: boolean }
 interface SquadData { memberId: string; displayName: string; teamName: string; players: SquadPlayer[] }
 interface PlayerCard { playerId: string; playerName: string; cardType: "yellow" | "red"; memberId: string }
 
@@ -68,8 +68,14 @@ function NumberInput({ label, value, onChange }: { label: string; value: string;
     <div className="flex flex-col gap-1">
       <label className="text-[#9CA3AF] text-[10px] uppercase tracking-wider font-medium">{label}</label>
       <input
-        type="number" min={0} max={20} value={value}
-        onChange={(e) => onChange(e.target.value)}
+        type="number" min={0} max={99} value={value}
+        onKeyDown={(e) => { if (e.key === "-" || e.key === "e") e.preventDefault(); }}
+        onChange={(e) => {
+          const n = parseInt(e.target.value);
+          if (e.target.value === "") { onChange("0"); return; }
+          if (isNaN(n) || n < 0) return;
+          onChange(String(Math.min(n, 99)));
+        }}
         className="w-full bg-[#0D0F14] border border-white/8 rounded-xl px-3 py-2 text-[#F3F4F6] text-sm font-semibold text-center focus:outline-none focus:border-[#8B5CF6]/50"
       />
     </div>
@@ -222,8 +228,8 @@ export default function CalendarPage() {
         : action === "confirm"
           ? { confirm: true, cards: form.cards }
           : {
-              homeGoals: parseInt(form.homeGoals) || 0,
-              awayGoals: parseInt(form.awayGoals) || 0,
+              homeGoals: Math.max(0, parseInt(form.homeGoals) || 0),
+              awayGoals: Math.max(0, parseInt(form.awayGoals) || 0),
               cards: form.cards,
             };
       await fetch(`/api/tournaments/${code}/league/fixtures/${fixtureId}/result`, {
@@ -244,8 +250,8 @@ export default function CalendarPage() {
         method: "PATCH",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
         body: JSON.stringify({
-          homeGoals: parseInt(form.homeGoals) || 0,
-          awayGoals: parseInt(form.awayGoals) || 0,
+          homeGoals: Math.max(0, parseInt(form.homeGoals) || 0),
+          awayGoals: Math.max(0, parseInt(form.awayGoals) || 0),
           cards: form.cards,
         }),
       });
@@ -699,20 +705,40 @@ function ResultModal({ fixture, form, setForm, squads, myMemberId, submitting, m
   const mySquad = squads?.home?.memberId === myMemberId ? squads?.home : squads?.away;
   const allPlayers: Array<SquadPlayer & { memberId: string; side: "home" | "away"; ownerName: string }> = isForce
     ? [
-        ...(squads?.home?.players ?? []).map(p => ({ ...p, memberId: squads!.home!.memberId, side: "home" as const, ownerName: squads!.home!.displayName })),
-        ...(squads?.away?.players ?? []).map(p => ({ ...p, memberId: squads!.away!.memberId, side: "away" as const, ownerName: squads!.away!.displayName })),
+        ...(squads?.home?.players ?? []).filter(p => !p.suspended).map(p => ({ ...p, memberId: squads!.home!.memberId, side: "home" as const, ownerName: squads!.home!.displayName })),
+        ...(squads?.away?.players ?? []).filter(p => !p.suspended).map(p => ({ ...p, memberId: squads!.away!.memberId, side: "away" as const, ownerName: squads!.away!.displayName })),
       ]
-    : (mySquad?.players ?? []).map(p => ({ ...p, memberId: mySquad!.memberId, side: "home" as const, ownerName: mySquad!.displayName }));
+    : (mySquad?.players ?? []).filter(p => !p.suspended).map(p => ({ ...p, memberId: mySquad!.memberId, side: "home" as const, ownerName: mySquad!.displayName }));
+
+  // Track cards per player in this match to enforce limits
+  const cardsByPlayer = (playerId: string) => form.cards.filter(c => c.playerId === playerId);
+  const playerHasRed = (playerId: string) => cardsByPlayer(playerId).some(c => c.cardType === "red");
+  const playerCardCount = (playerId: string) => cardsByPlayer(playerId).length;
 
   const filtered = search.length >= 2
     ? allPlayers.filter(p => p.name.toLowerCase().includes(search.toLowerCase()))
     : [];
 
   const addCard = (player: typeof allPlayers[0], cardType: "yellow" | "red") => {
-    setForm({
-      ...form,
-      cards: [...form.cards, { playerId: player.id, playerName: player.name, cardType, memberId: player.memberId }],
-    });
+    if (playerHasRed(player.id)) return;
+    const yellows = cardsByPlayer(player.id).filter(c => c.cardType === "yellow").length;
+    if (yellows >= 2) return;
+
+    if (cardType === "yellow" && yellows === 1) {
+      // Double yellow → auto-convert to red
+      const withoutFirstYellow = form.cards.filter(
+        c => !(c.playerId === player.id && c.cardType === "yellow")
+      );
+      setForm({
+        ...form,
+        cards: [...withoutFirstYellow, { playerId: player.id, playerName: player.name, cardType: "red", memberId: player.memberId }],
+      });
+    } else {
+      setForm({
+        ...form,
+        cards: [...form.cards, { playerId: player.id, playerName: player.name, cardType, memberId: player.memberId }],
+      });
+    }
     setSearch("");
   };
 
@@ -777,23 +803,32 @@ function ResultModal({ fixture, form, setForm, squads, myMemberId, submitting, m
           {/* Dropdown results */}
           {filtered.length > 0 && (
             <div className="absolute top-full left-0 right-0 mt-1 bg-[#1A1F2E] border border-white/8 rounded-xl overflow-hidden z-10 shadow-xl max-h-48 overflow-y-auto">
-              {filtered.map(p => (
+              {filtered.map(p => {
+                const hasRed = playerHasRed(p.id);
+                const yellows = cardsByPlayer(p.id).filter(c => c.cardType === "yellow").length;
+                const maxedOut = hasRed || yellows >= 2;
+                return (
                 <div key={`${p.id}-${p.side}`}
-                  className="flex items-center gap-3 px-3 py-2.5 hover:bg-[#8B5CF6]/10 transition-colors border-b border-white/4 last:border-0">
+                  className={`flex items-center gap-3 px-3 py-2.5 transition-colors border-b border-white/4 last:border-0 ${maxedOut ? "opacity-40" : "hover:bg-[#8B5CF6]/10"}`}>
                   <div className="flex-1 min-w-0">
                     <p className="text-[#F3F4F6] text-xs font-semibold truncate">{p.name}</p>
-                    <p className="text-[#9CA3AF] text-[10px]">{p.position} · {p.ownerName}</p>
+                    <p className="text-[#9CA3AF] text-[10px]">{p.position} · {p.ownerName}
+                      {maxedOut && <span className="text-[#EF4444] ml-1">(expulsado)</span>}
+                    </p>
                   </div>
                   <div className="flex gap-1.5 shrink-0">
                     <button onClick={() => addCard(p, "yellow")}
-                      className="w-6 h-8 bg-[#F59E0B] rounded-sm hover:bg-[#D97706] transition-colors cursor-pointer"
+                      disabled={maxedOut}
+                      className="w-6 h-8 bg-[#F59E0B] rounded-sm hover:bg-[#D97706] transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
                       title="Amarilla" />
                     <button onClick={() => addCard(p, "red")}
-                      className="w-6 h-8 bg-[#EF4444] rounded-sm hover:bg-[#DC2626] transition-colors cursor-pointer"
+                      disabled={maxedOut}
+                      className="w-6 h-8 bg-[#EF4444] rounded-sm hover:bg-[#DC2626] transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
                       title="Roja" />
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

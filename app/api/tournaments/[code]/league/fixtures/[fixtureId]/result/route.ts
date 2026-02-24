@@ -6,6 +6,28 @@ type Params = { params: Promise<{ code: string; fixtureId: string }> };
 interface PlayerCard { playerId: string; playerName: string; cardType: "yellow" | "red"; memberId: string }
 
 // Helper: process player-level discipline after match finalization
+function sanitizeCards(cards: PlayerCard[]): PlayerCard[] {
+  const seen: Record<string, { yellows: number; hasRed: boolean }> = {};
+  const result: PlayerCard[] = [];
+  for (const c of cards) {
+    if (!seen[c.playerId]) seen[c.playerId] = { yellows: 0, hasRed: false };
+    const s = seen[c.playerId];
+    if (s.hasRed) continue;
+    if (c.cardType === "red") { s.hasRed = true; result.push(c); continue; }
+    s.yellows++;
+    if (s.yellows >= 2) {
+      // Double yellow → convert to a single red, remove previous yellow
+      const filtered = result.filter(r => !(r.playerId === c.playerId && r.cardType === "yellow"));
+      result.length = 0;
+      result.push(...filtered, { ...c, cardType: "red" });
+      s.hasRed = true;
+    } else {
+      result.push(c);
+    }
+  }
+  return result;
+}
+
 async function processDiscipline(
   supabase: any,
   sessionId: string,
@@ -13,10 +35,10 @@ async function processDiscipline(
   currentMatchday: number,
   playerCards: PlayerCard[]
 ) {
-  if (playerCards.length === 0) return;
+  const sanitized = sanitizeCards(playerCards);
+  if (sanitized.length === 0) return;
 
-  // Insert discipline rows (one per card event)
-  const rows = playerCards.map((c) => ({
+  const rows = sanitized.map((c) => ({
     session_id: sessionId,
     member_id: c.memberId,
     player_id: c.playerId,
@@ -28,10 +50,10 @@ async function processDiscipline(
   await supabase.from("discipline").insert(rows);
 
   // Check suspensions per player
-  const playerIds = [...new Set(playerCards.map((c) => c.playerId))];
+  const playerIds = [...new Set(sanitized.map((c) => c.playerId))];
 
   for (const playerId of playerIds) {
-    const card = playerCards.find((c) => c.playerId === playerId)!;
+    const card = sanitized.find((c) => c.playerId === playerId)!;
     const memberId = card.memberId;
 
     const { data: allCards } = await supabase
@@ -112,8 +134,14 @@ export async function POST(request: NextRequest, { params }: Params) {
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
   const body = await request.json();
-  // cards: Array<{ playerId, playerName, cardType, memberId }>
   const { homeGoals, awayGoals, cards = [], confirm } = body;
+
+  // Validate goals are non-negative integers
+  const hg = parseInt(homeGoals) || 0;
+  const ag = parseInt(awayGoals) || 0;
+  if (hg < 0 || ag < 0) {
+    return NextResponse.json({ error: "Los goles no pueden ser negativos." }, { status: 400 });
+  }
 
   const supabase = createServerClient();
   const { data: fixture } = await supabase.from("fixtures").select("*").eq("id", fixtureId).single();
@@ -153,8 +181,8 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   // First submit (or re-submit)
   await supabase.from("fixtures").update({
-    pending_home_goals: homeGoals ?? 0,
-    pending_away_goals: awayGoals ?? 0,
+    pending_home_goals: hg,
+    pending_away_goals: ag,
     pending_cards: cards,
     result_submitter_id: auth.memberId,
   }).eq("id", fixtureId);
@@ -174,11 +202,14 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   const body = await request.json();
   const { homeGoals = 0, awayGoals = 0, cards = [] } = body;
 
+  const hg = Math.max(0, parseInt(homeGoals) || 0);
+  const ag = Math.max(0, parseInt(awayGoals) || 0);
+
   const { data: fixture } = await supabase.from("fixtures").select("*").eq("id", fixtureId).single();
   if (!fixture) return NextResponse.json({ error: "Partido no encontrado." }, { status: 404 });
 
   const currentMatchday = await getMatchday(supabase, (fixture as any).session_id);
-  await finalizeFixture(supabase, fixtureId, fixture, homeGoals, awayGoals, cards, currentMatchday);
+  await finalizeFixture(supabase, fixtureId, fixture, hg, ag, cards, currentMatchday);
 
   return NextResponse.json({ ok: true });
 }

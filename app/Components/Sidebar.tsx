@@ -249,13 +249,14 @@ export default function Sidebar() {
                 ? pathname === resolved || pathname.startsWith("/lobby/")
                 : pathname === href || pathname.startsWith(href + "/");
 
-              // "Mi Equipo" y "Mercado" requieren equipo asignado
-              const requiresTeam = href === "/squad" || href === "/market";
-              const noTeam = requiresTeam && !hasTeam;
+              // "Mi Equipo" requiere equipo asignado
+              const noTeam = href === "/squad" && !hasTeam;
 
-              // Mercado bloqueado durante liga; Calendario/Clasificación bloqueados durante mercado
-              const marketLocked = href === "/market" && status === "league";
-              const leagueLocked = (href === "/calendar" || href === "/table") && status === "market";
+              // Mercado: solo accesible durante fase de mercado
+              const marketLocked = href === "/market" && status !== "market";
+
+              // Calendario/Clasificación: solo accesible durante fase de liga
+              const leagueLocked = (href === "/calendar" || href === "/table") && status !== "league";
 
               const locked = noTeam || marketLocked || leagueLocked;
 
@@ -263,8 +264,8 @@ export default function Sidebar() {
                 const lockReason = noTeam
                   ? "Debes girar la ruleta primero"
                   : marketLocked
-                  ? "No disponible durante la liga"
-                  : "No disponible durante el mercado";
+                  ? "Disponible durante el mercado"
+                  : "Disponible durante la liga";
                 return (
                   <div
                     key={href}

@@ -46,6 +46,21 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   const turnId = (activeTurn as any).id;
 
+  // Block actions if there's a pending outgoing offer
+  if (body.type !== "skip") {
+    const { data: pendingOffer } = await supabase
+      .from("market_offers")
+      .select("id")
+      .eq("session_id", (session as any).id)
+      .eq("buyer_id", auth.memberId)
+      .eq("status", "pending")
+      .limit(1);
+
+    if ((pendingOffer ?? []).length > 0) {
+      return NextResponse.json({ error: "Tienes una oferta pendiente. Espera a que sea respondida." }, { status: 409 });
+    }
+  }
+
   // ── Clause payment ────────────────────────────────────────────────────────
   if (body.type === "clause") {
     if (!body.playerId) {

@@ -223,7 +223,7 @@ export default function LobbyPage() {
       });
       if (res.ok) {
         saveTournamentStatus(code, "league");
-        setTournament((t) => (t ? { ...t, status: "league" } : t));
+        router.push("/calendar");
       }
     } finally {
       setStartingLeague(false);
@@ -241,7 +241,7 @@ export default function LobbyPage() {
       });
       if (res.ok) {
         saveTournamentStatus(code, "market");
-        setTournament((t) => (t ? { ...t, status: "market" } : t));
+        router.push("/market");
       }
     } finally {
       setStartingMarket(false);
