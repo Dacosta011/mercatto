@@ -53,6 +53,8 @@ interface IconAuctionData {
   myVoteIcon: string | null;
   myIconWon: boolean;
   isAdmin: boolean;
+  rerollVoteCount: number;
+  myRerollVote: boolean;
 }
 
 interface Props {
@@ -77,77 +79,85 @@ function fmt(v: number): string {
 
 // ── Icon Card visual ──────────────────────────────────────────────────────────
 
-function IconCard({ icon, selected, onClick, votes, myVote }: {
+function getTierColor(ovr: number) {
+  return ovr >= 95 ? "#F59E0B" : ovr >= 92 ? "#C084FC" : ovr >= 89 ? "#60A5FA" : "#34D399";
+}
+
+function IconCard({ icon, selected, onClick, votes, myVote, compact }: {
   icon: IconInfo;
   selected?: boolean;
   onClick?: () => void;
   votes?: number;
   myVote?: boolean;
+  compact?: boolean;
 }) {
-  const tierColor =
-    icon.ovr >= 95 ? "#F59E0B" :
-    icon.ovr >= 92 ? "#C084FC" :
-    icon.ovr >= 89 ? "#60A5FA" : "#34D399";
+  const tierColor = getTierColor(icon.ovr);
 
   return (
     <motion.div
-      whileHover={onClick ? { y: -3, scale: 1.015 } : {}}
-      whileTap={onClick ? { scale: 0.98 } : {}}
+      whileHover={onClick ? { y: -4, scale: 1.02 } : {}}
+      whileTap={onClick ? { scale: 0.97 } : {}}
       onClick={onClick}
       className={`relative flex flex-col overflow-hidden rounded-2xl transition-all duration-200 ${onClick ? "cursor-pointer" : ""}`}
       style={{
         background: selected
-          ? `linear-gradient(160deg, ${tierColor}18 0%, #131722 60%)`
+          ? `linear-gradient(160deg, ${tierColor}20 0%, #131722 60%)`
           : `linear-gradient(160deg, ${tierColor}0a 0%, #131722 70%)`,
-        border: selected ? `1.5px solid ${tierColor}80` : `1px solid rgba(255,255,255,0.07)`,
-        boxShadow: selected ? `0 0 24px ${tierColor}30, 0 4px 24px #00000060` : `0 2px 12px #00000040`,
+        border: selected ? `2px solid ${tierColor}90` : `1px solid rgba(255,255,255,0.07)`,
+        boxShadow: selected ? `0 0 32px ${tierColor}40, 0 8px 32px #00000060` : `0 2px 16px #00000040`,
       }}>
 
       {/* Top accent bar */}
-      <div className="h-0.5 w-full shrink-0" style={{ background: `linear-gradient(90deg, ${tierColor}, ${tierColor}00)` }} />
+      <div className="h-1 w-full shrink-0" style={{ background: `linear-gradient(90deg, ${tierColor}, ${tierColor}40)` }} />
 
-      <div className="flex flex-col items-center gap-3 p-5 flex-1">
+      <div className={`flex flex-col items-center ${compact ? "gap-2 p-4" : "gap-3.5 p-5"} flex-1`}>
         {/* ICON label + OVR row */}
         <div className="flex items-center justify-between w-full">
-          <span className="text-[9px] font-black uppercase tracking-[0.18em]" style={{ color: tierColor }}>
+          <span className={`${compact ? "text-[9px]" : "text-[11px]"} font-black uppercase tracking-[0.18em]`} style={{ color: tierColor }}>
             ★ Ícono
           </span>
-          <span className="text-lg font-black leading-none" style={{ color: tierColor }}>
+          <span className={`${compact ? "text-xl" : "text-2xl"} font-black leading-none`} style={{ color: tierColor }}>
             {icon.ovr}
           </span>
         </div>
 
         {/* Headshot */}
-        <div className="w-20 h-20 rounded-xl overflow-hidden shrink-0 flex items-center justify-center"
-          style={{ background: `${tierColor}12`, border: `1px solid ${tierColor}25` }}>
+        <div className={`${compact ? "w-20 h-20" : "w-28 h-28"} rounded-2xl overflow-hidden shrink-0 flex items-center justify-center`}
+          style={{ background: `${tierColor}10`, border: `1.5px solid ${tierColor}30` }}>
           {icon.headshotUrl ? (
             <img src={icon.headshotUrl} alt={icon.name}
               className="w-full h-full object-contain object-bottom" />
           ) : (
-            <span className="text-3xl font-black" style={{ color: tierColor }}>
+            <span className={`${compact ? "text-3xl" : "text-4xl"} font-black`} style={{ color: tierColor }}>
               {icon.name.charAt(0)}
             </span>
           )}
         </div>
 
-        {/* Name + meta */}
-        <div className="text-center min-w-0 w-full">
-          <p className="text-[#F3F4F6] text-sm font-bold leading-tight truncate">{icon.name}</p>
-          <p className="text-[#6B7280] text-[10px] mt-0.5">{icon.position} · {icon.nation}</p>
+        {/* Name */}
+        <p className={`text-[#F3F4F6] ${compact ? "text-sm" : "text-base"} font-bold leading-tight truncate text-center w-full`}>{icon.name}</p>
+
+        {/* Position badge */}
+        <div className="flex items-center gap-2">
+          <span className={`px-2.5 py-0.5 rounded-md ${compact ? "text-[10px]" : "text-xs"} font-black`}
+            style={{ background: `${tierColor}20`, color: tierColor, border: `1px solid ${tierColor}35` }}>
+            {icon.position}
+          </span>
+          <span className={`text-[#9CA3AF] ${compact ? "text-[10px]" : "text-xs"}`}>{icon.nation}</span>
         </div>
 
         {/* Min bid chip */}
-        <div className="px-3 py-1 rounded-lg text-[10px] font-bold w-full text-center"
-          style={{ background: `${tierColor}12`, color: tierColor, border: `1px solid ${tierColor}25` }}>
+        <div className={`px-4 ${compact ? "py-1.5" : "py-2"} rounded-xl ${compact ? "text-[11px]" : "text-sm"} font-bold w-full text-center`}
+          style={{ background: `${tierColor}15`, color: tierColor, border: `1px solid ${tierColor}30` }}>
           Mín. {fmt(icon.minBid)}
         </div>
       </div>
 
       {/* My vote checkmark */}
       {myVote && (
-        <div className="absolute top-2.5 right-2.5 w-5 h-5 rounded-full flex items-center justify-center"
-          style={{ background: "#22C55E" }}>
-          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+        <div className="absolute top-3 right-3 w-6 h-6 rounded-full flex items-center justify-center"
+          style={{ background: "#22C55E", boxShadow: "0 2px 8px #22C55E60" }}>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="20 6 9 17 4 12"/>
           </svg>
         </div>
@@ -155,7 +165,8 @@ function IconCard({ icon, selected, onClick, votes, myVote }: {
 
       {/* Vote count */}
       {votes !== undefined && votes > 0 && !myVote && (
-        <div className="absolute top-2.5 right-2.5 w-5 h-5 rounded-full bg-[#8B5CF6] flex items-center justify-center text-white text-[9px] font-black">
+        <div className="absolute top-3 right-3 w-6 h-6 rounded-full bg-[#8B5CF6] flex items-center justify-center text-white text-[10px] font-black"
+          style={{ boxShadow: "0 2px 8px #8B5CF660" }}>
           {votes}
         </div>
       )}
@@ -201,6 +212,7 @@ export default function IconAuction({ code, token, adminToken, myMemberId, sessi
   const [bidAmount, setBidAmount] = useState("");
   const [confirmVote, setConfirmVote] = useState<IconInfo | null>(null);
   const [initiating, setInitiating] = useState(false);
+  const [rerollLoading, setRerollLoading] = useState(false);
   const channelRef       = useRef<any>(null);
   const fetchingRef      = useRef(false);
   const pendingFetchRef  = useRef(false);
@@ -284,7 +296,7 @@ export default function IconAuction({ code, token, adminToken, myMemberId, sessi
   if (loading && !data) return null;
   if (!data?.auction) return null;
 
-  const { auction, totalMembers, members, myVoteActivation, myVoteIcon, myIconWon, isAdmin } = data;
+  const { auction, totalMembers, members, myVoteActivation, myVoteIcon, myIconWon, isAdmin, rerollVoteCount, myRerollVote } = data;
   const me = members.find((m) => m.id === myMemberId);
 
   // ── Phase: Skipped ────────────────────────────────────────────────────────
@@ -473,6 +485,20 @@ export default function IconAuction({ code, token, adminToken, myMemberId, sessi
       } finally { setActionLoading(false); }
     };
 
+    const doReroll = async () => {
+      if (actionLoading || rerollLoading) return;
+      setRerollLoading(true);
+      try {
+        const res = await fetch(`/api/tournaments/${code}/market/icon-auction/reroll`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        });
+        if (res.ok) await fetchData(true);
+      } finally { setRerollLoading(false); }
+    };
+
+    const confirmTierColor = confirmVote ? getTierColor(confirmVote.ovr) : "#34D399";
+
     return (
       <div className="fixed inset-0 z-50 flex flex-col bg-[#0D0F14] overflow-y-auto">
         {/* Top bar */}
@@ -489,107 +515,183 @@ export default function IconAuction({ code, token, adminToken, myMemberId, sessi
             </div>
           </div>
 
-          {/* Vote progress */}
-          <div className="flex items-center gap-3">
-            <div className="text-right">
-              <p className="text-[#F3F4F6] text-sm font-bold">
-                {auction.selectionVoteCount}
-                <span className="text-[#4B5563]">/{totalMembers}</span>
-              </p>
-              <p className="text-[#6B7280] text-[10px] uppercase tracking-wider">votos</p>
-            </div>
-            <div className="flex gap-1">
-              {Array.from({ length: totalMembers }).map((_, i) => (
-                <div key={i} className="w-1.5 h-5 rounded-full transition-all duration-300"
-                  style={{ background: i < auction.selectionVoteCount ? "#8B5CF6" : "rgba(255,255,255,0.08)" }} />
-              ))}
+          <div className="flex items-center gap-4">
+            {/* Reroll button */}
+            {!alreadyVoted && (
+              <button onClick={doReroll} disabled={rerollLoading || myRerollVote}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all ${
+                  myRerollVote
+                    ? "opacity-60 cursor-default"
+                    : "cursor-pointer hover:bg-[#F59E0B]/15 disabled:opacity-40"
+                }`}
+                style={{ background: myRerollVote ? "#F59E0B18" : "#F59E0B10", color: "#F59E0B", border: `1px solid ${myRerollVote ? "#F59E0B50" : "#F59E0B30"}` }}>
+                {rerollLoading ? (
+                  <svg className="animate-spin w-3.5 h-3.5" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
+                ) : myRerollVote ? (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                ) : (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.5 2v6h-6"/><path d="M2.5 22v-6h6"/><path d="M2 11.5a10 10 0 0 1 18.8-4.3"/><path d="M22 12.5a10 10 0 0 1-18.8 4.3"/></svg>
+                )}
+                {myRerollVote ? "Votado" : "Reroll"} <span className="px-1.5 py-0.5 rounded bg-[#F59E0B]/20 text-[10px]">{rerollVoteCount}/{Math.ceil(totalMembers / 2)}</span>
+              </button>
+            )}
+
+            {/* Vote progress */}
+            <div className="flex items-center gap-3">
+              <div className="text-right">
+                <p className="text-[#F3F4F6] text-sm font-bold">
+                  {auction.selectionVoteCount}
+                  <span className="text-[#4B5563]">/{totalMembers}</span>
+                </p>
+                <p className="text-[#6B7280] text-[10px] uppercase tracking-wider">votos</p>
+              </div>
+              <div className="flex gap-1">
+                {Array.from({ length: totalMembers }).map((_, i) => (
+                  <div key={i} className="w-1.5 h-5 rounded-full transition-all duration-300"
+                    style={{ background: i < auction.selectionVoteCount ? "#8B5CF6" : "rgba(255,255,255,0.08)" }} />
+                ))}
+              </div>
             </div>
           </div>
         </div>
 
         {/* Content */}
         <div className="flex-1 flex flex-col items-center justify-center px-8 py-10">
-          <p className="text-[#6B7280] text-sm mb-8">
-            {alreadyVoted ? "Voto registrado — esperando a los demás…" : "Selecciona el ícono que quieres subastar"}
-          </p>
-
-          {/* Icons grid — 3 columns */}
-          <div className="grid grid-cols-3 gap-5 w-full max-w-3xl">
-            {auction.presentedIcons.map((icon, i) => (
+          <AnimatePresence mode="wait">
+            {confirmVote ? (
+              /* ── Expanded card confirmation ──────────────────────────── */
               <motion.div
-                key={icon.id}
-                initial={{ opacity: 0, y: 16 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.05 }}
+                key="confirm"
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                transition={{ type: "spring", damping: 25, stiffness: 300 }}
+                className="flex flex-col items-center gap-6 w-full max-w-sm"
               >
-                <IconCard
-                  icon={icon}
-                  selected={myVoteIcon === icon.id}
-                  onClick={!alreadyVoted ? () => setConfirmVote(icon) : undefined}
-                  votes={voteCounts[icon.id]}
-                  myVote={myVoteIcon === icon.id}
-                />
-              </motion.div>
-            ))}
-          </div>
+                {/* Large hero card */}
+                <motion.div
+                  className="w-full rounded-3xl overflow-hidden relative"
+                  style={{
+                    background: `linear-gradient(160deg, ${confirmTierColor}18 0%, #131722 55%)`,
+                    border: `2px solid ${confirmTierColor}60`,
+                    boxShadow: `0 0 60px ${confirmTierColor}25, 0 16px 48px #00000060`,
+                  }}>
+                  <div className="h-1.5 w-full" style={{ background: `linear-gradient(90deg, ${confirmTierColor}, ${confirmTierColor}40)` }} />
+                  <div className="flex flex-col items-center gap-4 p-8">
+                    {/* OVR + Label */}
+                    <div className="flex items-center justify-between w-full">
+                      <span className="text-xs font-black uppercase tracking-[0.2em]" style={{ color: confirmTierColor }}>
+                        ★ Ícono
+                      </span>
+                      <span className="text-4xl font-black" style={{ color: confirmTierColor }}>
+                        {confirmVote.ovr}
+                      </span>
+                    </div>
 
-          {alreadyVoted && (
-            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-              className="mt-8 flex items-center gap-2 px-5 py-3 rounded-xl bg-[#8B5CF6]/8 border border-[#8B5CF6]/20">
-              <div className="w-1.5 h-1.5 rounded-full bg-[#8B5CF6] animate-pulse" />
-              <span className="text-[#9CA3AF] text-sm">Esperando a los demás participantes…</span>
-            </motion.div>
-          )}
-        </div>
+                    {/* Large headshot */}
+                    <div className="w-40 h-40 rounded-3xl overflow-hidden flex items-center justify-center"
+                      style={{ background: `${confirmTierColor}10`, border: `2px solid ${confirmTierColor}30` }}>
+                      {confirmVote.headshotUrl ? (
+                        <img src={confirmVote.headshotUrl} alt={confirmVote.name}
+                          className="w-full h-full object-contain object-bottom" />
+                      ) : (
+                        <span className="text-6xl font-black" style={{ color: confirmTierColor }}>
+                          {confirmVote.name.charAt(0)}
+                        </span>
+                      )}
+                    </div>
 
-        {/* Confirmation modal */}
-        <AnimatePresence>
-          {confirmVote && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="fixed inset-0 z-60 flex items-center justify-center bg-black/70 backdrop-blur-sm"
-              onClick={() => setConfirmVote(null)}>
-              <motion.div initial={{ scale: 0.93, y: 16 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.93, y: 16 }}
-                onClick={(e) => e.stopPropagation()}
-                className="bg-[#131722] rounded-2xl border border-white/8 p-6 max-w-xs w-full mx-4 flex flex-col items-center gap-5"
-                style={{ boxShadow: "0 24px 64px #00000080" }}>
-                {/* Mini icon info row */}
-                <div className="w-full flex items-center gap-4 p-4 rounded-xl bg-[#0D0F14] border border-white/5">
-                  <div className="w-14 h-14 rounded-xl overflow-hidden shrink-0 flex items-center justify-center"
-                    style={{
-                      background: `${confirmVote.ovr >= 95 ? "#F59E0B" : confirmVote.ovr >= 92 ? "#C084FC" : confirmVote.ovr >= 89 ? "#60A5FA" : "#34D399"}15`,
-                      border: `1px solid ${confirmVote.ovr >= 95 ? "#F59E0B" : confirmVote.ovr >= 92 ? "#C084FC" : confirmVote.ovr >= 89 ? "#60A5FA" : "#34D399"}30`,
-                    }}>
-                    {confirmVote.headshotUrl ? (
-                      <img src={confirmVote.headshotUrl} alt={confirmVote.name}
-                        className="w-full h-full object-contain object-bottom" />
-                    ) : (
-                      <span className="text-2xl font-black text-[#9CA3AF]">{confirmVote.name.charAt(0)}</span>
-                    )}
+                    {/* Name */}
+                    <p className="text-[#F3F4F6] text-2xl font-black text-center">{confirmVote.name}</p>
+
+                    {/* Position + Nation */}
+                    <div className="flex items-center gap-3">
+                      <span className="px-3 py-1 rounded-lg text-sm font-black"
+                        style={{ background: `${confirmTierColor}20`, color: confirmTierColor, border: `1px solid ${confirmTierColor}35` }}>
+                        {confirmVote.position}
+                      </span>
+                      <span className="text-[#9CA3AF] text-sm">{confirmVote.nation}</span>
+                    </div>
+
+                    {/* Min bid */}
+                    <div className="px-6 py-2.5 rounded-xl text-sm font-bold w-full text-center"
+                      style={{ background: `${confirmTierColor}12`, color: confirmTierColor, border: `1px solid ${confirmTierColor}25` }}>
+                      Mín. {fmt(confirmVote.minBid)}
+                    </div>
                   </div>
-                  <div className="min-w-0">
-                    <p className="text-[#F3F4F6] font-bold text-sm truncate">{confirmVote.name}</p>
-                    <p className="text-[#6B7280] text-xs mt-0.5">{confirmVote.position} · {confirmVote.nation}</p>
-                    <p className="text-[#F59E0B] text-xs font-bold mt-1">OVR {confirmVote.ovr}</p>
-                  </div>
-                </div>
+                </motion.div>
+
+                {/* Confirmation text */}
                 <div className="text-center">
-                  <p className="text-[#F3F4F6] font-bold text-sm">¿Confirmar voto?</p>
-                  <p className="text-[#6B7280] text-xs mt-1">Solo puedes votar una vez</p>
+                  <p className="text-[#F3F4F6] font-bold text-base">¿Confirmar voto por este ícono?</p>
+                  <p className="text-[#6B7280] text-xs mt-1">Solo puedes votar una vez, elige bien</p>
                 </div>
+
+                {/* Action buttons */}
                 <div className="flex gap-3 w-full">
-                  <button onClick={() => setConfirmVote(null)}
-                    className="flex-1 py-2.5 rounded-xl border border-white/8 text-[#9CA3AF] text-sm font-medium cursor-pointer hover:bg-[#1A1F2E] transition-colors">
-                    Cancelar
-                  </button>
-                  <button onClick={() => doVoteIcon(confirmVote)} disabled={actionLoading}
-                    className="flex-1 py-2.5 rounded-xl bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-sm font-semibold cursor-pointer transition-colors disabled:opacity-40">
-                    {actionLoading ? "Votando…" : "Votar"}
-                  </button>
+                  <motion.button whileTap={{ scale: 0.95 }}
+                    onClick={() => setConfirmVote(null)}
+                    className="flex-1 py-3.5 rounded-xl border border-white/10 text-[#9CA3AF] text-sm font-semibold cursor-pointer hover:bg-[#1A1F2E] transition-colors">
+                    Volver
+                  </motion.button>
+                  <motion.button whileTap={{ scale: 0.95 }}
+                    onClick={() => doVoteIcon(confirmVote)} disabled={actionLoading}
+                    className="flex-1 py-3.5 rounded-xl bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-sm font-bold cursor-pointer transition-colors disabled:opacity-40 flex items-center justify-center gap-2"
+                    style={{ boxShadow: "0 4px 20px #8B5CF640" }}>
+                    {actionLoading ? (
+                      <><svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>Votando...</>
+                    ) : (
+                      <>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                        Confirmar voto
+                      </>
+                    )}
+                  </motion.button>
                 </div>
               </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+            ) : (
+              /* ── Grid of icons ──────────────────────────────────────── */
+              <motion.div
+                key="grid"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="flex flex-col items-center w-full"
+              >
+                <p className="text-[#6B7280] text-sm mb-8">
+                  {alreadyVoted ? "Voto registrado — esperando a los demás..." : "Selecciona el ícono que quieres subastar"}
+                </p>
+
+                <div className="grid grid-cols-3 gap-5 w-full max-w-4xl">
+                  {auction.presentedIcons.map((icon, i) => (
+                    <motion.div
+                      key={icon.id}
+                      initial={{ opacity: 0, y: 16 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: i * 0.05 }}
+                    >
+                      <IconCard
+                        icon={icon}
+                        selected={myVoteIcon === icon.id}
+                        onClick={!alreadyVoted ? () => setConfirmVote(icon) : undefined}
+                        votes={voteCounts[icon.id]}
+                        myVote={myVoteIcon === icon.id}
+                      />
+                    </motion.div>
+                  ))}
+                </div>
+
+                {alreadyVoted && (
+                  <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+                    className="mt-8 flex items-center gap-2 px-5 py-3 rounded-xl bg-[#8B5CF6]/8 border border-[#8B5CF6]/20">
+                    <div className="w-1.5 h-1.5 rounded-full bg-[#8B5CF6] animate-pulse" />
+                    <span className="text-[#9CA3AF] text-sm">Esperando a los demás participantes...</span>
+                  </motion.div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </div>
     );
   }
@@ -672,7 +774,7 @@ export default function IconAuction({ code, token, adminToken, myMemberId, sessi
           <div className="max-w-5xl mx-auto flex gap-6 h-full">
             {/* Left: Icon hero */}
             <div className="w-72 shrink-0 flex flex-col gap-4">
-              {auction.selectedIcon && <IconCard icon={auction.selectedIcon} />}
+              {auction.selectedIcon && <IconCard icon={auction.selectedIcon} compact />}
 
               {/* Highest bid */}
               <div className="bg-[#131722] rounded-2xl border border-[#8B5CF6]/20 p-5 text-center">
