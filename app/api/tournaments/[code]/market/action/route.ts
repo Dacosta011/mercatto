@@ -93,7 +93,7 @@ export async function POST(request: NextRequest, { params }: Params) {
       return NextResponse.json({ error: "Presupuesto insuficiente." }, { status: 422 });
     }
 
-    // Find player's current team
+    // Find player's original team
     const { data: tp } = await supabase
       .from("team_players")
       .select("team_id")
@@ -101,29 +101,58 @@ export async function POST(request: NextRequest, { params }: Params) {
       .single();
 
     if (!tp) return NextResponse.json({ error: "El jugador no está en ningún equipo." }, { status: 422 });
-    const sellerTeamId = (tp as any).team_id;
 
-    // Check clause protection
+    // Check if this player was transferred previously → effective owner is the latest buyer
+    const { data: lastTransfer } = await supabase
+      .from("market_transfers")
+      .select("buyer_id")
+      .eq("session_id", (session as any).id)
+      .eq("player_id", body.playerId)
+      .in("transfer_type", ["clause", "offer", "icon_auction"])
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    // Get all assignments to resolve member → team
+    const { data: tournamentAssignments } = await supabase
+      .from("assignments")
+      .select("member_id, team_id")
+      .in("member_id",
+        (await supabase.from("members").select("id").eq("tournament_id", auth.tournamentId))
+          .data?.map((m: any) => m.id) ?? []
+      );
+
+    const teamByMember: Record<string, string> = {};
+    const memberByTeam: Record<string, string> = {};
+    for (const a of tournamentAssignments ?? []) {
+      teamByMember[(a as any).member_id] = (a as any).team_id;
+      memberByTeam[(a as any).team_id] = (a as any).member_id;
+    }
+
+    let sellerId: string;
+    let sellerTeamId: string;
+
+    if (lastTransfer) {
+      sellerId = (lastTransfer as any).buyer_id;
+      sellerTeamId = teamByMember[sellerId] ?? (tp as any).team_id;
+    } else {
+      sellerTeamId = (tp as any).team_id;
+      sellerId = memberByTeam[sellerTeamId] ?? "";
+    }
+
+    // Clause protection: only from current iteration (after session.started_at)
     const { data: prot } = await supabase
       .from("market_transfers")
       .select("id")
       .eq("session_id", (session as any).id)
       .eq("seller_team_id", sellerTeamId)
       .eq("transfer_type", "clause")
+      .gte("created_at", (session as any).started_at)
       .limit(1);
 
     if ((prot ?? []).length > 0) {
       return NextResponse.json({ error: "Ese equipo ya está protegido contra cláusulas." }, { status: 422 });
     }
-
-    // Find seller member scoped to THIS tournament
-    const { data: sellerMember } = await supabase
-      .from("members")
-      .select("id, assignments!inner(team_id)")
-      .eq("tournament_id", auth.tournamentId)
-      .eq("assignments.team_id", sellerTeamId)
-      .maybeSingle();
-    const sellerId = (sellerMember as any)?.id;
 
     // Deduct buyer budget + increment purchases
     await supabase

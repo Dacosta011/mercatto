@@ -70,14 +70,21 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "El comprador ya no tiene suficiente presupuesto." }, { status: 422 });
   }
 
-  // Find player's current team (for history record — does NOT modify team_players)
+  // Find effective seller team — check if player was transferred before
   const { data: tp } = await supabase
     .from("team_players")
     .select("team_id")
     .eq("player_id", (offer as any).player_id)
     .maybeSingle();
 
-  const sellerTeamId = (tp as any)?.team_id ?? null;
+  // If player was transferred previously, seller_team is the buyer's assigned team
+  const { data: sellerAssignment } = await supabase
+    .from("assignments")
+    .select("team_id")
+    .eq("member_id", auth.memberId)
+    .maybeSingle();
+
+  const sellerTeamId = (sellerAssignment as any)?.team_id ?? (tp as any)?.team_id ?? null;
 
   // Deduct buyer budget + increment purchases
   await supabase

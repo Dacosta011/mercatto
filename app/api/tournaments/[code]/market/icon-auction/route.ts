@@ -82,8 +82,18 @@ export async function GET(request: NextRequest, { params }: Params) {
     const highestBidderId: string | null = (auction as any).highest_bidder_id ?? null;
     const selectedIconId: string | null = (auction as any).selected_icon_id ?? null;
 
-    if (bidderOrder.length <= 1 && selectedIconId) {
-      if (bidderOrder.length === 1 && highestBid > 0 && highestBidderId) {
+    if (selectedIconId) {
+      if (bidderOrder.length === 0) {
+        // No bidders — no winner
+        await supabase.from("icon_auctions").update({
+          phase: "finished",
+          bidder_order: bidderOrder,
+        }).eq("id", auctionId);
+
+        const { data: updatedAuction } = await supabase
+          .from("icon_auctions").select("*").eq("id", auctionId).single();
+        Object.assign(auction as any, updatedAuction);
+      } else if (bidderOrder.length === 1 && highestBid > 0 && highestBidderId) {
         // Single bidder with a bid — they win
         const { data: winnerMember } = await supabase
           .from("members").select("budget, market_purchases")
@@ -109,21 +119,11 @@ export async function GET(request: NextRequest, { params }: Params) {
           final_amount: highestBid,
         }).eq("id", auctionId);
 
-        // Re-fetch the auction after auto-resolve
-        const { data: updatedAuction } = await supabase
-          .from("icon_auctions").select("*").eq("id", auctionId).single();
-        Object.assign(auction as any, updatedAuction);
-      } else if (bidderOrder.length === 0 || highestBid === 0) {
-        // No bidders or no bids — no winner
-        await supabase.from("icon_auctions").update({
-          phase: "finished",
-          bidder_order: bidderOrder,
-        }).eq("id", auctionId);
-
         const { data: updatedAuction } = await supabase
           .from("icon_auctions").select("*").eq("id", auctionId).single();
         Object.assign(auction as any, updatedAuction);
       }
+      // If 1 bidder remains but no bids yet — don't auto-finish, let them bid
     }
   }
 

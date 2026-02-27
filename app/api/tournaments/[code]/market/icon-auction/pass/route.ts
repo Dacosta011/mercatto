@@ -111,14 +111,25 @@ export async function POST(request: NextRequest, { params }: Params) {
     remaining = remaining.filter(id => canAffordSet.has(id));
   }
 
-  // Auction ends when 1 or fewer active bidders remain
-  if (remaining.length <= 1) {
+  // No bidders left — finish with no winner
+  if (remaining.length === 0) {
     const result = await finishAuction(
       supabase, auctionId, (session as any).id, auth.tournamentId,
       selectedIconId, highestBid, highestBidderId, remaining
     );
     return NextResponse.json(result);
   }
+
+  // 1 bidder left AND there's already a highest bid — that bidder wins
+  if (remaining.length === 1 && highestBid > 0 && highestBidderId) {
+    const result = await finishAuction(
+      supabase, auctionId, (session as any).id, auth.tournamentId,
+      selectedIconId, highestBid, highestBidderId, remaining
+    );
+    return NextResponse.json(result);
+  }
+
+  // 1 bidder left but no bids yet — let them take their turn instead of finishing
 
   // Advance: the retired member was at currentIndex, so the next element
   // in the new array is already at currentIndex (array shrunk).
