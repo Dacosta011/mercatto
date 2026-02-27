@@ -13,8 +13,35 @@ function shuffle<T>(arr: T[]): T[] {
   return a;
 }
 
+const OVR_REF  = 88;
+const STEP     = 20_000_000;
+const MIN_B    = 100_000_000;
+const MAX_B    = 400_000_000;
+const ROUND_TO = 5_000_000;
+
+async function recalcBudget(supabase: any, teamId: string, memberId: string) {
+  const { data: rows } = await supabase
+    .from("team_players").select("players(ovr)").eq("team_id", teamId);
+
+  const ovrs: number[] = (rows ?? [])
+    .map((r: any) => { const p = r.players; return Array.isArray(p) ? p[0]?.ovr : p?.ovr; })
+    .filter((v: any) => typeof v === "number");
+
+  const budget = (() => {
+    if (ovrs.length === 0) return MIN_B;
+    const avgOvr  = ovrs.reduce((s, v) => s + v, 0) / ovrs.length;
+    const raw     = MIN_B + (OVR_REF - avgOvr) * STEP;
+    const rounded = Math.round(raw / ROUND_TO) * ROUND_TO;
+    return Math.max(MIN_B, Math.min(MAX_B, rounded));
+  })();
+
+  await supabase.from("members").update({ budget }).eq("id", memberId);
+}
+
 // ─── POST /api/tournaments/[code]/market/start ────────────────────────────────
-// Admin only. Creates market session + round 1 turn order.
+// Admin only. Creates or restarts market session + round 1 turn order.
+// If a finished session exists, it is restarted (transfers preserved as history).
+// Body (optional): { resetBudgets: true } to recalculate budgets from scratch.
 
 export async function POST(request: NextRequest, { params }: Params) {
   const { code } = await params;
@@ -22,17 +49,29 @@ export async function POST(request: NextRequest, { params }: Params) {
   const auth = await verifyAdminToken(request, code);
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
+  let body: any = {};
+  try { body = await request.json(); } catch { /* no body is fine */ }
+  const resetBudgets = body?.resetBudgets === true;
+
   const supabase = createServerClient();
 
-  // Check market doesn't already exist
+  // Check for existing session
   const { data: existing } = await supabase
     .from("market_sessions")
-    .select("id")
+    .select("id, status")
     .eq("tournament_id", auth.tournamentId)
     .maybeSingle();
 
-  if (existing) {
-    return NextResponse.json({ error: "El mercado ya fue iniciado." }, { status: 409 });
+  // If active, check if it has actual pending turns (truly running vs. failed previous start)
+  if (existing && (existing as any).status === "active") {
+    const { count } = await supabase
+      .from("market_turns")
+      .select("id", { count: "exact", head: true })
+      .eq("session_id", (existing as any).id);
+    if ((count ?? 0) > 0) {
+      return NextResponse.json({ error: "El mercado ya está activo." }, { status: 409 });
+    }
+    // No turns = failed previous start → allow re-init
   }
 
   // Verify all members have teams
@@ -48,7 +87,7 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   const { data: assignments } = await supabase
     .from("assignments")
-    .select("member_id")
+    .select("member_id, team_id")
     .in("member_id", memberIds);
 
   if ((assignments ?? []).length < memberIds.length) {
@@ -58,27 +97,58 @@ export async function POST(request: NextRequest, { params }: Params) {
     );
   }
 
-  // Create session
-  const { data: session, error: sessionErr } = await supabase
-    .from("market_sessions")
-    .insert({
-      tournament_id: auth.tournamentId,
-      status: "active",
-      current_round: 1,
-      total_rounds: 3,
-      started_at: new Date().toISOString(),
-    })
-    .select("id")
-    .single();
+  // Reset market_purchases for all members
+  await supabase
+    .from("members")
+    .update({ market_purchases: 0 })
+    .in("id", memberIds);
 
-  if (sessionErr || !session) {
-    return NextResponse.json({ error: "Error al crear la sesión de mercado." }, { status: 500 });
+  // Optionally recalculate budgets from scratch
+  if (resetBudgets) {
+    for (const a of assignments ?? []) {
+      await recalcBudget(supabase, (a as any).team_id, (a as any).member_id);
+    }
   }
 
-  // Generate round 1 random turn order — all start as "pending"
+  let sessionId: string;
+  const now = new Date().toISOString();
+
+  if (existing) {
+    // ── Restart the existing session ──────────────────────────────────────
+    // Transfers are kept as ownership history. Turns and offers are cleared.
+    sessionId = (existing as any).id;
+
+    // Clean up old data first (before changing status)
+    // icon_auctions cascade deletes icon_activation_votes, icon_selection_votes, icon_bids
+    await supabase.from("icon_auctions").delete().eq("session_id", sessionId);
+    await supabase.from("market_offers").delete().eq("session_id", sessionId);
+    // Nullify turn_id FK in transfers (kept as ownership history) so turns can be deleted
+    await supabase.from("market_transfers").update({ turn_id: null }).eq("session_id", sessionId);
+    await supabase.from("market_turns").delete().eq("session_id", sessionId);
+  } else {
+    // ── Create brand-new session (initially "pending" until fully set up) ─
+    const { data: session, error: sessionErr } = await supabase
+      .from("market_sessions")
+      .insert({
+        tournament_id: auth.tournamentId,
+        status: "pending",
+        current_round: 1,
+        total_rounds: 3,
+        started_at: now,
+      })
+      .select("id")
+      .single();
+
+    if (sessionErr || !session) {
+      return NextResponse.json({ error: "Error al crear la sesión de mercado." }, { status: 500 });
+    }
+    sessionId = (session as any).id;
+  }
+
+  // Generate round 1 random turn order
   const shuffled = shuffle(memberIds);
   const turnRows = shuffled.map((memberId, idx) => ({
-    session_id: (session as any).id,
+    session_id: sessionId,
     round_num: 1,
     position: idx + 1,
     member_id: memberId,
@@ -90,14 +160,26 @@ export async function POST(request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Error al generar el orden de turnos." }, { status: 500 });
   }
 
+  // Everything succeeded — now activate the session
+  await supabase
+    .from("market_sessions")
+    .update({
+      status: "active",
+      current_round: 1,
+      total_rounds: 3,
+      started_at: now,
+      finished_at: null,
+    })
+    .eq("id", sessionId);
+
   // Update tournament status
   await supabase
     .from("tournaments")
     .update({ status: "market" })
     .eq("id", auth.tournamentId);
 
-  // Activate the first eligible turn (auto-skips members with 3/3 purchases)
-  await advanceTurn(supabase, { ...session, id: (session as any).id, current_round: 1 });
+  // Activate the first eligible turn
+  await advanceTurn(supabase, { id: sessionId, current_round: 1 });
 
-  return NextResponse.json({ ok: true, sessionId: (session as any).id }, { status: 201 });
+  return NextResponse.json({ ok: true, sessionId }, { status: 201 });
 }

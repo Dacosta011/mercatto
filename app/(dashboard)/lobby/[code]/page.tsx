@@ -141,6 +141,7 @@ export default function LobbyPage() {
   const [endingTournament, setEndingTournament] = useState(false);
 
   const [startingMarket, setStartingMarket] = useState(false);
+  const [startingFreshMarket, setStartingFreshMarket] = useState(false);
   const [startingLeague, setStartingLeague] = useState(false);
   const [resettingMarket, setResettingMarket] = useState(false);
   const [resettingLeague, setResettingLeague] = useState(false);
@@ -230,14 +231,15 @@ export default function LobbyPage() {
     }
   };
 
-  // Iniciar mercado
+  // Iniciar mercado (continúa donde terminó el anterior)
   const handleStartMarket = async () => {
     if (!adminToken) return;
     setStartingMarket(true);
     try {
       const res = await fetch(`/api/tournaments/${code}/market/start`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${adminToken}` },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
+        body: JSON.stringify({}),
       });
       if (res.ok) {
         saveTournamentStatus(code, "market");
@@ -245,6 +247,25 @@ export default function LobbyPage() {
       }
     } finally {
       setStartingMarket(false);
+    }
+  };
+
+  // Iniciar mercado desde cero (recalcula presupuestos)
+  const handleStartFreshMarket = async () => {
+    if (!adminToken) return;
+    setStartingFreshMarket(true);
+    try {
+      const res = await fetch(`/api/tournaments/${code}/market/start`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
+        body: JSON.stringify({ resetBudgets: true }),
+      });
+      if (res.ok) {
+        saveTournamentStatus(code, "market");
+        router.push("/market");
+      }
+    } finally {
+      setStartingFreshMarket(false);
     }
   };
 
@@ -505,6 +526,25 @@ export default function LobbyPage() {
               }
               loading={startingMarket}
               onClick={handleStartMarket}
+            />
+
+            {/* Mercado desde cero (recalcula presupuestos) */}
+            <AdminAction
+              icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>}
+              label="Mercado desde Cero"
+              description="Recalcula presupuestos e inicia un mercado limpio"
+              color="#F59E0B"
+              available={tournament.status === "lobby" && tournament.members.every(m => m.team !== null)}
+              unavailableReason={
+                tournament.status !== "lobby" ? "Solo en fase lobby" :
+                !tournament.members.every(m => m.team !== null) ? "Todos deben tener equipo" : undefined
+              }
+              loading={startingFreshMarket}
+              danger
+              confirmKey="fresh-market"
+              confirmAction={confirmAction}
+              setConfirmAction={setConfirmAction}
+              onClick={handleStartFreshMarket}
             />
 
             {/* Reiniciar Mercado */}

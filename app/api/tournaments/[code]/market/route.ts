@@ -92,19 +92,52 @@ export async function GET(request: NextRequest, { params }: Params) {
     (t) => t.status === "completed" || t.status === "skipped"
   );
 
-  // ── 4. My status ──────────────────────────────────────────────────────────
-  const myMember = memberById[auth.memberId];
+  // ── 4. Effective ownership ────────────────────────────────────────────────
+  // Start from team_players -> assignments, then apply ALL historical transfers.
+  // This ensures players bought in previous markets are owned by the buyer.
 
-  const [{ data: clauseOnMyTeam }, { data: myPendingOffer }] = await Promise.all([
-    myTeamId
-      ? supabase
-          .from("market_transfers")
-          .select("id")
-          .eq("session_id", (session as any).id)
-          .eq("seller_team_id", myTeamId)
-          .eq("transfer_type", "clause")
-          .limit(1)
-      : Promise.resolve({ data: [] }),
+  const { data: allTeamPlayers } = allTeamIds.length > 0
+    ? await supabase.from("team_players").select("team_id, player_id").in("team_id", allTeamIds)
+    : { data: [] };
+
+  // Initial ownership: player -> memberId (from original team rosters)
+  const effectiveOwner: Record<string, string> = {};
+  const effectiveTeam: Record<string, string> = {};
+  for (const r of allTeamPlayers ?? []) {
+    const mid = memberIdByTeam[(r as any).team_id];
+    if (mid) {
+      effectiveOwner[(r as any).player_id] = mid;
+      effectiveTeam[(r as any).player_id] = (r as any).team_id;
+    }
+  }
+
+  // Apply ALL transfers chronologically to compute current ownership
+  const { data: allTransfers } = await supabase
+    .from("market_transfers")
+    .select("buyer_id, player_id, transfer_type")
+    .eq("session_id", (session as any).id)
+    .in("transfer_type", ["clause", "offer", "icon_auction"])
+    .order("created_at", { ascending: true });
+
+  for (const t of allTransfers ?? []) {
+    effectiveOwner[t.player_id] = t.buyer_id;
+    const buyerTeam = teamIdByMember[t.buyer_id];
+    if (buyerTeam) effectiveTeam[t.player_id] = buyerTeam;
+  }
+
+  // ── 5. My status ──────────────────────────────────────────────────────────
+  const myMember = memberById[auth.memberId];
+  const sessionStartedAt = (session as any).started_at;
+
+  // Clause protection and sold players: only from current iteration
+  // (transfers created after the session's started_at, which resets on restart)
+  const [{ data: currentIterationTransfers }, { data: myPendingOffer }] = await Promise.all([
+    supabase
+      .from("market_transfers")
+      .select("id, player_id, seller_team_id, transfer_type")
+      .eq("session_id", (session as any).id)
+      .in("transfer_type", ["clause", "offer", "icon_auction"])
+      .gte("created_at", sessionStartedAt),
     supabase
       .from("market_offers")
       .select("id, player_id, amount")
@@ -114,76 +147,65 @@ export async function GET(request: NextRequest, { params }: Params) {
       .limit(1),
   ]);
 
-  // ── 5. Clause-protected teams ─────────────────────────────────────────────
-  const { data: protectedTransfers } = await supabase
-    .from("market_transfers")
-    .select("seller_team_id")
-    .eq("session_id", (session as any).id)
-    .eq("transfer_type", "clause");
-
-  const protectedTeamIds = new Set(
-    (protectedTransfers ?? []).map((t: any) => t.seller_team_id)
+  const soldPlayerIds = new Set(
+    (currentIterationTransfers ?? []).map((t: any) => t.player_id)
   );
 
-  // ── 6. Available players (other teams, excluding already transferred) ────────
-  const otherTeamIds = (allAssignments ?? [])
-    .filter((a: any) => a.member_id !== auth.memberId)
-    .map((a: any) => a.team_id);
+  const protectedTeamIds = new Set(
+    (currentIterationTransfers ?? [])
+      .filter((t: any) => t.transfer_type === "clause")
+      .map((t: any) => t.seller_team_id)
+  );
 
-  // Players already sold in this market session cannot be re-purchased
-  const { data: soldTransfers } = await supabase
-    .from("market_transfers")
-    .select("player_id")
-    .eq("session_id", (session as any).id)
-    .in("transfer_type", ["clause", "offer", "icon_auction"]);
+  // Check if my effective team was clause-protected in this iteration
+  const myEffectiveTeamIds = new Set(
+    Object.entries(effectiveOwner)
+      .filter(([, mid]) => mid === auth.memberId)
+      .map(([pid]) => effectiveTeam[pid])
+      .filter(Boolean)
+  );
+  const teamClauseProtected = [...myEffectiveTeamIds].some(tid => protectedTeamIds.has(tid));
 
-  const soldPlayerIds = new Set((soldTransfers ?? []).map((t: any) => t.player_id));
+  // ── 6. Available players ────────────────────────────────────────────────────
+  // Players effectively owned by OTHER members, excluding icons and current-iteration sold
+  const allPlayerIds = Object.keys(effectiveOwner).filter(
+    (pid) => effectiveOwner[pid] !== auth.memberId
+  );
 
   let availablePlayers: any[] = [];
-  if (otherTeamIds.length > 0) {
-    const { data: tp } = await supabase
-      .from("team_players")
-      .select("team_id, player_id")
-      .in("team_id", otherTeamIds);
+  if (allPlayerIds.length > 0) {
+    const { data: players } = await supabase
+      .from("players")
+      .select("id, name, ovr, position, price, clause, headshot_url, is_icon")
+      .in("id", allPlayerIds)
+      .order("ovr", { ascending: false });
 
-    const teamByPlayer: Record<string, string> = {};
-    for (const r of tp ?? []) teamByPlayer[(r as any).player_id] = (r as any).team_id;
+    for (const p of players ?? []) {
+      if ((p as any).is_icon) continue;
+      if (soldPlayerIds.has((p as any).id)) continue;
 
-    const playerIds = (tp ?? []).map((r: any) => r.player_id);
-    if (playerIds.length > 0) {
-      const { data: players } = await supabase
-        .from("players")
-        .select("id, name, ovr, position, price, clause, headshot_url")
-        .in("id", playerIds)
-        .order("ovr", { ascending: false });
-
-      for (const p of players ?? []) {
-        // Skip players already sold in this market session
-        if (soldPlayerIds.has((p as any).id)) continue;
-
-        const tid = teamByPlayer[(p as any).id];
-        const ownerId = memberIdByTeam[tid];
-        availablePlayers.push({
-          playerId: (p as any).id,
-          playerName: (p as any).name,
-          headshotUrl: (p as any).headshot_url ?? null,
-          ovr: (p as any).ovr,
-          position: (p as any).position ?? "—",
-          price: (p as any).price ?? 0,
-          clause: (p as any).clause ?? 0,
-          teamId: tid,
-          teamName: teamNameById[tid] ?? "—",
-          ownerId,
-          ownerName: memberById[ownerId]?.display_name ?? "—",
-          clauseProtected: protectedTeamIds.has(tid),
-        });
-      }
+      const ownerId = effectiveOwner[(p as any).id];
+      const ownerTeamId = effectiveTeam[(p as any).id];
+      availablePlayers.push({
+        playerId: (p as any).id,
+        playerName: (p as any).name,
+        headshotUrl: (p as any).headshot_url ?? null,
+        ovr: (p as any).ovr,
+        position: (p as any).position ?? "—",
+        price: (p as any).price ?? 0,
+        clause: (p as any).clause ?? 0,
+        teamId: ownerTeamId,
+        teamName: teamNameById[ownerTeamId] ?? "—",
+        ownerId,
+        ownerName: memberById[ownerId]?.display_name ?? "—",
+        clauseProtected: protectedTeamIds.has(ownerTeamId),
+      });
     }
   }
 
-  // ── 7. Recent activity: completed transfers + rejected offers ─────────────
+  // ── 7. Recent activity + pending offers ──────────────────────────────────
   const isFinished = (session as any).status === "finished";
-  const [{ data: recentTransfersRaw }, { data: rejectedOffersRaw }] = await Promise.all([
+  const [{ data: recentTransfersRaw }, { data: rejectedOffersRaw }, { data: allPendingOffersRaw }] = await Promise.all([
     supabase
       .from("market_transfers")
       .select("id, buyer_id, seller_id, seller_team_id, player_id, transfer_type, amount, created_at")
@@ -197,13 +219,21 @@ export async function GET(request: NextRequest, { params }: Params) {
       .eq("status", "rejected")
       .order("responded_at", { ascending: false })
       .limit(30),
+    supabase
+      .from("market_offers")
+      .select("id, buyer_id, seller_id, player_id, amount, created_at")
+      .eq("session_id", (session as any).id)
+      .eq("status", "pending")
+      .order("created_at", { ascending: false })
+      .limit(20),
   ]);
 
-  // Collect all player ids from both sources for a single lookup
+  // Collect all player ids from all sources for a single lookup
   const allActivityPlayerIds = [
     ...new Set([
       ...(recentTransfersRaw ?? []).map((t: any) => t.player_id),
       ...(rejectedOffersRaw  ?? []).map((o: any) => o.player_id),
+      ...(allPendingOffersRaw ?? []).map((o: any) => o.player_id),
     ]),
   ];
   const { data: activityPlayers } = allActivityPlayerIds.length > 0
@@ -236,18 +266,31 @@ export async function GET(request: NextRequest, { params }: Params) {
     playerName: playerNameById[o.player_id] ?? "—",
   }));
 
+  const pendingOfferEntries = (allPendingOffersRaw ?? []).map((o: any) => {
+    const sellerTeamId = teamIdByMember[o.seller_id];
+    return {
+      id: `pend-${o.id}`,
+      transferType: "pending_offer" as string,
+      amount: o.amount,
+      createdAt: o.created_at,
+      buyerId: o.buyer_id,
+      sellerId: o.seller_id,
+      buyerName: memberById[o.buyer_id]?.display_name ?? "—",
+      sellerName: memberById[o.seller_id]?.display_name ?? "—",
+      sellerTeamName: sellerTeamId ? (teamNameById[sellerTeamId] ?? "—") : "—",
+      playerName: playerNameById[o.player_id] ?? "—",
+    };
+  });
+
   // Merge and sort by date descending, cap at 40 entries
-  const recentTransfers = [...completedTransfers, ...rejectedOffers]
+  const recentTransfers = [...completedTransfers, ...rejectedOffers, ...pendingOfferEntries]
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .slice(0, 40);
 
-  // ── 8. Incoming offers (enriched with player name) ────────────────────────
-  const { data: incomingOffersRaw } = await supabase
-    .from("market_offers")
-    .select("id, buyer_id, player_id, amount, created_at")
-    .eq("session_id", (session as any).id)
-    .eq("seller_id", auth.memberId)
-    .eq("status", "pending");
+  // ── 8. Incoming offers for this user ────────────────────────────────────
+  const incomingOffersRaw = (allPendingOffersRaw ?? []).filter(
+    (o: any) => o.seller_id === auth.memberId
+  );
 
   const offerPlayerIds = [...new Set((incomingOffersRaw ?? []).map((o: any) => o.player_id))];
   const { data: offerPlayersRaw } = offerPlayerIds.length > 0
@@ -291,7 +334,7 @@ export async function GET(request: NextRequest, { params }: Params) {
       maxPurchases: 3,
       myTeamId,
       myTeamName: myTeamId ? (teamNameById[myTeamId] ?? null) : null,
-      teamClauseProtected: ((clauseOnMyTeam as any) ?? []).length > 0,
+      teamClauseProtected,
       hasPendingOffer: ((myPendingOffer as any) ?? []).length > 0,
     },
     availablePlayers,

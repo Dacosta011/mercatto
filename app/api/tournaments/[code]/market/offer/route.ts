@@ -26,7 +26,7 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   const { data: session } = await supabase
     .from("market_sessions")
-    .select("id, status, current_round")
+    .select("id, status, current_round, started_at")
     .eq("tournament_id", auth.tournamentId)
     .maybeSingle();
 
@@ -73,19 +73,21 @@ export async function POST(request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Ya tienes una oferta pendiente. Espera a que sea respondida." }, { status: 409 });
   }
 
-  // Block offers on players already sold in this session
+  // Block offers on players already sold in the current iteration
   const { data: alreadySold } = await supabase
     .from("market_transfers")
     .select("id")
     .eq("session_id", (session as any).id)
     .eq("player_id", body.playerId)
+    .in("transfer_type", ["clause", "offer", "icon_auction"])
+    .gte("created_at", (session as any).started_at)
     .limit(1);
 
   if ((alreadySold ?? []).length > 0) {
     return NextResponse.json({ error: "Este jugador ya fue transferido en este mercado." }, { status: 422 });
   }
 
-  // Find player's current team + owner
+  // Find player's original team
   const { data: tp } = await supabase
     .from("team_players")
     .select("team_id")
@@ -94,15 +96,30 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   if (!tp) return NextResponse.json({ error: "Jugador no encontrado en ningún equipo." }, { status: 422 });
 
-  // Find the member who owns this team IN THIS tournament (not globally)
-  const { data: sellerMember } = await supabase
-    .from("members")
-    .select("id, assignments!inner(team_id)")
-    .eq("tournament_id", auth.tournamentId)
-    .eq("assignments.team_id", (tp as any).team_id)
+  // Check if player was transferred previously → effective owner is the latest buyer
+  const { data: lastTransfer } = await supabase
+    .from("market_transfers")
+    .select("buyer_id")
+    .eq("session_id", (session as any).id)
+    .eq("player_id", body.playerId)
+    .in("transfer_type", ["clause", "offer", "icon_auction"])
+    .order("created_at", { ascending: false })
+    .limit(1)
     .maybeSingle();
 
-  const sellerId = (sellerMember as any)?.id;
+  let sellerId: string | undefined;
+  if (lastTransfer) {
+    sellerId = (lastTransfer as any).buyer_id;
+  } else {
+    const { data: sellerMember } = await supabase
+      .from("members")
+      .select("id, assignments!inner(team_id)")
+      .eq("tournament_id", auth.tournamentId)
+      .eq("assignments.team_id", (tp as any).team_id)
+      .maybeSingle();
+    sellerId = (sellerMember as any)?.id;
+  }
+
   if (!sellerId || sellerId === auth.memberId) {
     return NextResponse.json({ error: "Jugador inválido." }, { status: 422 });
   }
