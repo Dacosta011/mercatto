@@ -58,7 +58,7 @@ export async function GET(request: NextRequest, { params }: Params) {
   for (const m of members) memberNameById[m.id] = m.displayName;
 
   if (!session) {
-    return NextResponse.json({ auction: null, totalMembers: members.length, members, myVoteActivation: null, myVoteIcon: null, isAdmin });
+    return NextResponse.json({ auction: null, totalMembers: members.length, members, myVoteActivation: null, myVoteIcon: null, isAdmin, rerollVoteCount: 0, myRerollVote: false });
   }
 
   // Current icon auction for this round
@@ -69,7 +69,7 @@ export async function GET(request: NextRequest, { params }: Params) {
     .maybeSingle();
 
   if (!auction) {
-    return NextResponse.json({ auction: null, totalMembers: members.length, members, myVoteActivation: null, myVoteIcon: null, isAdmin });
+    return NextResponse.json({ auction: null, totalMembers: members.length, members, myVoteActivation: null, myVoteIcon: null, isAdmin, rerollVoteCount: 0, myRerollVote: false });
   }
 
   const auctionId = (auction as any).id;
@@ -225,5 +225,7 @@ export async function GET(request: NextRequest, { params }: Params) {
     myVoteIcon,
     myIconWon,
     isAdmin,
+    rerollVoteCount: ((auction as any).reroll_votes ?? []).length,
+    myRerollVote: ((auction as any).reroll_votes ?? []).includes(memberId),
   });
 }
