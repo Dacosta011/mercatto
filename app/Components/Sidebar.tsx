@@ -105,6 +105,15 @@ const navItems: NavItem[] = [
     ),
   },
   {
+    href: "/subastas",
+    label: "Subastas",
+    icon: (active) => (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={active ? "#8B5CF6" : "#9CA3AF"} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+      </svg>
+    ),
+  },
+  {
     href: "/calendar",
     label: "Calendario",
     icon: (active) => (
@@ -243,7 +252,7 @@ export default function Sidebar() {
                 : pathname === href || pathname.startsWith(href + "/");
 
               const noTeam = href === "/squad" && !hasTeam;
-              const marketLocked = href === "/market" && status !== "market";
+              const marketLocked = (href === "/market" || href === "/subastas") && status !== "market";
               const leagueLocked = (href === "/calendar" || href === "/table") && status !== "league";
               const locked = noTeam || marketLocked || leagueLocked;
 
@@ -252,7 +261,9 @@ export default function Sidebar() {
                   ? "Debes girar la ruleta primero"
                   : marketLocked
                   ? "Disponible durante el mercado"
-                  : "Disponible durante la liga";
+                  : leagueLocked
+                  ? "Disponible durante la liga"
+                  : "No disponible";
                 return (
                   <div
                     key={href}

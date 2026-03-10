@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import Link from "next/link";
 import FormInput from "../../Components/FormInput";
@@ -60,13 +61,27 @@ function CopyButton({ value }: { value: string }) {
 }
 
 export default function JoinTournamentPage() {
+  return (
+    <Suspense>
+      <JoinForm />
+    </Suspense>
+  );
+}
+
+function JoinForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [phase, setPhase] = useState<Phase>("form");
   const [code, setCode] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<JoinResult | null>(null);
   const [errors, setErrors] = useState<{ code?: string; displayName?: string; api?: string }>({});
+
+  useEffect(() => {
+    const prefill = searchParams.get("code");
+    if (prefill) setCode(prefill.toUpperCase());
+  }, [searchParams]);
 
   const validate = () => {
     const errs: Omit<typeof errors, "api"> = {};

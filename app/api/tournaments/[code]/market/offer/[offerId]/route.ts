@@ -1,27 +1,34 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient, verifyMemberToken } from "@/lib/supabase";
+import {
+  createNotification,
+  offerExpiresAt,
+} from "@/lib/notifications";
 
 type Params = { params: Promise<{ code: string; offerId: string }> };
 
 // ─── PATCH /api/tournaments/[code]/market/offer/[offerId] ─────────────────────
-// Seller accepts or rejects an offer.
-// Either way the BUYER'S turn (stored in offer.turn_id) is completed and the
-// market advances to the next turn.
-// Body: { action: "accept" | "reject" }
+// Seller accepts, rejects, or counters an offer.
+// Body: { action: "accept" | "reject" | "counter", counterAmount?: number }
 
 export async function PATCH(request: NextRequest, { params }: Params) {
   const { code, offerId } = await params;
   const auth = await verifyMemberToken(request, code);
-  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
+  if (!auth.ok)
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
 
   const supabase = createServerClient();
 
-  let body: { action: "accept" | "reject" };
-  try { body = await request.json(); } catch {
+  let body: {
+    action: "accept" | "reject" | "counter";
+    counterAmount?: number;
+  };
+  try {
+    body = await request.json();
+  } catch {
     return NextResponse.json({ error: "JSON inválido." }, { status: 400 });
   }
 
-  // Fetch the offer (only the seller can respond)
   const { data: offer } = await supabase
     .from("market_offers")
     .select("*")
@@ -30,72 +37,172 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     .eq("status", "pending")
     .maybeSingle();
 
-  if (!offer) return NextResponse.json({ error: "Oferta no encontrada." }, { status: 404 });
+  if (!offer) {
+    return NextResponse.json(
+      { error: "Oferta no encontrada." },
+      { status: 404 }
+    );
+  }
 
-  // Fetch the session (needed for turn advancement)
+  const o = offer as any;
+
+  // Check if offer expired
+  if (o.expires_at && new Date(o.expires_at) < new Date()) {
+    await supabase
+      .from("market_offers")
+      .update({ status: "expired", responded_at: new Date().toISOString() })
+      .eq("id", offerId);
+    return NextResponse.json(
+      { error: "Esta oferta ha expirado." },
+      { status: 410 }
+    );
+  }
+
   const { data: session } = await supabase
     .from("market_sessions")
-    .select("id, status, current_round, total_rounds")
+    .select("id, status")
     .eq("tournament_id", auth.tournamentId)
     .maybeSingle();
 
   if (!session || (session as any).status !== "active") {
-    return NextResponse.json({ error: "El mercado no está activo." }, { status: 409 });
+    return NextResponse.json(
+      { error: "El mercado no está activo." },
+      { status: 409 }
+    );
   }
 
+  const { data: playerData } = await supabase
+    .from("players")
+    .select("name")
+    .eq("id", o.player_id)
+    .single();
+  const playerName = (playerData as any)?.name ?? "jugador";
+
+  const sellerName =
+    (
+      await supabase
+        .from("members")
+        .select("display_name")
+        .eq("id", auth.memberId)
+        .single()
+    ).data?.display_name ?? "—";
+
   // ── Reject ────────────────────────────────────────────────────────────────
-  // Turn stays active — buyer can try another action
   if (body.action === "reject") {
     await supabase
       .from("market_offers")
       .update({ status: "rejected", responded_at: new Date().toISOString() })
       .eq("id", offerId);
 
+    await createNotification({
+      supabase,
+      memberId: o.buyer_id,
+      tournamentId: auth.tournamentId,
+      type: "offer_rejected",
+      title: "Oferta rechazada",
+      body: `${sellerName} rechazó tu oferta por ${playerName}`,
+      metadata: { offerId, playerId: o.player_id },
+    });
+
     return NextResponse.json({ ok: true, action: "rejected" });
   }
 
-  // ── Accept ────────────────────────────────────────────────────────────────
+  // ── Counter ───────────────────────────────────────────────────────────────
+  if (body.action === "counter") {
+    if (!body.counterAmount || body.counterAmount <= 0) {
+      return NextResponse.json(
+        { error: "Se requiere un monto de contra-oferta válido." },
+        { status: 400 }
+      );
+    }
 
-  // Re-validate buyer limits (could have changed since offer was created)
+    // Mark original as countered
+    await supabase
+      .from("market_offers")
+      .update({
+        status: "countered",
+        counter_amount: body.counterAmount,
+        responded_at: new Date().toISOString(),
+      })
+      .eq("id", offerId);
+
+    // Create new counter-offer (roles swapped: seller becomes buyer of the negotiation)
+    const expiresAt = offerExpiresAt();
+    const { data: counterOffer } = await supabase
+      .from("market_offers")
+      .insert({
+        session_id: (session as any).id,
+        buyer_id: o.buyer_id,
+        seller_id: auth.memberId,
+        player_id: o.player_id,
+        amount: body.counterAmount,
+        expires_at: expiresAt,
+        parent_offer_id: offerId,
+      })
+      .select("id")
+      .single();
+
+    await createNotification({
+      supabase,
+      memberId: o.buyer_id,
+      tournamentId: auth.tournamentId,
+      type: "offer_countered",
+      title: "Contra-oferta recibida",
+      body: `${sellerName} pide $${(body.counterAmount / 1_000_000).toFixed(0)}M por ${playerName}`,
+      metadata: {
+        offerId: (counterOffer as any)?.id,
+        originalOfferId: offerId,
+        playerId: o.player_id,
+        counterAmount: body.counterAmount,
+      },
+    });
+
+    return NextResponse.json({
+      ok: true,
+      action: "countered",
+      counterOfferId: (counterOffer as any)?.id,
+    });
+  }
+
+  // ── Accept ────────────────────────────────────────────────────────────────
   const { data: buyer } = await supabase
     .from("members")
     .select("budget, market_purchases")
-    .eq("id", (offer as any).buyer_id)
+    .eq("id", o.buyer_id)
     .single();
 
   if ((buyer as any)?.market_purchases >= 3) {
-    return NextResponse.json({ error: "El comprador ya alcanzó el límite de compras." }, { status: 422 });
+    return NextResponse.json(
+      { error: "El comprador ya alcanzó el límite de fichajes." },
+      { status: 422 }
+    );
   }
-  if ((buyer as any)?.budget < (offer as any).amount) {
-    return NextResponse.json({ error: "El comprador ya no tiene suficiente presupuesto." }, { status: 422 });
+  if ((buyer as any)?.budget < o.amount) {
+    return NextResponse.json(
+      { error: "El comprador ya no tiene suficiente presupuesto." },
+      { status: 422 }
+    );
   }
 
-  // Find effective seller team — check if player was transferred before
-  const { data: tp } = await supabase
-    .from("team_players")
-    .select("team_id")
-    .eq("player_id", (offer as any).player_id)
-    .maybeSingle();
-
-  // If player was transferred previously, seller_team is the buyer's assigned team
+  // Resolve seller team for transfer record
   const { data: sellerAssignment } = await supabase
     .from("assignments")
     .select("team_id")
     .eq("member_id", auth.memberId)
     .maybeSingle();
 
-  const sellerTeamId = (sellerAssignment as any)?.team_id ?? (tp as any)?.team_id ?? null;
+  const sellerTeamId = (sellerAssignment as any)?.team_id ?? null;
 
   // Deduct buyer budget + increment purchases
   await supabase
     .from("members")
     .update({
-      budget: (buyer as any).budget - (offer as any).amount,
+      budget: (buyer as any).budget - o.amount,
       market_purchases: (buyer as any).market_purchases + 1,
     })
-    .eq("id", (offer as any).buyer_id);
+    .eq("id", o.buyer_id);
 
-  // Add offer amount to seller's budget
+  // Credit seller
   const { data: sellerMember } = await supabase
     .from("members")
     .select("budget")
@@ -104,19 +211,21 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
   await supabase
     .from("members")
-    .update({ budget: ((sellerMember as any)?.budget ?? 0) + (offer as any).amount })
+    .update({
+      budget: ((sellerMember as any)?.budget ?? 0) + o.amount,
+    })
     .eq("id", auth.memberId);
 
-  // Record transfer in history
+  // Record transfer
   await supabase.from("market_transfers").insert({
     session_id: (session as any).id,
-    turn_id: (offer as any).turn_id,
-    buyer_id: (offer as any).buyer_id,
+    turn_id: null,
+    buyer_id: o.buyer_id,
     seller_id: auth.memberId,
     seller_team_id: sellerTeamId,
-    player_id: (offer as any).player_id,
+    player_id: o.player_id,
     transfer_type: "offer",
-    amount: (offer as any).amount,
+    amount: o.amount,
   });
 
   // Mark offer accepted
@@ -125,20 +234,32 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     .update({ status: "accepted", responded_at: new Date().toISOString() })
     .eq("id", offerId);
 
-  // Complete the buyer's turn and advance
-  await completeTurnAndAdvance(supabase, session, (offer as any).turn_id);
+  // Cancel all other pending offers for this player
+  await supabase
+    .from("market_offers")
+    .update({ status: "cancelled", responded_at: new Date().toISOString() })
+    .eq("session_id", (session as any).id)
+    .eq("player_id", o.player_id)
+    .eq("status", "pending");
+
+  const buyerName =
+    (
+      await supabase
+        .from("members")
+        .select("display_name")
+        .eq("id", o.buyer_id)
+        .single()
+    ).data?.display_name ?? "—";
+
+  await createNotification({
+    supabase,
+    memberId: o.buyer_id,
+    tournamentId: auth.tournamentId,
+    type: "offer_accepted",
+    title: "Oferta aceptada",
+    body: `${sellerName} aceptó tu oferta por ${playerName}. ¡Bienvenido al equipo!`,
+    metadata: { offerId, playerId: o.player_id, amount: o.amount },
+  });
 
   return NextResponse.json({ ok: true, action: "accepted" });
-}
-
-// ─── Helper: mark a turn as completed and activate the next one ───────────────
-async function completeTurnAndAdvance(supabase: any, session: any, turnId: string) {
-  await supabase
-    .from("market_turns")
-    .update({ status: "completed", completed_at: new Date().toISOString() })
-    .eq("id", turnId);
-
-  // Reuse shared advanceTurn logic (auto-skips 3/3 members)
-  const { advanceTurn } = await import("../../action/route");
-  await advanceTurn(supabase, session);
 }

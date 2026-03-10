@@ -135,7 +135,6 @@ export default function LobbyPage() {
   const router = useRouter();
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const [adminToken, setAdminToken] = useState<string | null>(null);
-  // memberId confirmando eliminación (doble click)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [endingTournament, setEndingTournament] = useState(false);
@@ -151,6 +150,7 @@ export default function LobbyPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [myMemberId, setMyMemberId] = useState<string | null>(null);
+  const [shareCopied, setShareCopied] = useState(false);
 
   const fetchTournament = useCallback(
     async (silent = false) => {
@@ -437,6 +437,50 @@ export default function LobbyPage() {
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+          {isAdmin && (
+            <button
+              onClick={async () => {
+                const shareUrl = `${window.location.origin}/join?code=${tournament.code}`;
+                if (navigator.share) {
+                  try {
+                    await navigator.share({
+                      title: `Únete a ${tournament.name} en Mercatto`,
+                      text: `Entra al torneo "${tournament.name}" con este enlace:`,
+                      url: shareUrl,
+                    });
+                  } catch {
+                    /* user cancelled */
+                  }
+                } else {
+                  await navigator.clipboard.writeText(shareUrl);
+                  setShareCopied(true);
+                  setTimeout(() => setShareCopied(false), 2500);
+                }
+              }}
+              className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-medium transition-all duration-200 cursor-pointer ${
+                shareCopied
+                  ? "bg-[#22C55E]/10 border-[#22C55E]/25 text-[#22C55E]"
+                  : "bg-[#8B5CF6]/10 border-[#8B5CF6]/20 hover:bg-[#8B5CF6]/15 text-[#8B5CF6] hover:text-[#A78BFA]"
+              }`}
+            >
+              {shareCopied ? (
+                <>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                  Enlace copiado
+                </>
+              ) : (
+                <>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+                    <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+                  </svg>
+                  Compartir
+                </>
+              )}
+            </button>
+          )}
           <button
             onClick={() => fetchTournament(true)}
             disabled={refreshing}
