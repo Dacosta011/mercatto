@@ -14,6 +14,16 @@ export async function GET(request: NextRequest, { params }: Params) {
 
   const supabase = createServerClient();
 
+  // ── 0. Tournament settings ───────────────────────────────────────────────
+  const { data: tournamentSettings } = await supabase
+    .from("tournaments")
+    .select("max_transfers, clause_protection")
+    .eq("id", auth.tournamentId)
+    .single();
+
+  const maxTransfers = (tournamentSettings as any)?.max_transfers ?? 3;
+  const clauseProtection = (tournamentSettings as any)?.clause_protection ?? true;
+
   // ── 1. Market session ─────────────────────────────────────────────────────
   const { data: session } = await supabase
     .from("market_sessions")
@@ -187,7 +197,7 @@ export async function GET(request: NextRequest, { params }: Params) {
         teamCrestUrl: teamCrestById[ownerTeamId] ?? null,
         ownerId,
         ownerName: memberById[ownerId]?.display_name ?? "—",
-        clauseProtected: protectedTeamIds.has(ownerTeamId),
+        clauseProtected: clauseProtection && protectedTeamIds.has(ownerTeamId),
         inNegotiation: false,
       });
     }
@@ -223,7 +233,7 @@ export async function GET(request: NextRequest, { params }: Params) {
   const { data: offerPlayersRaw } = offerPlayerIds.length > 0
     ? await supabase
         .from("players")
-        .select("id, name, ovr, position, headshot_url")
+        .select("id, name, ovr, position, headshot_url, price, clause")
         .in("id", offerPlayerIds)
     : { data: [] };
 
@@ -244,6 +254,8 @@ export async function GET(request: NextRequest, { params }: Params) {
       playerOvr: player?.ovr ?? null,
       playerPosition: player?.position ?? "—",
       playerHeadshot: player?.headshot_url ?? null,
+      playerPrice: player?.price ?? 0,
+      playerClause: player?.clause ?? 0,
       amount: o.amount,
       expiresAt: o.expires_at,
       counterAmount: o.counter_amount,
@@ -386,7 +398,7 @@ export async function GET(request: NextRequest, { params }: Params) {
       memberId: auth.memberId,
       budget: myMember?.budget ?? 0,
       purchasesUsed: myMember?.market_purchases ?? 0,
-      maxPurchases: 3,
+      maxPurchases: maxTransfers,
       iconSlotUsed: myMember?.icon_slot_used ?? false,
       myTeamId,
       myTeamName: myTeamId ? (teamNameById[myTeamId] ?? null) : null,
@@ -398,6 +410,7 @@ export async function GET(request: NextRequest, { params }: Params) {
     myIncomingOffers,
     myOutgoingOffers,
     recentTransfers,
+    clauseProtectionEnabled: clauseProtection,
     unreadNotifications: unreadNotifications ?? 0,
     allMembers: (allMembersRaw ?? []).map((m: any) => {
       const tid = teamIdByMember[m.id];

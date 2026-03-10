@@ -13,16 +13,28 @@ type Params = { params: Promise<{ code: string }> };
 
 export async function GET(request: NextRequest, { params }: Params) {
   const { code } = await params;
-  const auth = await verifyMemberToken(request, code);
-  if (!auth.ok)
-    return NextResponse.json({ error: auth.error }, { status: auth.status });
+
+  // Accept both member and admin tokens
+  let authMemberId: string | null = null;
+  let authTournamentId: string;
+  const memberAuth = await verifyMemberToken(request, code);
+  if (memberAuth.ok) {
+    authMemberId = memberAuth.memberId;
+    authTournamentId = memberAuth.tournamentId;
+  } else {
+    const adminAuth = await verifyAdminToken(request, code);
+    if (!adminAuth.ok) {
+      return NextResponse.json({ error: "Token inválido." }, { status: 403 });
+    }
+    authTournamentId = adminAuth.tournamentId;
+  }
 
   const supabase = createServerClient();
 
   const { data: session } = await supabase
     .from("market_sessions")
     .select("id, status")
-    .eq("tournament_id", auth.tournamentId)
+    .eq("tournament_id", authTournamentId)
     .maybeSingle();
 
   if (!session) {
@@ -131,12 +143,16 @@ export async function GET(request: NextRequest, { params }: Params) {
   for (const m of membersRaw ?? [])
     memberNameById[(m as any).id] = (m as any).display_name;
 
-  // My budget & icon slot
-  const { data: myMember } = await supabase
-    .from("members")
-    .select("budget, icon_slot_used")
-    .eq("id", auth.memberId)
-    .single();
+  // My budget & icon slot (only if authenticated as member)
+  let myMember: any = null;
+  if (authMemberId) {
+    const { data: mm } = await supabase
+      .from("members")
+      .select("budget, icon_slot_used")
+      .eq("id", authMemberId)
+      .single();
+    myMember = mm;
+  }
 
   const auctions = (auctionsRaw as any[]).map((a) => {
     const icon = iconById[a.selected_icon_id];
@@ -178,15 +194,15 @@ export async function GET(request: NextRequest, { params }: Params) {
             headshotUrl: icon.headshot_url ?? null,
           }
         : null,
-      isMyBid: a.highest_bidder_id === auth.memberId,
+      isMyBid: authMemberId ? a.highest_bidder_id === authMemberId : false,
       timeRemainingMs: endsAt ? Math.max(0, endsAt - now) : null,
     };
   });
 
   return NextResponse.json({
     auctions,
-    myBudget: (myMember as any)?.budget ?? 0,
-    myIconSlotUsed: (myMember as any)?.icon_slot_used ?? false,
+    myBudget: myMember?.budget ?? 0,
+    myIconSlotUsed: myMember?.icon_slot_used ?? false,
   });
 }
 

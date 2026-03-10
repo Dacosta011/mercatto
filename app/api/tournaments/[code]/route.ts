@@ -12,7 +12,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
   // 1. Buscar el torneo
   const { data: tournament, error: tournamentError } = await supabase
     .from("tournaments")
-    .select("id, name, code, status, created_at")
+    .select("id, name, code, status, created_at, max_transfers, clause_protection")
     .eq("code", code.toUpperCase())
     .single();
 
@@ -92,6 +92,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
     code: tournament.code,
     status: tournament.status,
     createdAt: tournament.created_at,
+    maxTransfers: (tournament as any).max_transfers ?? 3,
+    clauseProtection: (tournament as any).clause_protection ?? true,
     members: membersWithTeams,
   });
 }

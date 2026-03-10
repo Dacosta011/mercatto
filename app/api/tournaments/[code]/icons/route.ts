@@ -1,16 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerClient, verifyMemberToken } from "@/lib/supabase";
+import {
+  createServerClient,
+  verifyMemberToken,
+  verifyAdminToken,
+} from "@/lib/supabase";
 
 type Params = { params: Promise<{ code: string }> };
 
 // ─── GET /api/tournaments/[code]/icons ────────────────────────────────────────
 // Returns all icon players available for auction.
+// Accepts both member and admin tokens.
 
 export async function GET(request: NextRequest, { params }: Params) {
   const { code } = await params;
-  const auth = await verifyMemberToken(request, code);
-  if (!auth.ok)
-    return NextResponse.json({ error: auth.error }, { status: auth.status });
+
+  // Try member token first, then admin token
+  const memberAuth = await verifyMemberToken(request, code);
+  if (!memberAuth.ok) {
+    const adminAuth = await verifyAdminToken(request, code);
+    if (!adminAuth.ok) {
+      return NextResponse.json(
+        { error: "Token inválido." },
+        { status: 403 }
+      );
+    }
+  }
 
   const supabase = createServerClient();
 

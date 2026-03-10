@@ -71,6 +71,8 @@ export default function CreateTournamentPage() {
   const [name, setName] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [rerolls, setRerolls] = useState(1);
+  const [maxTransfers, setMaxTransfers] = useState(3);
+  const [clauseProtection, setClauseProtection] = useState(true);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<TournamentResult | null>(null);
   const [errors, setErrors] = useState<{ name?: string; displayName?: string }>({});
@@ -90,7 +92,13 @@ export default function CreateTournamentPage() {
       const res = await fetch("/api/tournaments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim(), displayName: displayName.trim(), rerolls }),
+        body: JSON.stringify({
+          name: name.trim(),
+          displayName: displayName.trim(),
+          rerolls,
+          maxTransfers,
+          clauseProtection,
+        }),
       });
 
       const data = await res.json();
@@ -276,6 +284,72 @@ export default function CreateTournamentPage() {
                           </svg>
                         </button>
                       </div>
+                    </div>
+                  </div>
+
+                  {/* Max Transfers stepper */}
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[#F3F4F6] text-sm font-medium">
+                        Fichajes por Mercado
+                      </label>
+                      <span className="text-[#9CA3AF] text-xs">Por participante</span>
+                    </div>
+                    <div className="bg-[#0D0F14] border border-white/[0.07] rounded-xl px-4 py-3 flex items-center justify-between">
+                      <p className="text-[#9CA3AF] text-sm">
+                        Máximo de fichajes permitidos
+                      </p>
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => setMaxTransfers((v) => Math.max(1, v - 1))}
+                          className="w-8 h-8 rounded-lg bg-[#131722] border border-white/[0.07] hover:border-[#8B5CF6]/30 hover:bg-[#1A1F2E] flex items-center justify-center text-[#9CA3AF] hover:text-[#F3F4F6] transition-all duration-150 cursor-pointer"
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                            <line x1="5" y1="12" x2="19" y2="12" />
+                          </svg>
+                        </button>
+                        <span className="text-[#F3F4F6] text-lg font-semibold w-6 text-center tabular-nums">
+                          {maxTransfers}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setMaxTransfers((v) => Math.min(10, v + 1))}
+                          className="w-8 h-8 rounded-lg bg-[#131722] border border-white/[0.07] hover:border-[#8B5CF6]/30 hover:bg-[#1A1F2E] flex items-center justify-center text-[#9CA3AF] hover:text-[#F3F4F6] transition-all duration-150 cursor-pointer"
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                            <line x1="12" y1="5" x2="12" y2="19" />
+                            <line x1="5" y1="12" x2="19" y2="12" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Clause Protection toggle */}
+                  <div className="flex flex-col gap-2">
+                    <label className="text-[#F3F4F6] text-sm font-medium">
+                      Protección de Cláusula
+                    </label>
+                    <div className="bg-[#0D0F14] border border-white/[0.07] rounded-xl px-4 py-3 flex items-center justify-between">
+                      <div>
+                        <p className="text-[#9CA3AF] text-sm">
+                          Cada equipo solo puede perder 1 jugador por cláusula
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setClauseProtection((v) => !v)}
+                        className={`relative w-11 h-6 rounded-full transition-colors duration-200 cursor-pointer shrink-0 ${
+                          clauseProtection ? "bg-[#8B5CF6]" : "bg-[#1A1F2E] border border-white/10"
+                        }`}
+                      >
+                        <span
+                          className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+                            clauseProtection ? "translate-x-5" : "translate-x-0"
+                          }`}
+                        />
+                      </button>
                     </div>
                   </div>
 

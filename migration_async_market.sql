@@ -68,3 +68,8 @@ ALTER PUBLICATION supabase_realtime ADD TABLE notifications;
 
 -- ─── 8. market_transfers: make turn_id nullable (async has no turns) ────────
 ALTER TABLE market_transfers ALTER COLUMN turn_id DROP NOT NULL;
+
+-- ─── 9. tournaments: parametizable market settings ────────────────────────
+ALTER TABLE tournaments
+  ADD COLUMN IF NOT EXISTS max_transfers      integer NOT NULL DEFAULT 3,
+  ADD COLUMN IF NOT EXISTS clause_protection  boolean NOT NULL DEFAULT true;

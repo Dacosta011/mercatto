@@ -113,19 +113,26 @@ export default function SubastasPage() {
     setAdminToken(a);
   }, []);
 
+  const [fetchError, setFetchError] = useState<string | null>(null);
+
   const fetchAuctions = useCallback(async () => {
     if (!code || !token) return;
     try {
       const res = await fetch(`/api/tournaments/${code}/auctions`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (!res.ok) return;
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        setFetchError(errData.error ?? `Error ${res.status}`);
+        return;
+      }
+      setFetchError(null);
       const data = await res.json();
       setAuctions(data.auctions ?? []);
       setMyBudget(data.myBudget ?? 0);
       setMyIconSlotUsed(data.myIconSlotUsed ?? false);
     } catch {
-      /* silent */
+      setFetchError("Error de conexión.");
     } finally {
       setLoading(false);
     }
@@ -304,8 +311,16 @@ export default function SubastasPage() {
           </section>
         )}
 
+        {/* Error state */}
+        {fetchError && (
+          <div className="mb-6 rounded-2xl bg-[#EF4444]/10 border border-[#EF4444]/20 p-5">
+            <p className="text-[#EF4444] text-sm font-semibold mb-1">Error al cargar subastas</p>
+            <p className="text-[#EF4444]/70 text-xs">{fetchError}</p>
+          </div>
+        )}
+
         {/* Empty state */}
-        {auctions.length === 0 && (
+        {!fetchError && auctions.length === 0 && (
           <div className="flex flex-col items-center justify-center py-24">
             <div className="w-20 h-20 rounded-3xl bg-[#8B5CF6]/10 border border-[#8B5CF6]/20 flex items-center justify-center mb-6">
               <svg
