@@ -16,14 +16,17 @@ export async function GET(request: NextRequest, { params }: Params) {
 
   // Accept both member and admin tokens
   let authMemberId: string | null = null;
+  let authTournamentId: string;
   const memberAuth = await verifyMemberToken(request, code);
   if (memberAuth.ok) {
     authMemberId = memberAuth.memberId;
+    authTournamentId = memberAuth.tournamentId;
   } else {
     const adminAuth = await verifyAdminToken(request, code);
     if (!adminAuth.ok) {
       return NextResponse.json({ error: "Token inválido." }, { status: 403 });
     }
+    authTournamentId = adminAuth.tournamentId;
   }
 
   const supabase = createServerClient();
@@ -31,7 +34,7 @@ export async function GET(request: NextRequest, { params }: Params) {
   const { data: session } = await supabase
     .from("market_sessions")
     .select("id, status")
-    .eq("tournament_id", auth.tournamentId)
+    .eq("tournament_id", authTournamentId)
     .maybeSingle();
 
   if (!session) {
