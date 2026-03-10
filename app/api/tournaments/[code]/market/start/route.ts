@@ -6,34 +6,48 @@ import {
 
 type Params = { params: Promise<{ code: string }> };
 
-const OVR_REF = 88;
-const STEP = 20_000_000;
-const MIN_B = 100_000_000;
-const MAX_B = 400_000_000;
+const MIN_BUDGET = 100_000_000;
+const MAX_BUDGET = 400_000_000;
 const ROUND_TO = 5_000_000;
 
-async function recalcBudget(supabase: ReturnType<typeof createServerClient>, teamId: string, memberId: string) {
-  const { data: rows } = await supabase
-    .from("team_players")
-    .select("players(ovr)")
-    .eq("team_id", teamId);
+async function recalcAllBudgets(
+  supabase: ReturnType<typeof createServerClient>,
+  assignments: { member_id: string; team_id: string }[]
+) {
+  const teamValues: { memberId: string; squadValue: number }[] = [];
 
-  const ovrs: number[] = (rows ?? [])
-    .map((r: any) => {
+  for (const a of assignments) {
+    const { data: rows } = await supabase
+      .from("team_players")
+      .select("players(price)")
+      .eq("team_id", a.team_id);
+
+    const total = (rows ?? []).reduce((sum: number, r: any) => {
       const p = r.players;
-      return Array.isArray(p) ? p[0]?.ovr : p?.ovr;
-    })
-    .filter((v: any) => typeof v === "number");
+      const price = Array.isArray(p) ? p[0]?.price : p?.price;
+      return sum + (typeof price === "number" ? price : 0);
+    }, 0);
 
-  const budget = (() => {
-    if (ovrs.length === 0) return MIN_B;
-    const avgOvr = ovrs.reduce((s, v) => s + v, 0) / ovrs.length;
-    const raw = MIN_B + (OVR_REF - avgOvr) * STEP;
-    const rounded = Math.round(raw / ROUND_TO) * ROUND_TO;
-    return Math.max(MIN_B, Math.min(MAX_B, rounded));
-  })();
+    teamValues.push({ memberId: a.member_id, squadValue: total });
+  }
 
-  await supabase.from("members").update({ budget }).eq("id", memberId);
+  const values = teamValues.map((t) => t.squadValue);
+  const minVal = Math.min(...values);
+  const maxVal = Math.max(...values);
+
+  for (const tv of teamValues) {
+    let budget: number;
+    if (maxVal === minVal) {
+      budget = Math.round((MIN_BUDGET + MAX_BUDGET) / 2);
+    } else {
+      const ratio = (tv.squadValue - minVal) / (maxVal - minVal);
+      budget = MAX_BUDGET - ratio * (MAX_BUDGET - MIN_BUDGET);
+    }
+    budget = Math.round(budget / ROUND_TO) * ROUND_TO;
+    budget = Math.max(MIN_BUDGET, Math.min(MAX_BUDGET, budget));
+
+    await supabase.from("members").update({ budget }).eq("id", tv.memberId);
+  }
 }
 
 // ─── POST /api/tournaments/[code]/market/start ────────────────────────────────
@@ -101,13 +115,11 @@ export async function POST(request: NextRequest, { params }: Params) {
     .in("id", memberIds);
 
   if (resetBudgets) {
-    for (const a of assignments ?? []) {
-      await recalcBudget(
-        supabase,
-        (a as any).team_id,
-        (a as any).member_id
-      );
-    }
+    const mapped = (assignments ?? []).map((a: any) => ({
+      member_id: a.member_id as string,
+      team_id: a.team_id as string,
+    }));
+    await recalcAllBudgets(supabase, mapped);
   }
 
   const now = new Date();
