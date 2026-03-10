@@ -159,8 +159,7 @@ function formatTimeLeft(expiresAt: string | null) {
   return `Expira en ${minutes}m`;
 }
 
-const FABRIZIO_IMG =
-  "https://pbs.twimg.com/profile_images/1741753635158024192/j0m8Ucvv_400x400.jpg";
+const INSIDER_IMG = "/cavsulas.png";
 
 function pickRandom<T>(arr: T[], id: string): T {
   let hash = 0;
@@ -810,21 +809,21 @@ export default function MarketPage() {
                 {!sidebarCollapsed && (
                   <div className="flex items-center gap-2.5">
                     <img
-                      src={FABRIZIO_IMG}
-                      alt="Fabrizio Romano"
+                      src={INSIDER_IMG}
+                      alt="Capsulizio Pelado"
                       className="w-8 h-8 rounded-full object-cover"
                     />
                     <div>
                       <div className="flex items-center gap-1">
                         <p className="text-[#F3F4F6] text-sm font-semibold">
-                          Fabrizio Romano
+                          Capsulizio Pelado
                         </p>
                         <span className="w-4 h-4 rounded-full bg-[#1D9BF0] text-white text-[9px] flex items-center justify-center font-bold">
                           ✓
                         </span>
                       </div>
                       <p className="text-[#9CA3AF] text-xs">
-                        @FabrizioRomano
+                        @CapsulaPelado
                       </p>
                     </div>
                   </div>
@@ -834,8 +833,8 @@ export default function MarketPage() {
               {sidebarCollapsed ? (
                 <div className="flex-1 flex flex-col items-center py-4 gap-3">
                   <img
-                    src={FABRIZIO_IMG}
-                    alt="FR"
+                    src={INSIDER_IMG}
+                    alt="CP"
                     className="w-9 h-9 rounded-full object-cover"
                   />
                   <div className="w-9 h-9 rounded-xl bg-[#1A1F2E] border border-white/8 flex items-center justify-center text-[#9CA3AF] text-xs">
@@ -872,14 +871,14 @@ export default function MarketPage() {
                       >
                         <div className="flex items-start gap-3">
                           <img
-                            src={FABRIZIO_IMG}
-                            alt="Fabrizio Romano"
+                            src={INSIDER_IMG}
+                            alt="Capsulizio Pelado"
                             className="w-11 h-11 rounded-full object-cover shrink-0"
                           />
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-1.5 text-xs">
                               <span className="text-[#F3F4F6] font-semibold">
-                                Fabrizio Romano
+                                Capsulizio Pelado
                               </span>
                               <span className="w-4 h-4 rounded-full bg-[#1D9BF0] text-white text-[9px] flex items-center justify-center font-bold">
                                 ✓
