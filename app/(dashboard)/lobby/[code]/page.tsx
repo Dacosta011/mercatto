@@ -25,10 +25,6 @@ interface Member {
     members: Member[];
   }
 
-function formatBudget(value: number | null | undefined) {
-  if (!value || isNaN(value)) return "—";
-  return `€${(value / 1_000_000).toFixed(0)}M`;
-}
 
 function StatusBadge({ status }: { status: Tournament["status"] }) {
   const map: Record<
@@ -699,8 +695,8 @@ export default function LobbyPage() {
         </div>
 
         {/* Column headers */}
-        <div className={`grid px-6 py-3 border-b border-white/[0.04] ${isAdmin ? "grid-cols-[2fr_2fr_1.5fr_1fr_auto]" : "grid-cols-[2fr_2fr_1.5fr_1fr]"}`}>
-          {["Nombre", "Equipo", "Presupuesto", "Estado", ...(isAdmin ? [""] : [])].map((col, i) => (
+        <div className={`grid px-6 py-3 border-b border-white/[0.04] ${isAdmin ? "grid-cols-[2fr_2fr_1fr_auto]" : "grid-cols-[2fr_2fr_1fr]"}`}>
+          {["Nombre", "Equipo", "Estado", ...(isAdmin ? [""] : [])].map((col, i) => (
             <span key={i} className="text-[#9CA3AF] text-[11px] font-semibold uppercase tracking-wider">
               {col}
             </span>
@@ -749,7 +745,7 @@ export default function LobbyPage() {
                   exit={{ opacity: 0, x: -10 }}
                   transition={{ duration: 0.25, delay: idx * 0.03 }}
                   className={`grid px-6 py-4 hover:bg-[#1A1F2E]/50 transition-colors duration-150 items-center
-                    ${isAdmin ? "grid-cols-[2fr_2fr_1.5fr_1fr_auto]" : "grid-cols-[2fr_2fr_1.5fr_1fr]"}`}
+                    ${isAdmin ? "grid-cols-[2fr_2fr_1fr_auto]" : "grid-cols-[2fr_2fr_1fr]"}`}
                 >
                   {/* Name */}
                   <div className="flex items-center gap-3">
@@ -772,11 +768,6 @@ export default function LobbyPage() {
                       {member.team?.name ?? "Sin asignar"}
                     </span>
                   </div>
-
-                  {/* Budget */}
-                  <span className={`text-sm font-medium ${member.budget ? "text-[#22C55E]" : "text-[#9CA3AF]/40"}`}>
-                    {formatBudget(member.budget)}
-                  </span>
 
                   {/* Status */}
                   <div>

@@ -184,7 +184,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
   const { data: buyer } = await supabase
     .from("members")
-    .select("budget, market_purchases")
+    .select("budget, budget_reserved, market_purchases")
     .eq("id", actualBuyerId)
     .single();
 
@@ -194,9 +194,10 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       { status: 422 }
     );
   }
-  if ((buyer as any)?.budget < o.amount) {
+  const buyerAvailable = ((buyer as any)?.budget ?? 0) - ((buyer as any)?.budget_reserved ?? 0);
+  if (buyerAvailable < o.amount) {
     return NextResponse.json(
-      { error: "El comprador ya no tiene suficiente presupuesto." },
+      { error: "El comprador ya no tiene suficiente presupuesto disponible." },
       { status: 422 }
     );
   }

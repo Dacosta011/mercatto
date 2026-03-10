@@ -65,20 +65,23 @@ export async function POST(request: NextRequest, { params }: Params) {
   // Check purchase limit
   const { data: myMember } = await supabase
     .from("members")
-    .select("budget, market_purchases")
+    .select("budget, budget_reserved, market_purchases")
     .eq("id", auth.memberId)
     .single();
 
-  if ((myMember as any)?.market_purchases >= maxTransfers) {
+  const mm = myMember as any;
+
+  if (mm?.market_purchases >= maxTransfers) {
     return NextResponse.json(
       { error: `Ya alcanzaste el límite de ${maxTransfers} fichajes.` },
       { status: 422 }
     );
   }
 
-  if ((myMember as any)?.budget < body.amount) {
+  const availableBudget = (mm?.budget ?? 0) - (mm?.budget_reserved ?? 0);
+  if (availableBudget < body.amount) {
     return NextResponse.json(
-      { error: "Presupuesto insuficiente para esa oferta." },
+      { error: "Presupuesto disponible insuficiente para esa oferta." },
       { status: 422 }
     );
   }
