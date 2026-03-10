@@ -27,6 +27,38 @@ export async function GET(request: NextRequest, { params }: Params) {
 
   const s = session as any;
 
+  // ── Lazy expiration (replaces frequent cron) ────────────────────────────
+  // Expire overdue offers on read so we don't need a cron every 2 minutes.
+  const now = new Date().toISOString();
+
+  if (s.status === "active") {
+    await supabase
+      .from("market_offers")
+      .update({ status: "expired", responded_at: now })
+      .eq("session_id", s.id)
+      .eq("status", "pending")
+      .lt("expires_at", now);
+
+    // Auto-close market if time is up
+    if (s.closes_at && new Date(s.closes_at).getTime() < Date.now()) {
+      await supabase
+        .from("market_sessions")
+        .update({ status: "finished", finished_at: now })
+        .eq("id", s.id);
+      await supabase
+        .from("market_offers")
+        .update({ status: "expired", responded_at: now })
+        .eq("session_id", s.id)
+        .eq("status", "pending");
+      await supabase
+        .from("icon_auctions")
+        .update({ phase: "finished" })
+        .eq("session_id", s.id)
+        .eq("phase", "active");
+      s.status = "finished";
+    }
+  }
+
   // ── 2. All members + assignments + teams ──────────────────────────────────
   const { data: allMembersRaw } = await supabase
     .from("members")
@@ -327,10 +359,10 @@ export async function GET(request: NextRequest, { params }: Params) {
     .eq("read", false);
 
   // ── 10. Market timer ──────────────────────────────────────────────────────
-  const now = new Date();
+  const nowDate = new Date();
   const closesAt = s.closes_at ? new Date(s.closes_at) : null;
   const timeRemainingMs = closesAt
-    ? Math.max(0, closesAt.getTime() - now.getTime())
+    ? Math.max(0, closesAt.getTime() - nowDate.getTime())
     : null;
 
   return NextResponse.json({

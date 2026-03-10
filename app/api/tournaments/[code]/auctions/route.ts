@@ -31,6 +31,57 @@ export async function GET(request: NextRequest, { params }: Params) {
 
   const sessionId = (session as any).id;
 
+  // ── Lazy auction resolution ─────────────────────────────────────────────
+  // Resolve expired auctions on read so we don't need a frequent cron.
+  const { data: expiredAuctions } = await supabase
+    .from("icon_auctions")
+    .select("id, selected_icon_id, highest_bid, highest_bidder_id, session_id")
+    .eq("session_id", sessionId)
+    .eq("phase", "active")
+    .lt("ends_at", new Date().toISOString());
+
+  for (const ea of expiredAuctions ?? []) {
+    const ax = ea as any;
+    if (ax.highest_bidder_id && ax.highest_bid > 0) {
+      await supabase
+        .from("icon_auctions")
+        .update({
+          phase: "finished",
+          winner_id: ax.highest_bidder_id,
+          final_amount: ax.highest_bid,
+        })
+        .eq("id", ax.id);
+
+      const { data: winner } = await supabase
+        .from("members")
+        .select("budget")
+        .eq("id", ax.highest_bidder_id)
+        .single();
+
+      await supabase
+        .from("members")
+        .update({
+          budget: Math.max(0, ((winner as any)?.budget ?? 0) - ax.highest_bid),
+          icon_slot_used: true,
+        })
+        .eq("id", ax.highest_bidder_id);
+
+      await supabase.from("market_transfers").insert({
+        session_id: ax.session_id,
+        player_id: ax.selected_icon_id,
+        buyer_id: ax.highest_bidder_id,
+        seller_id: null,
+        amount: ax.highest_bid,
+        type: "auction",
+      });
+    } else {
+      await supabase
+        .from("icon_auctions")
+        .update({ phase: "finished" })
+        .eq("id", ax.id);
+    }
+  }
+
   const { data: auctionsRaw } = await supabase
     .from("icon_auctions")
     .select(
