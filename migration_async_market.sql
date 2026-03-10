@@ -73,3 +73,22 @@ ALTER TABLE market_transfers ALTER COLUMN turn_id DROP NOT NULL;
 ALTER TABLE tournaments
   ADD COLUMN IF NOT EXISTS max_transfers      integer NOT NULL DEFAULT 3,
   ADD COLUMN IF NOT EXISTS clause_protection  boolean NOT NULL DEFAULT true;
+
+-- ─── 10. members: budget reservation for auction bids ─────────────────────
+ALTER TABLE members
+  ADD COLUMN IF NOT EXISTS budget_reserved bigint NOT NULL DEFAULT 0;
+
+-- ─── 11. icon_auctions: voting phase support ─────────────────────────────
+ALTER TABLE icon_auctions
+  ADD COLUMN IF NOT EXISTS vote_ends_at   timestamptz,
+  ADD COLUMN IF NOT EXISTS candidate_ids  uuid[] DEFAULT '{}';
+
+-- ─── 12. icon_votes table ─────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS icon_votes (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  auction_id  uuid NOT NULL REFERENCES icon_auctions(id) ON DELETE CASCADE,
+  member_id   uuid NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  icon_id     uuid NOT NULL,
+  created_at  timestamptz DEFAULT now(),
+  UNIQUE(auction_id, member_id)
+);

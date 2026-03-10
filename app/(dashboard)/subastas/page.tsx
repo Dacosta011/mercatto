@@ -24,9 +24,10 @@ interface AuctionIcon {
 
 interface Auction {
   id: string;
-  phase: "pending" | "active" | "finished";
+  phase: "voting" | "pending" | "active" | "finished";
   startsAt: string | null;
   endsAt: string | null;
+  voteEndsAt: string | null;
   minBid: number;
   highestBid: number;
   highestBidderId: string | null;
@@ -35,8 +36,14 @@ interface Auction {
   winnerName: string | null;
   finalAmount: number | null;
   icon: AuctionIcon | null;
+  candidates: AuctionIcon[];
+  voteCounts: Record<string, number>;
+  myVoteIconId: string | null;
+  totalMembers: number;
+  totalVotes: number;
   isMyBid: boolean;
   timeRemainingMs: number | null;
+  voteTimeRemainingMs: number | null;
 }
 
 interface BidEntry {
@@ -191,6 +198,7 @@ export default function SubastasPage() {
     );
   }
 
+  const votingAuctions = auctions.filter((a) => a.phase === "voting");
   const activeAuctions = auctions.filter((a) => a.phase === "active");
   const pendingAuctions = auctions.filter((a) => a.phase === "pending");
   const finishedAuctions = auctions.filter((a) => a.phase === "finished");
@@ -241,7 +249,22 @@ export default function SubastasPage() {
             </div>
             {adminToken && (
               <button
-                onClick={() => setModal("create")}
+                onClick={async () => {
+                  const res = await fetch(`/api/tournaments/${code}/auctions`, {
+                    method: "POST",
+                    headers: {
+                      Authorization: `Bearer ${adminToken}`,
+                      "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({}),
+                  });
+                  if (res.ok) {
+                    fetchAuctions();
+                  } else {
+                    const d = await res.json().catch(() => ({}));
+                    alert(d.error ?? "Error al crear subasta");
+                  }
+                }}
                 className="px-5 py-2.5 rounded-xl bg-[#8B5CF6] hover:bg-[#7C3AED] text-white font-semibold text-sm transition-colors cursor-pointer flex items-center gap-2"
               >
                 <svg
@@ -257,11 +280,23 @@ export default function SubastasPage() {
                   <line x1="12" y1="5" x2="12" y2="19" />
                   <line x1="5" y1="12" x2="19" y2="12" />
                 </svg>
-                Nueva Subasta
+                Iniciar Subasta
               </button>
             )}
           </div>
         </div>
+
+        {/* Voting Phase */}
+        {votingAuctions.map((a) => (
+          <VotingCard
+            key={a.id}
+            auction={a}
+            code={code}
+            token={token}
+            adminToken={adminToken}
+            onVoted={fetchAuctions}
+          />
+        ))}
 
         {/* Active Auctions */}
         {activeAuctions.length > 0 && (
@@ -276,6 +311,9 @@ export default function SubastasPage() {
                   key={a.id}
                   auction={a}
                   onEnter={() => setModal({ type: "auction", auction: a })}
+                  adminToken={adminToken}
+                  code={code}
+                  onAdminEnd={fetchAuctions}
                 />
               ))}
             </div>
@@ -349,18 +387,6 @@ export default function SubastasPage() {
 
       {/* ── Modals ─────────────────────────────────────────────────────────────── */}
       <AnimatePresence>
-        {modal === "create" && adminToken && (
-          <CreateAuctionModal
-            code={code}
-            token={adminToken}
-            onClose={() => setModal(null)}
-            onCreated={() => {
-              setModal(null);
-              fetchAuctions();
-            }}
-          />
-        )}
-
         {modal && typeof modal === "object" && modal.type === "auction" && (
           <AuctionDetailModal
             code={code}
@@ -377,15 +403,134 @@ export default function SubastasPage() {
   );
 }
 
+// ── Voting Card ──────────────────────────────────────────────────────────────
+
+function VotingCard({
+  auction: a,
+  code,
+  token,
+  adminToken,
+  onVoted,
+}: {
+  auction: Auction;
+  code: string;
+  token: string;
+  adminToken: string | null;
+  onVoted: () => void;
+}) {
+  const [voting, setVoting] = useState(false);
+  const countdown = useCountdown(a.voteEndsAt);
+
+  const handleVote = async (iconId: string) => {
+    setVoting(true);
+    const res = await fetch(`/api/tournaments/${code}/auctions/${a.id}/vote`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ iconId }),
+    });
+    if (res.ok) onVoted();
+    setVoting(false);
+  };
+
+  return (
+    <section className="mb-10">
+      <h2 className="text-[#F3F4F6] text-lg font-semibold mb-4 flex items-center gap-2">
+        <span className="w-2 h-2 rounded-full bg-[#F59E0B] animate-pulse" />
+        Votación en curso
+        <span className={`ml-2 text-sm font-medium ${countdown.urgent ? "text-[#EF4444]" : "text-[#F59E0B]"}`}>
+          {countdown.text}
+        </span>
+        <span className="text-[#9CA3AF] text-sm font-normal ml-2">
+          {a.totalVotes}/{a.totalMembers} votos
+        </span>
+      </h2>
+      <p className="text-[#9CA3AF] text-sm mb-5">
+        Elige el ícono a subastar. {a.myVoteIconId ? "Ya votaste, pero puedes cambiar tu voto." : "Tu voto cuenta."}
+      </p>
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
+        {a.candidates.map((icon) => {
+          const col = ovrColor(icon.ovr);
+          const voteCount = a.voteCounts[icon.id] ?? 0;
+          const isMyVote = a.myVoteIconId === icon.id;
+
+          return (
+            <motion.button
+              key={icon.id}
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
+              disabled={voting}
+              onClick={() => handleVote(icon.id)}
+              className={`rounded-2xl border p-4 text-left transition-all cursor-pointer disabled:cursor-wait ${
+                isMyVote
+                  ? "bg-[#8B5CF6]/15 border-[#8B5CF6]/50 shadow-[0_0_20px_rgba(139,92,246,0.12)]"
+                  : "bg-[#131722] border-white/8 hover:border-[#8B5CF6]/30"
+              }`}
+            >
+              <div className="w-full aspect-square rounded-xl bg-linear-to-b from-[#8B5CF6]/10 to-transparent border border-white/6 overflow-hidden flex items-center justify-center mb-3">
+                {icon.headshotUrl ? (
+                  <img
+                    src={icon.headshotUrl}
+                    alt={icon.name}
+                    className="w-full h-full object-contain object-bottom"
+                  />
+                ) : (
+                  <span className="text-4xl font-black" style={{ color: col.bg }}>
+                    {icon.ovr}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-1.5 mb-1">
+                <span
+                  className="px-1.5 py-0.5 rounded text-[10px] font-black"
+                  style={{ background: col.bg, color: col.text }}
+                >
+                  {icon.ovr}
+                </span>
+                <span className="text-[10px] font-bold text-[#9CA3AF]">
+                  {icon.position}
+                </span>
+              </div>
+              <p className="text-[#F3F4F6] text-sm font-bold truncate">
+                {icon.name}
+              </p>
+              <p className="text-[#6B7280] text-[10px] mb-2">{icon.nation}</p>
+              <div className="flex items-center justify-between">
+                <span className={`text-xs font-semibold ${isMyVote ? "text-[#8B5CF6]" : "text-[#9CA3AF]"}`}>
+                  {voteCount} {voteCount === 1 ? "voto" : "votos"}
+                </span>
+                {isMyVote && (
+                  <span className="text-[10px] font-bold text-[#8B5CF6] bg-[#8B5CF6]/10 px-2 py-0.5 rounded-full">
+                    Tu voto
+                  </span>
+                )}
+              </div>
+            </motion.button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 // ── Auction Card ──────────────────────────────────────────────────────────────
 
 function AuctionCard({
   auction: a,
   onEnter,
+  adminToken,
+  code,
+  onAdminEnd,
 }: {
   auction: Auction;
   onEnter?: () => void;
+  adminToken?: string | null;
+  code?: string | null;
+  onAdminEnd?: () => void;
 }) {
+  const [ending, setEnding] = useState(false);
   const icon = a.icon;
   const col = icon ? ovrColor(icon.ovr) : { bg: "#9CA3AF", text: "#fff" };
   const isActive = a.phase === "active";
@@ -497,12 +642,34 @@ function AuctionCard({
                 {countdown.text}
               </span>
             </div>
-            <button
-              onClick={onEnter}
-              className="px-4 py-2 rounded-xl bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-sm font-semibold transition-colors cursor-pointer"
-            >
-              Entrar a subasta
-            </button>
+            <div className="flex items-center gap-2">
+              {adminToken && code && (
+                <button
+                  disabled={ending}
+                  onClick={async () => {
+                    setEnding(true);
+                    const res = await fetch(
+                      `/api/tournaments/${code}/auctions/${a.id}`,
+                      {
+                        method: "PATCH",
+                        headers: { Authorization: `Bearer ${adminToken}` },
+                      }
+                    );
+                    if (res.ok) onAdminEnd?.();
+                    setEnding(false);
+                  }}
+                  className="px-3 py-2 rounded-xl border border-[#EF4444]/30 text-[#EF4444] text-sm font-semibold hover:bg-[#EF4444]/10 transition-colors cursor-pointer disabled:opacity-40"
+                >
+                  {ending ? "…" : "Terminar"}
+                </button>
+              )}
+              <button
+                onClick={onEnter}
+                className="px-4 py-2 rounded-xl bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-sm font-semibold transition-colors cursor-pointer"
+              >
+                Entrar a subasta
+              </button>
+            </div>
           </>
         )}
         {a.phase === "pending" && (

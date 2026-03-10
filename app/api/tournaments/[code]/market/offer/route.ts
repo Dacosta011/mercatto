@@ -152,6 +152,24 @@ export async function POST(request: NextRequest, { params }: Params) {
     );
   }
 
+  // Prevent duplicate pending offers by the same buyer for the same player
+  const { data: existingOffer } = await supabase
+    .from("market_offers")
+    .select("id")
+    .eq("session_id", s.id)
+    .eq("buyer_id", auth.memberId)
+    .eq("player_id", body.playerId)
+    .eq("status", "pending")
+    .is("parent_offer_id", null)
+    .limit(1);
+
+  if ((existingOffer ?? []).length > 0) {
+    return NextResponse.json(
+      { error: "Ya tienes una oferta pendiente por este jugador." },
+      { status: 422 }
+    );
+  }
+
   // Calculate offer expiration
   const expiresAt = offerExpiresAt();
 

@@ -97,7 +97,7 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   await supabase
     .from("members")
-    .update({ market_purchases: 0, icon_slot_used: false })
+    .update({ market_purchases: 0, icon_slot_used: false, budget_reserved: 0 })
     .in("id", memberIds);
 
   if (resetBudgets) {

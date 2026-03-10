@@ -72,7 +72,7 @@ export async function GET(request: NextRequest, { params }: Params) {
   // ── 2. All members + assignments + teams ──────────────────────────────────
   const { data: allMembersRaw } = await supabase
     .from("members")
-    .select("id, display_name, budget, market_purchases, icon_slot_used")
+    .select("id, display_name, budget, budget_reserved, market_purchases, icon_slot_used")
     .eq("tournament_id", auth.tournamentId);
 
   const allMemberIds = (allMembersRaw ?? []).map((m: any) => m.id);
@@ -397,6 +397,7 @@ export async function GET(request: NextRequest, { params }: Params) {
     myStatus: {
       memberId: auth.memberId,
       budget: myMember?.budget ?? 0,
+      budgetReserved: myMember?.budget_reserved ?? 0,
       purchasesUsed: myMember?.market_purchases ?? 0,
       maxPurchases: maxTransfers,
       iconSlotUsed: myMember?.icon_slot_used ?? false,
