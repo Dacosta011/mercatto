@@ -53,6 +53,15 @@ export async function POST(request: NextRequest, { params }: Params) {
     );
   }
 
+  // Tournament settings
+  const { data: tSettings } = await supabase
+    .from("tournaments")
+    .select("max_transfers")
+    .eq("id", auth.tournamentId)
+    .single();
+
+  const maxTransfers = (tSettings as any)?.max_transfers ?? 3;
+
   // Check purchase limit
   const { data: myMember } = await supabase
     .from("members")
@@ -60,9 +69,9 @@ export async function POST(request: NextRequest, { params }: Params) {
     .eq("id", auth.memberId)
     .single();
 
-  if ((myMember as any)?.market_purchases >= 3) {
+  if ((myMember as any)?.market_purchases >= maxTransfers) {
     return NextResponse.json(
-      { error: "Ya alcanzaste el límite de 3 fichajes." },
+      { error: `Ya alcanzaste el límite de ${maxTransfers} fichajes.` },
       { status: 422 }
     );
   }

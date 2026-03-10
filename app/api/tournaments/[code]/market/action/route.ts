@@ -74,8 +74,15 @@ export async function POST(request: NextRequest, { params }: Params) {
       .eq("id", auth.memberId)
       .single();
 
-    if ((myMember as any)?.market_purchases >= 3) {
-      return NextResponse.json({ error: "Ya compraste el máximo de 3 jugadores." }, { status: 422 });
+    const { data: tSettings } = await supabase
+      .from("tournaments")
+      .select("max_transfers")
+      .eq("id", auth.tournamentId)
+      .single();
+    const maxT = (tSettings as any)?.max_transfers ?? 3;
+
+    if ((myMember as any)?.market_purchases >= maxT) {
+      return NextResponse.json({ error: `Ya compraste el máximo de ${maxT} jugadores.` }, { status: 422 });
     }
 
     // Get player
@@ -205,6 +212,13 @@ export async function POST(request: NextRequest, { params }: Params) {
 // ─── Shared: advance to next pending turn ─────────────────────────────────────
 // Auto-skips members who already reached the 3-purchase limit.
 export async function advanceTurn(supabase: any, session: any) {
+  const { data: ts } = await supabase
+    .from("tournaments")
+    .select("max_transfers")
+    .eq("id", session.tournament_id)
+    .single();
+  const advMaxT = (ts as any)?.max_transfers ?? 3;
+
   // eslint-disable-next-line no-constant-condition
   while (true) {
     const { data: nextTurn } = await supabase
@@ -225,7 +239,7 @@ export async function advanceTurn(supabase: any, session: any) {
       .eq("id", (nextTurn as any).member_id)
       .single();
 
-    if ((member as any)?.market_purchases >= 3) {
+    if ((member as any)?.market_purchases >= advMaxT) {
       await supabase.from("market_turns").update({
         status: "skipped",
         completed_at: new Date().toISOString(),

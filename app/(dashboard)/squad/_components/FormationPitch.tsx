@@ -10,6 +10,8 @@ export interface LineupPlayer {
   position: string;
   countryName: string;
   headshotUrl?: string | null;
+  price?: number;
+  clause?: number;
   suspended?: number;
   yellowCards?: number;
 }

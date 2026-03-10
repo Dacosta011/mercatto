@@ -14,6 +14,13 @@ const POS_GROUPS: Record<PosFilter, string[]> = {
   DEL: ["DC", "SD", "EI", "ED", "CF", "ST", "LW", "RW", "SS"],
 };
 
+function fmtCompact(v: number) {
+  if (!v || isNaN(v)) return "—";
+  if (v >= 1_000_000) return `€${(v / 1_000_000).toFixed(0)}M`;
+  if (v >= 1_000) return `€${(v / 1_000).toFixed(0)}K`;
+  return `€${v}`;
+}
+
 function ovrColor(ovr: number): string {
   if (ovr >= 90) return "#8B5CF6";
   if (ovr >= 85) return "#22C55E";
@@ -99,6 +106,20 @@ function DraggableCard({ player, locked }: { player: LineupPlayer; locked: boole
             </span>
           )}
         </div>
+        {(player.price || player.clause) ? (
+          <div className="flex items-center gap-3 mt-1.5">
+            {player.price ? (
+              <span className="text-[10px] text-[#9CA3AF]">
+                Val: <span className="text-[#F3F4F6] font-semibold">{fmtCompact(player.price)}</span>
+              </span>
+            ) : null}
+            {player.clause ? (
+              <span className="text-[10px] text-[#9CA3AF]">
+                Cl: <span className="text-[#F59E0B] font-semibold">{fmtCompact(player.clause)}</span>
+              </span>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       {/* Status badges */}

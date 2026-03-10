@@ -52,6 +52,16 @@ export async function POST(request: NextRequest, { params }: Params) {
     );
   }
 
+  // Tournament settings
+  const { data: tSettings } = await supabase
+    .from("tournaments")
+    .select("max_transfers, clause_protection")
+    .eq("id", auth.tournamentId)
+    .single();
+
+  const maxTransfers = (tSettings as any)?.max_transfers ?? 3;
+  const clauseProtectionEnabled = (tSettings as any)?.clause_protection ?? true;
+
   // Check purchase limit
   const { data: myMember } = await supabase
     .from("members")
@@ -59,9 +69,9 @@ export async function POST(request: NextRequest, { params }: Params) {
     .eq("id", auth.memberId)
     .single();
 
-  if ((myMember as any)?.market_purchases >= 3) {
+  if ((myMember as any)?.market_purchases >= maxTransfers) {
     return NextResponse.json(
-      { error: "Ya alcanzaste el límite de 3 fichajes." },
+      { error: `Ya alcanzaste el límite de ${maxTransfers} fichajes.` },
       { status: 422 }
     );
   }
@@ -152,21 +162,23 @@ export async function POST(request: NextRequest, { params }: Params) {
     );
   }
 
-  // Clause protection check
-  const { data: prot } = await supabase
-    .from("market_transfers")
-    .select("id")
-    .eq("session_id", s.id)
-    .eq("seller_team_id", sellerTeamId)
-    .eq("transfer_type", "clause")
-    .gte("created_at", s.started_at)
-    .limit(1);
+  // Clause protection check (only if enabled)
+  if (clauseProtectionEnabled) {
+    const { data: prot } = await supabase
+      .from("market_transfers")
+      .select("id")
+      .eq("session_id", s.id)
+      .eq("seller_team_id", sellerTeamId)
+      .eq("transfer_type", "clause")
+      .gte("created_at", s.started_at)
+      .limit(1);
 
-  if ((prot ?? []).length > 0) {
-    return NextResponse.json(
-      { error: "Ese equipo ya está protegido contra cláusulas." },
-      { status: 422 }
-    );
+    if ((prot ?? []).length > 0) {
+      return NextResponse.json(
+        { error: "Ese equipo ya está protegido contra cláusulas." },
+        { status: 422 }
+      );
+    }
   }
 
   // Deduct buyer budget + increment purchases

@@ -53,6 +53,8 @@ interface OfferEntry {
   playerOvr: number | null;
   playerPosition: string;
   playerHeadshot: string | null;
+  playerPrice: number;
+  playerClause: number;
   amount: number;
   expiresAt: string | null;
   counterAmount: number | null;
@@ -97,6 +99,7 @@ interface MarketState {
   myIncomingOffers: OfferEntry[];
   myOutgoingOffers: OfferEntry[];
   recentTransfers: any[];
+  clauseProtectionEnabled: boolean;
   unreadNotifications: number;
   allMembers: {
     id: string;
@@ -1094,6 +1097,7 @@ export default function MarketPage() {
                         key={p.playerId}
                         player={p}
                         canAct={canAct}
+                        clauseProtectionEnabled={data.clauseProtectionEnabled}
                         onClause={() => {
                           setSelectedPlayer(p);
                           setModal("clause");
@@ -1130,14 +1134,14 @@ export default function MarketPage() {
               <div className="flex items-center justify-between">
                 <span className="text-[#9CA3AF] text-sm">Fichajes usados</span>
                 <span className="text-[#F3F4F6] text-base font-semibold">
-                  {data.myStatus.purchasesUsed}/3
+                  {data.myStatus.purchasesUsed}/{data.myStatus.maxPurchases}
                 </span>
               </div>
               <div className="w-full bg-[#1A1F2E] rounded-full h-1.5">
                 <div
                   className="bg-[#8B5CF6] h-1.5 rounded-full transition-all"
                   style={{
-                    width: `${(data.myStatus.purchasesUsed / 3) * 100}%`,
+                    width: `${(data.myStatus.purchasesUsed / data.myStatus.maxPurchases) * 100}%`,
                   }}
                 />
               </div>
@@ -1281,7 +1285,7 @@ export default function MarketPage() {
                         </p>
                       </div>
                       <span className="text-[#9CA3AF] text-[11px]">
-                        {m.purchasesUsed}/3
+                        {m.purchasesUsed}/{data.myStatus.maxPurchases}
                       </span>
                     </div>
                   );
@@ -1456,7 +1460,7 @@ export default function MarketPage() {
                   value={fmt(data.myStatus.budget - selectedPlayer.clause)}
                 />
               </div>
-              {selectedPlayer.clauseProtected && (
+              {data.clauseProtectionEnabled && selectedPlayer.clauseProtected && (
                 <div className="flex items-center gap-2 bg-[#EF4444]/10 border border-[#EF4444]/20 rounded-xl px-3 py-2.5">
                   <ShieldIcon />
                   <span className="text-[#EF4444] text-xs font-medium">
@@ -1485,7 +1489,7 @@ export default function MarketPage() {
                   onClick={doClause}
                   disabled={
                     actionLoading ||
-                    selectedPlayer.clauseProtected ||
+                    (data.clauseProtectionEnabled && selectedPlayer.clauseProtected) ||
                     data.myStatus.budget < selectedPlayer.clause
                   }
                   className="flex-1 py-3 rounded-xl bg-[#EF4444] hover:bg-[#DC2626] text-white text-sm font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
@@ -1771,11 +1775,25 @@ export default function MarketPage() {
                         </div>
                         <div className="text-right shrink-0">
                           <p className="text-[10px] text-[#9CA3AF] uppercase tracking-wider mb-1">
-                            Monto
+                            Oferta
                           </p>
                           <p className="text-[#22C55E] text-2xl font-black">
                             {fmt(o.amount)}
                           </p>
+                          <div className="mt-1.5 space-y-0.5">
+                            <p className="text-[10px] text-[#9CA3AF]">
+                              Valor:{" "}
+                              <span className="text-[#F3F4F6] font-semibold">
+                                {fmt(o.playerPrice)}
+                              </span>
+                            </p>
+                            <p className="text-[10px] text-[#9CA3AF]">
+                              Cláusula:{" "}
+                              <span className="text-[#F3F4F6] font-semibold">
+                                {fmt(o.playerClause)}
+                              </span>
+                            </p>
+                          </div>
                         </div>
                       </div>
 
@@ -1942,21 +1960,24 @@ export default function MarketPage() {
 function PlayerMarketCard({
   player,
   canAct,
+  clauseProtectionEnabled,
   onClause,
   onOffer,
 }: {
   player: PlayerCard;
   canAct: boolean;
+  clauseProtectionEnabled: boolean;
   onClause: () => void;
   onOffer: () => void;
 }) {
   const col = ovrColor(player.ovr);
   const [imgError, setImgError] = useState(false);
+  const isProtected = clauseProtectionEnabled && player.clauseProtected;
 
   return (
     <div
       className={`rounded-2xl border transition-colors p-4 bg-[#0D0F14] ${
-        player.clauseProtected
+        isProtected
           ? "border-[#3B82F6]/30"
           : player.inNegotiation
             ? "border-[#F59E0B]/25"
@@ -1992,13 +2013,13 @@ function PlayerMarketCard({
             <span className="px-2 py-1 rounded-lg text-xs font-bold bg-white/8 text-[#F3F4F6]">
               {player.position}
             </span>
-            {player.clauseProtected && (
+            {isProtected && (
               <span className="ml-auto flex items-center gap-1 text-xs text-[#3B82F6] font-medium">
                 <ShieldIcon size={12} filled />
                 Protegido
               </span>
             )}
-            {player.inNegotiation && !player.clauseProtected && (
+            {player.inNegotiation && !isProtected && (
               <span className="ml-auto text-xs text-[#F59E0B] font-medium">
                 En negociación
               </span>
@@ -2040,7 +2061,7 @@ function PlayerMarketCard({
         </button>
         <button
           onClick={onClause}
-          disabled={!canAct || player.clauseProtected}
+          disabled={!canAct || isProtected}
           className="flex-1 h-10 rounded-xl border border-[#EF4444]/35 text-[#EF4444] text-sm font-semibold hover:bg-[#EF4444]/12 transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
         >
           Cláusula
@@ -2424,7 +2445,7 @@ function MarketFinished({
                   </div>
                   <div className="text-right shrink-0">
                     <p className="text-[#F3F4F6] text-sm font-bold">
-                      {m.purchasesUsed}/3
+                      {m.purchasesUsed}/{data.myStatus.maxPurchases}
                     </p>
                     {m.totalSpent > 0 && (
                       <p className="text-[#22C55E] text-[10px] font-semibold">

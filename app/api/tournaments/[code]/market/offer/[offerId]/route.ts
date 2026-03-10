@@ -126,14 +126,15 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       })
       .eq("id", offerId);
 
-    // Create new counter-offer (roles swapped: seller becomes buyer of the negotiation)
+    // Create new counter-offer with roles swapped so the original buyer
+    // becomes the respondent (seller_id) and can accept/reject/counter.
     const expiresAt = offerExpiresAt();
     const { data: counterOffer } = await supabase
       .from("market_offers")
       .insert({
         session_id: (session as any).id,
-        buyer_id: o.buyer_id,
-        seller_id: auth.memberId,
+        buyer_id: auth.memberId,
+        seller_id: o.buyer_id,
         player_id: o.player_id,
         amount: body.counterAmount,
         expires_at: expiresAt,
@@ -165,15 +166,23 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   }
 
   // ── Accept ────────────────────────────────────────────────────────────────
+  const { data: tSettings } = await supabase
+    .from("tournaments")
+    .select("max_transfers")
+    .eq("id", auth.tournamentId)
+    .single();
+
+  const maxTransfers = (tSettings as any)?.max_transfers ?? 3;
+
   const { data: buyer } = await supabase
     .from("members")
     .select("budget, market_purchases")
     .eq("id", o.buyer_id)
     .single();
 
-  if ((buyer as any)?.market_purchases >= 3) {
+  if ((buyer as any)?.market_purchases >= maxTransfers) {
     return NextResponse.json(
-      { error: "El comprador ya alcanzó el límite de fichajes." },
+      { error: `El comprador ya alcanzó el límite de ${maxTransfers} fichajes.` },
       { status: 422 }
     );
   }
