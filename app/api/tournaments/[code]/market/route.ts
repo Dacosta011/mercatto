@@ -4,12 +4,13 @@ import { createServerClient, verifyMemberToken } from "@/lib/supabase";
 type Params = { params: Promise<{ code: string }> };
 
 // ─── GET /api/tournaments/[code]/market ───────────────────────────────────────
+// Returns full async market state for the requesting member.
 
 export async function GET(request: NextRequest, { params }: Params) {
   const { code } = await params;
-
   const auth = await verifyMemberToken(request, code);
-  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
+  if (!auth.ok)
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
 
   const supabase = createServerClient();
 
@@ -24,15 +25,48 @@ export async function GET(request: NextRequest, { params }: Params) {
     return NextResponse.json({ status: "pending", session: null });
   }
 
-  // ── 2. All members + assignments + teams (for names everywhere) ───────────
+  const s = session as any;
+
+  // ── Lazy expiration (replaces frequent cron) ────────────────────────────
+  // Expire overdue offers on read so we don't need a cron every 2 minutes.
+  const now = new Date().toISOString();
+
+  if (s.status === "active") {
+    await supabase
+      .from("market_offers")
+      .update({ status: "expired", responded_at: now })
+      .eq("session_id", s.id)
+      .eq("status", "pending")
+      .lt("expires_at", now);
+
+    // Auto-close market if time is up
+    if (s.closes_at && new Date(s.closes_at).getTime() < Date.now()) {
+      await supabase
+        .from("market_sessions")
+        .update({ status: "finished", finished_at: now })
+        .eq("id", s.id);
+      await supabase
+        .from("market_offers")
+        .update({ status: "expired", responded_at: now })
+        .eq("session_id", s.id)
+        .eq("status", "pending");
+      await supabase
+        .from("icon_auctions")
+        .update({ phase: "finished" })
+        .eq("session_id", s.id)
+        .eq("phase", "active");
+      s.status = "finished";
+    }
+  }
+
+  // ── 2. All members + assignments + teams ──────────────────────────────────
   const { data: allMembersRaw } = await supabase
     .from("members")
-    .select("id, display_name, budget, market_purchases")
+    .select("id, display_name, budget, market_purchases, icon_slot_used")
     .eq("tournament_id", auth.tournamentId);
 
   const allMemberIds = (allMembersRaw ?? []).map((m: any) => m.id);
 
-  // All assignments in the tournament
   const { data: allAssignments } = allMemberIds.length > 0
     ? await supabase
         .from("assignments")
@@ -40,10 +74,13 @@ export async function GET(request: NextRequest, { params }: Params) {
         .in("member_id", allMemberIds)
     : { data: [] };
 
-  // All team names
   const allTeamIds = (allAssignments ?? []).map((a: any) => a.team_id);
+
   const { data: allTeamsRaw } = allTeamIds.length > 0
-    ? await supabase.from("teams").select("id, name, crest_url").in("id", allTeamIds)
+    ? await supabase
+        .from("teams")
+        .select("id, name, crest_url")
+        .in("id", allTeamIds)
     : { data: [] };
 
   const teamNameById: Record<string, string> = {};
@@ -57,50 +94,23 @@ export async function GET(request: NextRequest, { params }: Params) {
   const memberIdByTeam: Record<string, string> = {};
   for (const a of allAssignments ?? []) {
     teamIdByMember[(a as any).member_id] = (a as any).team_id;
-    memberIdByTeam[(a as any).team_id]   = (a as any).member_id;
+    memberIdByTeam[(a as any).team_id] = (a as any).member_id;
   }
 
   const memberById: Record<string, any> = {};
   for (const m of allMembersRaw ?? []) memberById[(m as any).id] = m;
 
   const myTeamId = teamIdByMember[auth.memberId] ?? null;
+  const myMember = memberById[auth.memberId];
 
-  // ── 3. Turns for current round (with team names) ──────────────────────────
-  const { data: turns } = await supabase
-    .from("market_turns")
-    .select("id, round_num, position, member_id, status, completed_at")
-    .eq("session_id", (session as any).id)
-    .eq("round_num", (session as any).current_round)
-    .order("position");
-
-  const turnsWithNames = (turns ?? []).map((t: any) => {
-    const teamId = teamIdByMember[t.member_id];
-    return {
-      id: t.id,
-      memberId: t.member_id,
-      memberName: memberById[t.member_id]?.display_name ?? "—",
-      teamName: teamId ? (teamNameById[teamId] ?? "—") : null,
-      teamCrestUrl: teamId ? (teamCrestById[teamId] ?? null) : null,
-      position: t.position,
-      status: t.status,
-      completedAt: t.completed_at,
-    };
-  });
-
-  const currentTurn = turnsWithNames.find((t) => t.status === "active") ?? null;
-  const allRoundDone = turnsWithNames.every(
-    (t) => t.status === "completed" || t.status === "skipped"
-  );
-
-  // ── 4. Effective ownership ────────────────────────────────────────────────
-  // Start from team_players -> assignments, then apply ALL historical transfers.
-  // This ensures players bought in previous markets are owned by the buyer.
-
+  // ── 3. Effective ownership ────────────────────────────────────────────────
   const { data: allTeamPlayers } = allTeamIds.length > 0
-    ? await supabase.from("team_players").select("team_id, player_id").in("team_id", allTeamIds)
+    ? await supabase
+        .from("team_players")
+        .select("team_id, player_id")
+        .in("team_id", allTeamIds)
     : { data: [] };
 
-  // Initial ownership: player -> memberId (from original team rosters)
   const effectiveOwner: Record<string, string> = {};
   const effectiveTeam: Record<string, string> = {};
   for (const r of allTeamPlayers ?? []) {
@@ -111,11 +121,10 @@ export async function GET(request: NextRequest, { params }: Params) {
     }
   }
 
-  // Apply ALL transfers chronologically to compute current ownership
   const { data: allTransfers } = await supabase
     .from("market_transfers")
     .select("buyer_id, player_id, transfer_type")
-    .eq("session_id", (session as any).id)
+    .eq("session_id", s.id)
     .in("transfer_type", ["clause", "offer", "icon_auction"])
     .order("created_at", { ascending: true });
 
@@ -125,27 +134,15 @@ export async function GET(request: NextRequest, { params }: Params) {
     if (buyerTeam) effectiveTeam[t.player_id] = buyerTeam;
   }
 
-  // ── 5. My status ──────────────────────────────────────────────────────────
-  const myMember = memberById[auth.memberId];
-  const sessionStartedAt = (session as any).started_at;
+  // ── 4. Clause protection + sold players (current market iteration) ────────
+  const sessionStartedAt = s.started_at;
 
-  // Clause protection and sold players: only from current iteration
-  // (transfers created after the session's started_at, which resets on restart)
-  const [{ data: currentIterationTransfers }, { data: myPendingOffer }] = await Promise.all([
-    supabase
-      .from("market_transfers")
-      .select("id, player_id, seller_team_id, transfer_type")
-      .eq("session_id", (session as any).id)
-      .in("transfer_type", ["clause", "offer", "icon_auction"])
-      .gte("created_at", sessionStartedAt),
-    supabase
-      .from("market_offers")
-      .select("id, player_id, amount")
-      .eq("session_id", (session as any).id)
-      .eq("buyer_id", auth.memberId)
-      .eq("status", "pending")
-      .limit(1),
-  ]);
+  const { data: currentIterationTransfers } = await supabase
+    .from("market_transfers")
+    .select("id, player_id, seller_team_id, transfer_type")
+    .eq("session_id", s.id)
+    .in("transfer_type", ["clause", "offer", "icon_auction"])
+    .gte("created_at", sessionStartedAt);
 
   const soldPlayerIds = new Set(
     (currentIterationTransfers ?? []).map((t: any) => t.player_id)
@@ -157,27 +154,17 @@ export async function GET(request: NextRequest, { params }: Params) {
       .map((t: any) => t.seller_team_id)
   );
 
-  // Check if my effective team was clause-protected in this iteration
-  const myEffectiveTeamIds = new Set(
-    Object.entries(effectiveOwner)
-      .filter(([, mid]) => mid === auth.memberId)
-      .map(([pid]) => effectiveTeam[pid])
-      .filter(Boolean)
-  );
-  const teamClauseProtected = [...myEffectiveTeamIds].some(tid => protectedTeamIds.has(tid));
-
-  // ── 6. Available players ────────────────────────────────────────────────────
-  // Players effectively owned by OTHER members, excluding icons and current-iteration sold
-  const allPlayerIds = Object.keys(effectiveOwner).filter(
+  // ── 5. Available players ──────────────────────────────────────────────────
+  const otherPlayerIds = Object.keys(effectiveOwner).filter(
     (pid) => effectiveOwner[pid] !== auth.memberId
   );
 
   let availablePlayers: any[] = [];
-  if (allPlayerIds.length > 0) {
+  if (otherPlayerIds.length > 0) {
     const { data: players } = await supabase
       .from("players")
       .select("id, name, ovr, position, price, clause, headshot_url, is_icon")
-      .in("id", allPlayerIds)
+      .in("id", otherPlayerIds)
       .order("ovr", { ascending: false });
 
     for (const p of players ?? []) {
@@ -186,6 +173,7 @@ export async function GET(request: NextRequest, { params }: Params) {
 
       const ownerId = effectiveOwner[(p as any).id];
       const ownerTeamId = effectiveTeam[(p as any).id];
+
       availablePlayers.push({
         playerId: (p as any).id,
         playerName: (p as any).name,
@@ -196,51 +184,118 @@ export async function GET(request: NextRequest, { params }: Params) {
         clause: (p as any).clause ?? 0,
         teamId: ownerTeamId,
         teamName: teamNameById[ownerTeamId] ?? "—",
+        teamCrestUrl: teamCrestById[ownerTeamId] ?? null,
         ownerId,
         ownerName: memberById[ownerId]?.display_name ?? "—",
         clauseProtected: protectedTeamIds.has(ownerTeamId),
+        inNegotiation: false,
       });
     }
   }
 
-  // ── 7. Recent activity + pending offers ──────────────────────────────────
-  const isFinished = (session as any).status === "finished";
-  const [{ data: recentTransfersRaw }, { data: rejectedOffersRaw }, { data: allPendingOffersRaw }] = await Promise.all([
+  // ── 6. Pending offers — mark players "in negotiation" ─────────────────────
+  const { data: allPendingOffers } = await supabase
+    .from("market_offers")
+    .select(
+      "id, buyer_id, seller_id, player_id, amount, expires_at, counter_amount, parent_offer_id, created_at"
+    )
+    .eq("session_id", s.id)
+    .eq("status", "pending")
+    .order("created_at", { ascending: false });
+
+  const pendingPlayerIds = new Set(
+    (allPendingOffers ?? []).map((o: any) => o.player_id)
+  );
+
+  for (const p of availablePlayers) {
+    if (pendingPlayerIds.has(p.playerId)) {
+      p.inNegotiation = true;
+    }
+  }
+
+  // ── 7. My pending actions ─────────────────────────────────────────────────
+  const myIncomingOffers: any[] = [];
+  const myOutgoingOffers: any[] = [];
+
+  const offerPlayerIds = [
+    ...new Set((allPendingOffers ?? []).map((o: any) => o.player_id)),
+  ];
+  const { data: offerPlayersRaw } = offerPlayerIds.length > 0
+    ? await supabase
+        .from("players")
+        .select("id, name, ovr, position, headshot_url")
+        .in("id", offerPlayerIds)
+    : { data: [] };
+
+  const offerPlayerById: Record<string, any> = {};
+  for (const p of offerPlayersRaw ?? [])
+    offerPlayerById[(p as any).id] = p;
+
+  for (const o of allPendingOffers ?? []) {
+    const player = offerPlayerById[o.player_id];
+    const entry = {
+      id: o.id,
+      buyerId: o.buyer_id,
+      buyerName: memberById[o.buyer_id]?.display_name ?? "—",
+      sellerId: o.seller_id,
+      sellerName: memberById[o.seller_id]?.display_name ?? "—",
+      playerId: o.player_id,
+      playerName: player?.name ?? "—",
+      playerOvr: player?.ovr ?? null,
+      playerPosition: player?.position ?? "—",
+      playerHeadshot: player?.headshot_url ?? null,
+      amount: o.amount,
+      expiresAt: o.expires_at,
+      counterAmount: o.counter_amount,
+      parentOfferId: o.parent_offer_id,
+      createdAt: o.created_at,
+    };
+
+    if (o.seller_id === auth.memberId) myIncomingOffers.push(entry);
+    if (o.buyer_id === auth.memberId) myOutgoingOffers.push(entry);
+  }
+
+  // ── 8. Recent activity feed ───────────────────────────────────────────────
+  const isFinished = s.status === "finished";
+  const [
+    { data: recentTransfersRaw },
+    { data: rejectedOffersRaw },
+  ] = await Promise.all([
     supabase
       .from("market_transfers")
-      .select("id, buyer_id, seller_id, seller_team_id, player_id, transfer_type, amount, created_at")
-      .eq("session_id", (session as any).id)
+      .select(
+        "id, buyer_id, seller_id, seller_team_id, player_id, transfer_type, amount, created_at"
+      )
+      .eq("session_id", s.id)
       .order("created_at", { ascending: false })
-      .limit(isFinished ? 200 : 30),
+      .limit(isFinished ? 200 : 40),
     supabase
       .from("market_offers")
       .select("id, buyer_id, seller_id, player_id, amount, responded_at")
-      .eq("session_id", (session as any).id)
+      .eq("session_id", s.id)
       .eq("status", "rejected")
       .order("responded_at", { ascending: false })
       .limit(30),
-    supabase
-      .from("market_offers")
-      .select("id, buyer_id, seller_id, player_id, amount, created_at")
-      .eq("session_id", (session as any).id)
-      .eq("status", "pending")
-      .order("created_at", { ascending: false })
-      .limit(20),
   ]);
 
-  // Collect all player ids from all sources for a single lookup
   const allActivityPlayerIds = [
     ...new Set([
       ...(recentTransfersRaw ?? []).map((t: any) => t.player_id),
-      ...(rejectedOffersRaw  ?? []).map((o: any) => o.player_id),
-      ...(allPendingOffersRaw ?? []).map((o: any) => o.player_id),
+      ...(rejectedOffersRaw ?? []).map((o: any) => o.player_id),
+      ...(allPendingOffers ?? []).map((o: any) => o.player_id),
     ]),
   ];
+
   const { data: activityPlayers } = allActivityPlayerIds.length > 0
-    ? await supabase.from("players").select("id, name").in("id", allActivityPlayerIds)
+    ? await supabase
+        .from("players")
+        .select("id, name")
+        .in("id", allActivityPlayerIds)
     : { data: [] };
+
   const playerNameById: Record<string, string> = {};
-  for (const p of activityPlayers ?? []) playerNameById[(p as any).id] = (p as any).name;
+  for (const p of activityPlayers ?? [])
+    playerNameById[(p as any).id] = (p as any).name;
 
   const completedTransfers = (recentTransfersRaw ?? []).map((t: any) => ({
     id: t.id,
@@ -266,7 +321,7 @@ export async function GET(request: NextRequest, { params }: Params) {
     playerName: playerNameById[o.player_id] ?? "—",
   }));
 
-  const pendingOfferEntries = (allPendingOffersRaw ?? []).map((o: any) => {
+  const pendingOfferEntries = (allPendingOffers ?? []).map((o: any) => {
     const sellerTeamId = teamIdByMember[o.seller_id];
     return {
       id: `pend-${o.id}`,
@@ -277,69 +332,73 @@ export async function GET(request: NextRequest, { params }: Params) {
       sellerId: o.seller_id,
       buyerName: memberById[o.buyer_id]?.display_name ?? "—",
       sellerName: memberById[o.seller_id]?.display_name ?? "—",
-      sellerTeamName: sellerTeamId ? (teamNameById[sellerTeamId] ?? "—") : "—",
+      sellerTeamName: sellerTeamId
+        ? (teamNameById[sellerTeamId] ?? "—")
+        : "—",
       playerName: playerNameById[o.player_id] ?? "—",
     };
   });
 
-  // Merge and sort by date descending, cap at 40 entries
-  const recentTransfers = [...completedTransfers, ...rejectedOffers, ...pendingOfferEntries]
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    .slice(0, 40);
+  const recentTransfers = [
+    ...completedTransfers,
+    ...rejectedOffers,
+    ...pendingOfferEntries,
+  ]
+    .sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    )
+    .slice(0, 50);
 
-  // ── 8. Incoming offers for this user ────────────────────────────────────
-  const incomingOffersRaw = (allPendingOffersRaw ?? []).filter(
-    (o: any) => o.seller_id === auth.memberId
-  );
+  // ── 9. Unread notification count ──────────────────────────────────────────
+  const { count: unreadNotifications } = await supabase
+    .from("notifications")
+    .select("id", { count: "exact", head: true })
+    .eq("member_id", auth.memberId)
+    .eq("tournament_id", auth.tournamentId)
+    .eq("read", false);
 
-  const offerPlayerIds = [...new Set((incomingOffersRaw ?? []).map((o: any) => o.player_id))];
-  const { data: offerPlayersRaw } = offerPlayerIds.length > 0
-    ? await supabase.from("players").select("id, name, ovr, position, headshot_url").in("id", offerPlayerIds)
-    : { data: [] };
-  const offerPlayerById: Record<string, any> = {};
-  for (const p of offerPlayersRaw ?? []) offerPlayerById[(p as any).id] = p;
-
-  const incomingOffers = (incomingOffersRaw ?? []).map((o: any) => {
-    const player = offerPlayerById[o.player_id];
-    return {
-      id: o.id,
-      buyerId: o.buyer_id,
-      buyerName: memberById[o.buyer_id]?.display_name ?? "—",
-      playerId: o.player_id,
-      playerName: player?.name ?? o.player_id,
-      playerOvr: player?.ovr ?? null,
-      playerPosition: player?.position ?? "—",
-      playerHeadshot: player?.headshot_url ?? null,
-      amount: o.amount,
-      createdAt: o.created_at,
-    };
-  });
+  // ── 10. Market timer ──────────────────────────────────────────────────────
+  const nowDate = new Date();
+  const closesAt = s.closes_at ? new Date(s.closes_at) : null;
+  const timeRemainingMs = closesAt
+    ? Math.max(0, closesAt.getTime() - nowDate.getTime())
+    : null;
 
   return NextResponse.json({
-    status: (session as any).status,
+    status: s.status,
     session: {
-      id: (session as any).id,
-      status: (session as any).status,
-      currentRound: (session as any).current_round,
-      totalRounds: (session as any).total_rounds,
-      allRoundDone,
+      id: s.id,
+      status: s.status,
+      opensAt: s.opens_at,
+      closesAt: s.closes_at,
+      durationHours: s.duration_hours,
+      startedAt: s.started_at,
+      finishedAt: s.finished_at,
     },
-    currentTurn,
-    isMyTurn: currentTurn?.memberId === auth.memberId,
-    turns: turnsWithNames,
+    timer: {
+      closesAt: s.closes_at,
+      timeRemainingMs,
+      isClosingSoon: timeRemainingMs !== null && timeRemainingMs < 2 * 60 * 60 * 1000,
+      isUrgent: timeRemainingMs !== null && timeRemainingMs < 30 * 60 * 1000,
+    },
     myStatus: {
       memberId: auth.memberId,
       budget: myMember?.budget ?? 0,
       purchasesUsed: myMember?.market_purchases ?? 0,
       maxPurchases: 3,
+      iconSlotUsed: myMember?.icon_slot_used ?? false,
       myTeamId,
       myTeamName: myTeamId ? (teamNameById[myTeamId] ?? null) : null,
-      teamClauseProtected,
-      hasPendingOffer: ((myPendingOffer as any) ?? []).length > 0,
+      myTeamCrestUrl: myTeamId ? (teamCrestById[myTeamId] ?? null) : null,
+      pendingIncoming: myIncomingOffers.length,
+      pendingOutgoing: myOutgoingOffers.length,
     },
     availablePlayers,
+    myIncomingOffers,
+    myOutgoingOffers,
     recentTransfers,
-    incomingOffers,
+    unreadNotifications: unreadNotifications ?? 0,
     allMembers: (allMembersRaw ?? []).map((m: any) => {
       const tid = teamIdByMember[m.id];
       return {
@@ -347,7 +406,6 @@ export async function GET(request: NextRequest, { params }: Params) {
         displayName: m.display_name,
         teamName: tid ? (teamNameById[tid] ?? null) : null,
         teamCrestUrl: tid ? (teamCrestById[tid] ?? null) : null,
-        budget: m.budget,
         purchasesUsed: m.market_purchases ?? 0,
       };
     }),
