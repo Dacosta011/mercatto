@@ -166,13 +166,23 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   }
 
   // ── Accept ────────────────────────────────────────────────────────────────
-  // For counter-offers (parent_offer_id is set), the roles are swapped:
-  // buyer_id = original player owner (who countered), seller_id = original buyer (who accepts).
-  // The ACTUAL buyer (who pays) is the person accepting = auth.memberId (seller_id in the offer).
-  // The ACTUAL seller (who receives money) is the other party = buyer_id in the offer.
-  const isCounterOffer = !!o.parent_offer_id;
-  const actualBuyerId = isCounterOffer ? o.seller_id : o.buyer_id;
-  const actualSellerId = isCounterOffer ? o.buyer_id : o.seller_id;
+  // Walk up the counter-offer chain to find the ROOT offer. The root offer
+  // (parent_offer_id = null) always has the correct original roles:
+  //   root.buyer_id  = the person who WANTS the player (actual buyer)
+  //   root.seller_id = the person who OWNS the player (actual seller)
+  let rootOffer = o;
+  while (rootOffer.parent_offer_id) {
+    const { data: parentOffer } = await supabase
+      .from("market_offers")
+      .select("*")
+      .eq("id", rootOffer.parent_offer_id)
+      .single();
+    if (!parentOffer) break;
+    rootOffer = parentOffer as any;
+  }
+
+  const actualBuyerId = rootOffer.buyer_id;
+  const actualSellerId = rootOffer.seller_id;
 
   const { data: tSettings } = await supabase
     .from("tournaments")
@@ -260,22 +270,40 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     .eq("player_id", o.player_id)
     .eq("status", "pending");
 
-  const buyerName =
-    (
-      await supabase
-        .from("members")
-        .select("display_name")
-        .eq("id", actualBuyerId)
-        .single()
-    ).data?.display_name ?? "—";
+  // Notify both parties with correct roles
+  const buyerNameRes = await supabase
+    .from("members")
+    .select("display_name")
+    .eq("id", actualBuyerId)
+    .single();
+  const actualBuyerName = buyerNameRes.data?.display_name ?? "—";
 
+  const sellerNameRes = await supabase
+    .from("members")
+    .select("display_name")
+    .eq("id", actualSellerId)
+    .single();
+  const actualSellerName = sellerNameRes.data?.display_name ?? "—";
+
+  // Notify buyer: you got the player
   await createNotification({
     supabase,
     memberId: actualBuyerId,
     tournamentId: auth.tournamentId,
     type: "offer_accepted",
-    title: "Oferta aceptada",
-    body: `${sellerName} aceptó tu oferta por ${playerName}. ¡Bienvenido al equipo!`,
+    title: "Fichaje completado",
+    body: `¡Compraste a ${playerName} por $${(o.amount / 1_000_000).toFixed(0)}M!`,
+    metadata: { offerId, playerId: o.player_id, amount: o.amount },
+  });
+
+  // Notify seller: you sold the player
+  await createNotification({
+    supabase,
+    memberId: actualSellerId,
+    tournamentId: auth.tournamentId,
+    type: "offer_accepted",
+    title: "Jugador vendido",
+    body: `Vendiste a ${playerName} a ${actualBuyerName} por $${(o.amount / 1_000_000).toFixed(0)}M`,
     metadata: { offerId, playerId: o.player_id, amount: o.amount },
   });
 
