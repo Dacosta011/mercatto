@@ -65,6 +65,7 @@ interface OfferEntry {
 interface MyStatus {
   memberId: string;
   budget: number;
+  budgetReserved: number;
   purchasesUsed: number;
   maxPurchases: number;
   iconSlotUsed: boolean;
@@ -589,9 +590,10 @@ export default function MarketPage() {
       return;
     }
     const amount = raw * 1_000_000;
-    if (amount > data.myStatus.budget) {
+    const avail = data.myStatus.budget - data.myStatus.budgetReserved;
+    if (amount > avail) {
       setActionMsg(
-        `No tienes suficiente presupuesto. Tu presupuesto es ${fmt(data.myStatus.budget)}.`
+        `No tienes suficiente presupuesto. Disponible: ${fmt(avail)}.`
       );
       return;
     }
@@ -1122,11 +1124,17 @@ export default function MarketPage() {
             {/* Budget */}
             <div className="rounded-2xl border border-[#8B5CF6]/25 bg-[#8B5CF6]/10 p-4">
               <p className="text-[10px] uppercase tracking-[0.18em] text-[#C4B5FD]">
-                Mi Presupuesto
+                Presupuesto Disponible
               </p>
               <p className="text-[#F3F4F6] text-3xl font-bold mt-1">
-                <RollingNumber value={data.myStatus.budget} format={fmt} />
+                <RollingNumber value={data.myStatus.budget - data.myStatus.budgetReserved} format={fmt} />
               </p>
+              {data.myStatus.budgetReserved > 0 && (
+                <div className="flex items-center justify-between mt-2 pt-2 border-t border-white/8">
+                  <span className="text-[#9CA3AF] text-[10px]">Total: {fmt(data.myStatus.budget)}</span>
+                  <span className="text-[#F59E0B] text-[10px]">Reservado en subastas: {fmt(data.myStatus.budgetReserved)}</span>
+                </div>
+              )}
             </div>
 
             {/* Status cards */}
@@ -1452,12 +1460,12 @@ export default function MarketPage() {
                   highlight
                 />
                 <StatBox
-                  label="Tu presupuesto"
-                  value={fmt(data.myStatus.budget)}
+                  label="Disponible"
+                  value={fmt(data.myStatus.budget - data.myStatus.budgetReserved)}
                 />
                 <StatBox
                   label="Restante"
-                  value={fmt(data.myStatus.budget - selectedPlayer.clause)}
+                  value={fmt(data.myStatus.budget - data.myStatus.budgetReserved - selectedPlayer.clause)}
                 />
               </div>
               {data.clauseProtectionEnabled && selectedPlayer.clauseProtected && (
@@ -1468,10 +1476,10 @@ export default function MarketPage() {
                   </span>
                 </div>
               )}
-              {data.myStatus.budget < selectedPlayer.clause && (
+              {(data.myStatus.budget - data.myStatus.budgetReserved) < selectedPlayer.clause && (
                 <div className="bg-[#EF4444]/10 border border-[#EF4444]/20 rounded-xl px-3 py-2.5">
                   <span className="text-[#EF4444] text-xs font-medium">
-                    Presupuesto insuficiente.
+                    Presupuesto disponible insuficiente.
                   </span>
                 </div>
               )}
@@ -1490,7 +1498,7 @@ export default function MarketPage() {
                   disabled={
                     actionLoading ||
                     (data.clauseProtectionEnabled && selectedPlayer.clauseProtected) ||
-                    data.myStatus.budget < selectedPlayer.clause
+                    (data.myStatus.budget - data.myStatus.budgetReserved) < selectedPlayer.clause
                   }
                   className="flex-1 py-3 rounded-xl bg-[#EF4444] hover:bg-[#DC2626] text-white text-sm font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                 >
@@ -1511,8 +1519,9 @@ export default function MarketPage() {
             const parsedAmount =
               parseInt(offerAmount.replace(/\D/g, "")) || 0;
             const amountInCents = parsedAmount * 1_000_000;
-            const exceedsBudget = amountInCents > data.myStatus.budget;
-            const remaining = data.myStatus.budget - amountInCents;
+            const availBudget = data.myStatus.budget - data.myStatus.budgetReserved;
+            const exceedsBudget = amountInCents > availBudget;
+            const remaining = availBudget - amountInCents;
             return (
               <Modal onClose={() => setModal(null)}>
                 <div className="flex flex-col gap-5">
@@ -1575,8 +1584,8 @@ export default function MarketPage() {
                       highlight
                     />
                     <StatBox
-                      label="Tu presupuesto"
-                      value={fmt(data.myStatus.budget)}
+                      label="Disponible"
+                      value={fmt(data.myStatus.budget - data.myStatus.budgetReserved)}
                     />
                   </div>
                   <div>
@@ -1640,8 +1649,8 @@ export default function MarketPage() {
                         <line x1="12" y1="16" x2="12.01" y2="16" />
                       </svg>
                       <span className="text-[#EF4444] text-sm font-medium">
-                        El monto excede tu presupuesto de{" "}
-                        {fmt(data.myStatus.budget)}.
+                        El monto excede tu presupuesto disponible de{" "}
+                        {fmt(data.myStatus.budget - data.myStatus.budgetReserved)}.
                       </span>
                     </div>
                   )}

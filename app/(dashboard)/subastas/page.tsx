@@ -104,6 +104,7 @@ export default function SubastasPage() {
   const [adminToken, setAdminToken] = useState<string | null>(null);
   const [auctions, setAuctions] = useState<Auction[]>([]);
   const [myBudget, setMyBudget] = useState(0);
+  const [myBudgetReserved, setMyBudgetReserved] = useState(0);
   const [myIconSlotUsed, setMyIconSlotUsed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState<
@@ -137,6 +138,7 @@ export default function SubastasPage() {
       const data = await res.json();
       setAuctions(data.auctions ?? []);
       setMyBudget(data.myBudget ?? 0);
+      setMyBudgetReserved(data.myBudgetReserved ?? 0);
       setMyIconSlotUsed(data.myIconSlotUsed ?? false);
     } catch {
       setFetchError("Error de conexión.");
@@ -164,6 +166,11 @@ export default function SubastasPage() {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "icon_bids" },
+        () => fetchAuctions()
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "icon_votes" },
         () => fetchAuctions()
       )
       .subscribe();
@@ -233,9 +240,12 @@ export default function SubastasPage() {
             {/* My budget */}
             <div className="bg-[#131722] rounded-xl border border-white/8 px-4 py-2.5">
               <p className="text-[#6B7280] text-[10px] uppercase font-medium">
-                Presupuesto
+                Disponible
               </p>
-              <p className="text-[#F3F4F6] text-base font-bold">{fmt(myBudget)}</p>
+              <p className="text-[#F3F4F6] text-base font-bold">{fmt(myBudget - myBudgetReserved)}</p>
+              {myBudgetReserved > 0 && (
+                <p className="text-[#F59E0B] text-[10px]">Reservado: {fmt(myBudgetReserved)}</p>
+              )}
             </div>
             <div className="bg-[#131722] rounded-xl border border-white/8 px-4 py-2.5">
               <p className="text-[#6B7280] text-[10px] uppercase font-medium">
@@ -393,6 +403,7 @@ export default function SubastasPage() {
             token={token}
             auction={modal.auction}
             myBudget={myBudget}
+            myBudgetReserved={myBudgetReserved}
             myIconSlotUsed={myIconSlotUsed}
             onClose={() => setModal(null)}
             onBidPlaced={fetchAuctions}
@@ -419,9 +430,11 @@ function VotingCard({
   onVoted: () => void;
 }) {
   const [voting, setVoting] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const countdown = useCountdown(a.voteEndsAt);
 
-  const handleVote = async (iconId: string) => {
+  const handleConfirm = async () => {
+    if (!selectedId) return;
     setVoting(true);
     const res = await fetch(`/api/tournaments/${code}/auctions/${a.id}/vote`, {
       method: "POST",
@@ -429,46 +442,124 @@ function VotingCard({
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ iconId }),
+      body: JSON.stringify({ iconId: selectedId }),
     });
-    if (res.ok) onVoted();
+    if (res.ok) {
+      playSound("success");
+      onVoted();
+    }
     setVoting(false);
+    setSelectedId(null);
   };
+
+  // Find the leading icon
+  let leadingId: string | null = null;
+  let leadingCount = 0;
+  for (const [iconId, count] of Object.entries(a.voteCounts)) {
+    if (count > leadingCount) {
+      leadingCount = count;
+      leadingId = iconId;
+    }
+  }
+
+  const selectedIcon = selectedId
+    ? a.candidates.find((c) => c.id === selectedId) ?? null
+    : null;
 
   return (
     <section className="mb-10">
-      <h2 className="text-[#F3F4F6] text-lg font-semibold mb-4 flex items-center gap-2">
-        <span className="w-2 h-2 rounded-full bg-[#F59E0B] animate-pulse" />
-        Votación en curso
-        <span className={`ml-2 text-sm font-medium ${countdown.urgent ? "text-[#EF4444]" : "text-[#F59E0B]"}`}>
-          {countdown.text}
-        </span>
-        <span className="text-[#9CA3AF] text-sm font-normal ml-2">
-          {a.totalVotes}/{a.totalMembers} votos
-        </span>
-      </h2>
-      <p className="text-[#9CA3AF] text-sm mb-5">
-        Elige el ícono a subastar. {a.myVoteIconId ? "Ya votaste, pero puedes cambiar tu voto." : "Tu voto cuenta."}
-      </p>
+      {/* Header */}
+      <div className="rounded-2xl border border-[#F59E0B]/20 bg-[#F59E0B]/5 p-5 mb-5">
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <h2 className="text-[#F3F4F6] text-lg font-semibold flex items-center gap-2">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+              </svg>
+              Votación de Ícono
+            </h2>
+            <p className="text-[#9CA3AF] text-sm mt-1">
+              {a.myVoteIconId
+                ? "Ya votaste. Puedes cambiar tu voto antes de que termine el tiempo."
+                : "Selecciona un ícono y confirma tu voto."}
+            </p>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="text-center">
+              <p className={`text-lg font-bold tabular-nums ${countdown.urgent ? "text-[#EF4444]" : countdown.warning ? "text-[#F59E0B]" : "text-[#F3F4F6]"}`}>
+                {countdown.text}
+              </p>
+              <p className="text-[#6B7280] text-[10px] uppercase">Tiempo restante</p>
+            </div>
+            <div className="h-8 w-px bg-white/10" />
+            <div className="text-center">
+              <p className="text-lg font-bold text-[#F3F4F6]">
+                {a.totalVotes}<span className="text-[#6B7280]">/{a.totalMembers}</span>
+              </p>
+              <p className="text-[#6B7280] text-[10px] uppercase">Votos</p>
+            </div>
+          </div>
+        </div>
+        {/* Progress bar */}
+        <div className="mt-4 h-1.5 bg-[#1A1F2E] rounded-full overflow-hidden">
+          <motion.div
+            className="h-full bg-[#F59E0B] rounded-full"
+            initial={{ width: 0 }}
+            animate={{ width: `${a.totalMembers > 0 ? (a.totalVotes / a.totalMembers) * 100 : 0}%` }}
+            transition={{ duration: 0.4 }}
+          />
+        </div>
+      </div>
+
+      {/* Candidates grid */}
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
         {a.candidates.map((icon) => {
           const col = ovrColor(icon.ovr);
           const voteCount = a.voteCounts[icon.id] ?? 0;
           const isMyVote = a.myVoteIconId === icon.id;
+          const isSelected = selectedId === icon.id;
+          const isLeading = leadingId === icon.id && leadingCount > 0;
+          const votePercent = a.totalVotes > 0 ? Math.round((voteCount / a.totalVotes) * 100) : 0;
 
           return (
-            <motion.button
+            <motion.div
               key={icon.id}
-              whileHover={{ scale: 1.03 }}
-              whileTap={{ scale: 0.97 }}
-              disabled={voting}
-              onClick={() => handleVote(icon.id)}
-              className={`rounded-2xl border p-4 text-left transition-all cursor-pointer disabled:cursor-wait ${
-                isMyVote
-                  ? "bg-[#8B5CF6]/15 border-[#8B5CF6]/50 shadow-[0_0_20px_rgba(139,92,246,0.12)]"
-                  : "bg-[#131722] border-white/8 hover:border-[#8B5CF6]/30"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => setSelectedId(icon.id)}
+              className={`rounded-2xl border p-4 text-left transition-all cursor-pointer relative ${
+                isSelected
+                  ? "bg-[#8B5CF6]/20 border-[#8B5CF6] shadow-[0_0_24px_rgba(139,92,246,0.15)] ring-1 ring-[#8B5CF6]/40"
+                  : isMyVote
+                    ? "bg-[#8B5CF6]/10 border-[#8B5CF6]/40"
+                    : "bg-[#131722] border-white/8 hover:border-white/20"
               }`}
             >
+              {/* Leading badge */}
+              {isLeading && (
+                <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 bg-[#F59E0B] text-[#111] text-[9px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                  Líder
+                </div>
+              )}
+
+              {/* Selection check */}
+              {isSelected && (
+                <div className="absolute top-2.5 right-2.5 w-6 h-6 rounded-full bg-[#8B5CF6] flex items-center justify-center">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                </div>
+              )}
+
+              {/* My vote badge */}
+              {isMyVote && !isSelected && (
+                <div className="absolute top-2.5 right-2.5 w-6 h-6 rounded-full bg-[#8B5CF6]/30 border border-[#8B5CF6]/50 flex items-center justify-center">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#8B5CF6" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                </div>
+              )}
+
               <div className="w-full aspect-square rounded-xl bg-linear-to-b from-[#8B5CF6]/10 to-transparent border border-white/6 overflow-hidden flex items-center justify-center mb-3">
                 {icon.headshotUrl ? (
                   <img
@@ -496,21 +587,95 @@ function VotingCard({
               <p className="text-[#F3F4F6] text-sm font-bold truncate">
                 {icon.name}
               </p>
-              <p className="text-[#6B7280] text-[10px] mb-2">{icon.nation}</p>
-              <div className="flex items-center justify-between">
-                <span className={`text-xs font-semibold ${isMyVote ? "text-[#8B5CF6]" : "text-[#9CA3AF]"}`}>
-                  {voteCount} {voteCount === 1 ? "voto" : "votos"}
-                </span>
-                {isMyVote && (
-                  <span className="text-[10px] font-bold text-[#8B5CF6] bg-[#8B5CF6]/10 px-2 py-0.5 rounded-full">
-                    Tu voto
+              <p className="text-[#6B7280] text-[10px] mb-3">{icon.nation}</p>
+
+              {/* Vote bar */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className={`text-xs font-semibold ${isMyVote ? "text-[#8B5CF6]" : "text-[#9CA3AF]"}`}>
+                    {voteCount} {voteCount === 1 ? "voto" : "votos"}
                   </span>
-                )}
+                  {a.totalVotes > 0 && (
+                    <span className="text-[10px] text-[#6B7280] font-medium">
+                      {votePercent}%
+                    </span>
+                  )}
+                </div>
+                <div className="h-1 bg-[#1A1F2E] rounded-full overflow-hidden">
+                  <motion.div
+                    className={`h-full rounded-full ${isLeading ? "bg-[#F59E0B]" : isMyVote ? "bg-[#8B5CF6]" : "bg-[#9CA3AF]/40"}`}
+                    initial={{ width: 0 }}
+                    animate={{ width: `${votePercent}%` }}
+                    transition={{ duration: 0.3 }}
+                  />
+                </div>
               </div>
-            </motion.button>
+            </motion.div>
           );
         })}
       </div>
+
+      {/* Confirmation bar */}
+      <AnimatePresence>
+        {selectedId && (
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 16 }}
+            transition={{ duration: 0.2 }}
+            className="mt-5 rounded-2xl border border-[#8B5CF6]/30 bg-[#131722] p-4 flex items-center justify-between gap-4"
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              {selectedIcon && (
+                <>
+                  <div className="w-12 h-12 rounded-xl bg-[#8B5CF6]/10 border border-[#8B5CF6]/20 overflow-hidden flex items-center justify-center shrink-0">
+                    {selectedIcon.headshotUrl ? (
+                      <img src={selectedIcon.headshotUrl} alt={selectedIcon.name} className="w-full h-full object-contain object-bottom" />
+                    ) : (
+                      <span className="text-lg font-black text-[#8B5CF6]">{selectedIcon.ovr}</span>
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[#F3F4F6] text-sm font-semibold truncate">
+                      {selectedIcon.name}
+                    </p>
+                    <p className="text-[#9CA3AF] text-xs">
+                      {a.myVoteIconId === selectedId ? "Ya tienes este voto" : "Confirma tu selección"}
+                    </p>
+                  </div>
+                </>
+              )}
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => setSelectedId(null)}
+                className="px-4 py-2.5 rounded-xl border border-white/10 text-[#9CA3AF] hover:text-[#F3F4F6] text-sm font-medium transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleConfirm}
+                disabled={voting || a.myVoteIconId === selectedId}
+                className="px-5 py-2.5 rounded-xl bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-sm font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {voting ? (
+                  <>
+                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Votando…
+                  </>
+                ) : (
+                  <>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                    {a.myVoteIconId ? "Cambiar voto" : "Confirmar voto"}
+                  </>
+                )}
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </section>
   );
 }
@@ -950,6 +1115,7 @@ function AuctionDetailModal({
   token,
   auction,
   myBudget,
+  myBudgetReserved,
   myIconSlotUsed,
   onClose,
   onBidPlaced,
@@ -958,6 +1124,7 @@ function AuctionDetailModal({
   token: string;
   auction: Auction;
   myBudget: number;
+  myBudgetReserved: number;
   myIconSlotUsed: boolean;
   onClose: () => void;
   onBidPlaced: () => void;
@@ -1179,8 +1346,13 @@ function AuctionDetailModal({
                   Tu presupuesto
                 </p>
                 <p className="text-[#F3F4F6] text-xl font-bold mt-1">
-                  {fmt(myBudget)}
+                  {fmt(myBudget - myBudgetReserved)}
                 </p>
+                {myBudgetReserved > 0 && (
+                  <p className="text-[#F59E0B] text-[10px] mt-0.5">
+                    {fmt(myBudgetReserved)} reservado
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -1195,7 +1367,7 @@ function AuctionDetailModal({
                 <input
                   type="number"
                   min={Math.ceil(minNext / 1_000_000)}
-                  max={Math.floor(myBudget / 1_000_000)}
+                  max={Math.floor((myBudget - myBudgetReserved) / 1_000_000)}
                   value={bidAmount}
                   onChange={(e) => setBidAmount(e.target.value)}
                   placeholder={`Min. €${Math.ceil(minNext / 1_000_000)}M`}
@@ -1216,7 +1388,7 @@ function AuctionDetailModal({
                   Math.ceil(minNext / 1_000_000) + 5,
                   Math.ceil(minNext / 1_000_000) + 10,
                 ]
-                  .filter((v) => v * 1_000_000 <= myBudget)
+                  .filter((v) => v * 1_000_000 <= (myBudget - myBudgetReserved))
                   .map((v) => (
                     <button
                       key={v}

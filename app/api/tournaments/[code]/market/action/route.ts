@@ -70,7 +70,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     // Check purchase limit
     const { data: myMember } = await supabase
       .from("members")
-      .select("budget, market_purchases")
+      .select("budget, budget_reserved, market_purchases")
       .eq("id", auth.memberId)
       .single();
 
@@ -96,8 +96,9 @@ export async function POST(request: NextRequest, { params }: Params) {
 
     const clauseAmount = (player as any).clause ?? 0;
 
-    if ((myMember as any)?.budget < clauseAmount) {
-      return NextResponse.json({ error: "Presupuesto insuficiente." }, { status: 422 });
+    const actionAvailable = ((myMember as any)?.budget ?? 0) - ((myMember as any)?.budget_reserved ?? 0);
+    if (actionAvailable < clauseAmount) {
+      return NextResponse.json({ error: "Presupuesto disponible insuficiente." }, { status: 422 });
     }
 
     // Find player's original team

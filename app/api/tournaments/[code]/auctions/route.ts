@@ -452,7 +452,7 @@ export async function POST(request: NextRequest, { params }: Params) {
       selected_icon_id: null,
       starts_at: null,
       ends_at: null,
-      min_bid: body.minBid ?? 0,
+      min_bid: body.minBid ?? 50_000_000,
       highest_bid: 0,
       presented_icon_ids: candidateIds,
       candidate_ids: candidateIds,
