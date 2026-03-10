@@ -68,20 +68,29 @@ export async function POST(request: NextRequest, { params }: Params) {
   // Check icon slot
   const { data: myMember } = await supabase
     .from("members")
-    .select("budget, icon_slot_used")
+    .select("budget, budget_reserved, icon_slot_used")
     .eq("id", auth.memberId)
     .single();
 
-  if ((myMember as any)?.icon_slot_used) {
+  const mm = myMember as any;
+
+  if (mm?.icon_slot_used) {
     return NextResponse.json(
       { error: "Ya usaste tu slot de ícono en este mercado." },
       { status: 422 }
     );
   }
 
-  if ((myMember as any)?.budget < body.amount) {
+  // Available budget = total budget minus reserved (for other auctions)
+  // But if I already have a bid in THIS auction, that reservation should be freed
+  const myCurrentReservation =
+    a.highest_bidder_id === auth.memberId ? (a.highest_bid ?? 0) : 0;
+  const availableBudget =
+    (mm?.budget ?? 0) - (mm?.budget_reserved ?? 0) + myCurrentReservation;
+
+  if (availableBudget < body.amount) {
     return NextResponse.json(
-      { error: "Presupuesto insuficiente." },
+      { error: "Presupuesto disponible insuficiente." },
       { status: 422 }
     );
   }
@@ -114,6 +123,7 @@ export async function POST(request: NextRequest, { params }: Params) {
   });
 
   const previousBidderId = a.highest_bidder_id;
+  const previousBidAmount = a.highest_bid ?? 0;
 
   // Update auction highest bid
   const updateData: Record<string, any> = {
@@ -133,6 +143,32 @@ export async function POST(request: NextRequest, { params }: Params) {
     .from("icon_auctions")
     .update(updateData)
     .eq("id", auctionId);
+
+  // Release previous bidder's reservation
+  if (previousBidderId && previousBidderId !== auth.memberId) {
+    const { data: prevMember } = await supabase
+      .from("members")
+      .select("budget_reserved")
+      .eq("id", previousBidderId)
+      .single();
+    await supabase
+      .from("members")
+      .update({
+        budget_reserved: Math.max(
+          0,
+          ((prevMember as any)?.budget_reserved ?? 0) - previousBidAmount
+        ),
+      })
+      .eq("id", previousBidderId);
+  }
+
+  // Update my reservation: remove old reservation (if any) and add new
+  const newReserved =
+    (mm?.budget_reserved ?? 0) - myCurrentReservation + body.amount;
+  await supabase
+    .from("members")
+    .update({ budget_reserved: Math.max(0, newReserved) })
+    .eq("id", auth.memberId);
 
   // Get session for tournament_id
   const { data: sess } = await supabase

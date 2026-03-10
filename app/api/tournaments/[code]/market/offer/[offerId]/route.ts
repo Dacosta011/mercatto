@@ -166,6 +166,14 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   }
 
   // ── Accept ────────────────────────────────────────────────────────────────
+  // For counter-offers (parent_offer_id is set), the roles are swapped:
+  // buyer_id = original player owner (who countered), seller_id = original buyer (who accepts).
+  // The ACTUAL buyer (who pays) is the person accepting = auth.memberId (seller_id in the offer).
+  // The ACTUAL seller (who receives money) is the other party = buyer_id in the offer.
+  const isCounterOffer = !!o.parent_offer_id;
+  const actualBuyerId = isCounterOffer ? o.seller_id : o.buyer_id;
+  const actualSellerId = isCounterOffer ? o.buyer_id : o.seller_id;
+
   const { data: tSettings } = await supabase
     .from("tournaments")
     .select("max_transfers")
@@ -177,7 +185,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   const { data: buyer } = await supabase
     .from("members")
     .select("budget, market_purchases")
-    .eq("id", o.buyer_id)
+    .eq("id", actualBuyerId)
     .single();
 
   if ((buyer as any)?.market_purchases >= maxTransfers) {
@@ -197,7 +205,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   const { data: sellerAssignment } = await supabase
     .from("assignments")
     .select("team_id")
-    .eq("member_id", auth.memberId)
+    .eq("member_id", actualSellerId)
     .maybeSingle();
 
   const sellerTeamId = (sellerAssignment as any)?.team_id ?? null;
@@ -209,13 +217,13 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       budget: (buyer as any).budget - o.amount,
       market_purchases: (buyer as any).market_purchases + 1,
     })
-    .eq("id", o.buyer_id);
+    .eq("id", actualBuyerId);
 
   // Credit seller
   const { data: sellerMember } = await supabase
     .from("members")
     .select("budget")
-    .eq("id", auth.memberId)
+    .eq("id", actualSellerId)
     .single();
 
   await supabase
@@ -223,14 +231,14 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     .update({
       budget: ((sellerMember as any)?.budget ?? 0) + o.amount,
     })
-    .eq("id", auth.memberId);
+    .eq("id", actualSellerId);
 
   // Record transfer
   await supabase.from("market_transfers").insert({
     session_id: (session as any).id,
     turn_id: null,
-    buyer_id: o.buyer_id,
-    seller_id: auth.memberId,
+    buyer_id: actualBuyerId,
+    seller_id: actualSellerId,
     seller_team_id: sellerTeamId,
     player_id: o.player_id,
     transfer_type: "offer",
@@ -256,13 +264,13 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       await supabase
         .from("members")
         .select("display_name")
-        .eq("id", o.buyer_id)
+        .eq("id", actualBuyerId)
         .single()
     ).data?.display_name ?? "—";
 
   await createNotification({
     supabase,
-    memberId: o.buyer_id,
+    memberId: actualBuyerId,
     tournamentId: auth.tournamentId,
     type: "offer_accepted",
     title: "Oferta aceptada",

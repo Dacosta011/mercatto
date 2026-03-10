@@ -658,8 +658,8 @@ export default function MarketPage() {
       headers: { Authorization: `Bearer ${adminToken}` },
     });
     if (res.ok) {
-      saveTournamentStatus(code, "lobby");
-      window.location.href = `/lobby/${code}`;
+      await fetchData();
+      setShowSummary(true);
     }
     setActionLoading(false);
   };
@@ -709,7 +709,7 @@ export default function MarketPage() {
     );
   }
 
-  if (showSummary && data.status === "finished") {
+  if (data.status === "finished" || showSummary) {
     return (
       <MarketFinished
         data={data}
@@ -943,8 +943,9 @@ export default function MarketPage() {
                   <div className="flex items-center gap-2">
                     {isAdmin && (
                       <button
-                        onClick={() => setShowSummary(true)}
-                        className="px-4 py-2 rounded-xl bg-[#22C55E] hover:bg-[#16A34A] text-white text-sm font-semibold transition-colors cursor-pointer flex items-center gap-2"
+                        onClick={doCloseMarket}
+                        disabled={actionLoading}
+                        className="px-4 py-2 rounded-xl bg-[#EF4444] hover:bg-[#DC2626] text-white text-sm font-semibold transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-2"
                       >
                         <svg
                           width="14"

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerClient, verifyMemberToken } from "@/lib/supabase";
+import { createServerClient, verifyMemberToken, verifyAdminToken } from "@/lib/supabase";
+import { createNotification } from "@/lib/notifications";
 
 type Params = { params: Promise<{ code: string; auctionId: string }> };
 
@@ -115,4 +116,95 @@ export async function GET(request: NextRequest, { params }: Params) {
     myBudget: (myMember as any)?.budget ?? 0,
     myIconSlotUsed: (myMember as any)?.icon_slot_used ?? false,
   });
+}
+
+// ─── PATCH /api/tournaments/[code]/auctions/[auctionId] ───────────────────────
+// Admin force-ends an active auction. Resolves winner if there are bids.
+
+export async function PATCH(request: NextRequest, { params }: Params) {
+  const { code, auctionId } = await params;
+  const auth = await verifyAdminToken(request, code);
+  if (!auth.ok)
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+
+  const supabase = createServerClient();
+
+  const { data: auction } = await supabase
+    .from("icon_auctions")
+    .select("*")
+    .eq("id", auctionId)
+    .maybeSingle();
+
+  if (!auction) {
+    return NextResponse.json({ error: "Subasta no encontrada." }, { status: 404 });
+  }
+
+  const a = auction as any;
+
+  if (a.phase === "finished") {
+    return NextResponse.json({ error: "La subasta ya terminó." }, { status: 409 });
+  }
+
+  // Resolve winner
+  if (a.highest_bidder_id && a.highest_bid > 0) {
+    await supabase
+      .from("icon_auctions")
+      .update({
+        phase: "finished",
+        ends_at: new Date().toISOString(),
+        winner_id: a.highest_bidder_id,
+        final_amount: a.highest_bid,
+      })
+      .eq("id", auctionId);
+
+    // Budget was already reserved via budget_reserved, now finalize:
+    // Deduct the reserved amount and mark icon_slot_used
+    const { data: winner } = await supabase
+      .from("members")
+      .select("budget, budget_reserved")
+      .eq("id", a.highest_bidder_id)
+      .single();
+
+    const wn = winner as any;
+    await supabase
+      .from("members")
+      .update({
+        budget: Math.max(0, (wn?.budget ?? 0) - a.highest_bid),
+        budget_reserved: Math.max(0, (wn?.budget_reserved ?? 0) - a.highest_bid),
+        icon_slot_used: true,
+      })
+      .eq("id", a.highest_bidder_id);
+
+    await supabase.from("market_transfers").insert({
+      session_id: a.session_id,
+      player_id: a.selected_icon_id,
+      buyer_id: a.highest_bidder_id,
+      seller_id: null,
+      amount: a.highest_bid,
+      transfer_type: "icon_auction",
+    });
+
+    const { data: iconData } = await supabase
+      .from("players")
+      .select("name")
+      .eq("id", a.selected_icon_id)
+      .single();
+
+    await createNotification({
+      supabase,
+      memberId: a.highest_bidder_id,
+      tournamentId: auth.tournamentId,
+      type: "auction_won",
+      title: "¡Ganaste la subasta!",
+      body: `Has ganado a ${(iconData as any)?.name ?? "un ícono"} por €${Math.floor(a.highest_bid / 1_000_000)}M`,
+      metadata: { auctionId, amount: a.highest_bid },
+    });
+  } else {
+    await supabase
+      .from("icon_auctions")
+      .update({ phase: "finished", ends_at: new Date().toISOString() })
+      .eq("id", auctionId);
+  }
+
+  return NextResponse.json({ ok: true });
 }
