@@ -81,7 +81,7 @@ export async function GET(request: NextRequest, { params }: Params) {
 
     if (winningIconId) {
       const now = new Date();
-      const biddingEndsAt = new Date(now.getTime() + 120 * 60 * 1000).toISOString();
+      const biddingEndsAt = new Date(now.getTime() + 30 * 60 * 1000).toISOString();
       await supabase
         .from("icon_auctions")
         .update({
@@ -428,7 +428,7 @@ export async function POST(request: NextRequest, { params }: Params) {
   const shuffled = available.sort(() => Math.random() - 0.5);
   const candidateIds = shuffled.slice(0, Math.min(6, shuffled.length));
 
-  const votingMinutes = body.votingMinutes ?? 120;
+  const votingMinutes = body.votingMinutes ?? 30;
   const now = new Date();
   const voteEndsAt = new Date(now.getTime() + votingMinutes * 60 * 1000).toISOString();
 

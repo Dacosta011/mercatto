@@ -4,7 +4,7 @@ import { createBulkNotifications } from "@/lib/notifications";
 
 type Params = { params: Promise<{ code: string; auctionId: string }> };
 
-const DEFAULT_BIDDING_MINUTES = 120;
+const DEFAULT_BIDDING_MINUTES = 30;
 
 // ─── POST /api/tournaments/[code]/auctions/[auctionId]/vote ───────────────────
 // Member votes for an icon in the voting phase.
