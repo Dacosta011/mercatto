@@ -11,6 +11,7 @@ import {
   saveUserProfile,
   saveTeamAssignment,
   saveTournamentStatus,
+  clearAdminToken,
 } from "@/lib/tokenStorage";
 import type { TournamentStatus } from "@/lib/tokenStorage";
 
@@ -43,6 +44,7 @@ function RejoinContent() {
           return;
         }
 
+        clearAdminToken(data.code);
         saveMemberToken(data.code, t.trim());
         saveMemberId(data.code, data.memberId);
         saveUserProfile(data.code, data.displayName, "member");

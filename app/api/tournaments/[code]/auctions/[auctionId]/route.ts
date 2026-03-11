@@ -145,7 +145,81 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "La subasta ya terminó." }, { status: 409 });
   }
 
-  // Resolve winner
+  // If voting phase: resolve the vote and start bidding
+  if (a.phase === "voting") {
+    const candidateIds: string[] = a.candidate_ids ?? [];
+
+    // Count votes per icon
+    const { data: votes } = await supabase
+      .from("icon_votes")
+      .select("icon_id")
+      .eq("auction_id", auctionId);
+
+    const voteCounts: Record<string, number> = {};
+    for (const v of votes ?? []) {
+      const iconId = (v as any).icon_id;
+      voteCounts[iconId] = (voteCounts[iconId] ?? 0) + 1;
+    }
+
+    // Pick the most-voted icon, or first candidate if no votes
+    let winningIconId: string | null = null;
+    let maxVotes = 0;
+    for (const [iconId, count] of Object.entries(voteCounts)) {
+      if (count > maxVotes) {
+        maxVotes = count;
+        winningIconId = iconId;
+      }
+    }
+    if (!winningIconId && candidateIds.length > 0) {
+      winningIconId = candidateIds[0];
+    }
+
+    if (winningIconId) {
+      const now = new Date();
+      const biddingEndsAt = new Date(now.getTime() + 30 * 60 * 1000).toISOString();
+      await supabase
+        .from("icon_auctions")
+        .update({
+          phase: "active",
+          selected_icon_id: winningIconId,
+          starts_at: now.toISOString(),
+          ends_at: biddingEndsAt,
+        })
+        .eq("id", auctionId);
+
+      const { data: members } = await supabase
+        .from("members")
+        .select("id")
+        .eq("tournament_id", auth.tournamentId);
+
+      const { data: iconData } = await supabase
+        .from("players")
+        .select("name")
+        .eq("id", winningIconId)
+        .single();
+
+      const { createBulkNotifications } = await import("@/lib/notifications");
+      await createBulkNotifications(
+        supabase,
+        auth.tournamentId,
+        (members ?? []).map((m: any) => m.id),
+        "auction_started",
+        "Subasta iniciada",
+        `La subasta por ${(iconData as any)?.name ?? "un ícono"} ha comenzado. ¡30 minutos para pujar!`,
+        { auctionId }
+      );
+
+      return NextResponse.json({ ok: true, action: "bidding_started", iconId: winningIconId });
+    } else {
+      await supabase
+        .from("icon_auctions")
+        .update({ phase: "finished", ends_at: new Date().toISOString() })
+        .eq("id", auctionId);
+      return NextResponse.json({ ok: true, action: "finished_no_candidates" });
+    }
+  }
+
+  // Resolve winner for active auctions
   if (a.highest_bidder_id && a.highest_bid > 0) {
     await supabase
       .from("icon_auctions")

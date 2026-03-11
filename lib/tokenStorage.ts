@@ -23,6 +23,10 @@ export function isAdmin(tournamentCode: string): boolean {
   return !!getAdminToken(tournamentCode);
 }
 
+export function clearAdminToken(tournamentCode: string) {
+  localStorage.removeItem(ADMIN_KEY(tournamentCode));
+}
+
 // ─── Member token ─────────────────────────────────────────────────────────────
 
 export function saveMemberToken(tournamentCode: string, token: string) {
