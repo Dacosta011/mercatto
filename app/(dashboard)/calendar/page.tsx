@@ -21,6 +21,8 @@ interface Fixture {
   pendingHomeYellow: number | null; pendingAwayYellow: number | null;
   pendingHomeRed: number | null; pendingAwayRed: number | null;
   startedAt: string | null; finishedAt: string | null;
+  postponeRequestedBy: string | null;
+  reactivateRequestedBy: string | null;
 }
 interface LeagueState {
   status: string;
@@ -53,6 +55,7 @@ function StatusPill({ status }: { status: string }) {
     pending:     { label: "Pendiente",  color: "#9CA3AF", bg: "#9CA3AF15" },
     in_progress: { label: "En Curso",   color: "#F59E0B", bg: "#F59E0B15" },
     finished:    { label: "Finalizado", color: "#22C55E", bg: "#22C55E15" },
+    postponed:   { label: "Aplazado",   color: "#3B82F6", bg: "#3B82F615" },
   };
   const c = cfg[status] ?? cfg.pending;
   return (
@@ -271,6 +274,42 @@ export default function CalendarPage() {
     } finally { setClosingMatchday(false); }
   };
 
+  const postponeFixture = async (fixtureId: string, force: boolean) => {
+    if (!code) return;
+    const authToken = force ? adminToken : token;
+    if (!authToken) return;
+    await fetch(`/api/tournaments/${code}/league/fixtures/${fixtureId}/postpone`, {
+      method: "POST", headers: { Authorization: `Bearer ${authToken}` },
+    });
+    await fetchData(true);
+  };
+
+  const cancelPostpone = async (fixtureId: string) => {
+    if (!code || !token) return;
+    await fetch(`/api/tournaments/${code}/league/fixtures/${fixtureId}/postpone`, {
+      method: "DELETE", headers: { Authorization: `Bearer ${token}` },
+    });
+    await fetchData(true);
+  };
+
+  const reactivateFixture = async (fixtureId: string, force: boolean) => {
+    if (!code) return;
+    const authToken = force ? adminToken : token;
+    if (!authToken) return;
+    await fetch(`/api/tournaments/${code}/league/fixtures/${fixtureId}/reactivate`, {
+      method: "POST", headers: { Authorization: `Bearer ${authToken}` },
+    });
+    await fetchData(true);
+  };
+
+  const cancelReactivate = async (fixtureId: string) => {
+    if (!code || !token) return;
+    await fetch(`/api/tournaments/${code}/league/fixtures/${fixtureId}/reactivate`, {
+      method: "DELETE", headers: { Authorization: `Bearer ${token}` },
+    });
+    await fetchData(true);
+  };
+
   // ── Guard states ─────────────────────────────────────────────────────────────
   if (!code || !token) return (
     <div className="min-h-screen flex items-center justify-center p-8">
@@ -418,13 +457,20 @@ export default function CalendarPage() {
             fixture={fixture}
             myMemberId={myMemberId}
             isAdmin={isAdmin}
-            isCurrentMatchday={displayMatchday === session.currentMatchday && data.status !== "finished"}
+            isLeagueActive={data.status !== "finished"}
+            isCurrentMatchday={displayMatchday <= session.currentMatchday && data.status !== "finished"}
             submitting={submitting}
             onConfirmStart={() => confirmStart(fixture.id)}
             onOpenResult={() => openResultModal(fixture, "result")}
             onOpenConfirm={() => openResultModal(fixture, "confirm")}
             onDisputeResult={() => submitResult(fixture.id, "dispute")}
             onForceValidate={() => openResultModal(fixture, "force")}
+            onPostponeForce={() => postponeFixture(fixture.id, true)}
+            onPostponeRequest={() => postponeFixture(fixture.id, false)}
+            onCancelPostpone={() => cancelPostpone(fixture.id)}
+            onReactivateForce={() => reactivateFixture(fixture.id, true)}
+            onReactivateRequest={() => reactivateFixture(fixture.id, false)}
+            onCancelReactivate={() => cancelReactivate(fixture.id)}
           />
         ))}
       </div>
@@ -504,12 +550,16 @@ export default function CalendarPage() {
 
 // ── Fixture card ───────────────────────────────────────────────────────────────
 function FixtureCard({
-  fixture, myMemberId, isAdmin, isCurrentMatchday, submitting,
+  fixture, myMemberId, isAdmin, isLeagueActive, isCurrentMatchday, submitting,
   onConfirmStart, onOpenResult, onOpenConfirm, onDisputeResult, onForceValidate,
+  onPostponeForce, onPostponeRequest, onCancelPostpone,
+  onReactivateForce, onReactivateRequest, onCancelReactivate,
 }: {
-  fixture: Fixture; myMemberId: string; isAdmin: boolean; isCurrentMatchday: boolean; submitting: boolean;
+  fixture: Fixture; myMemberId: string; isAdmin: boolean; isLeagueActive: boolean; isCurrentMatchday: boolean; submitting: boolean;
   onConfirmStart: () => void; onOpenResult: () => void;
   onOpenConfirm: () => void; onDisputeResult: () => void; onForceValidate: () => void;
+  onPostponeForce: () => void; onPostponeRequest: () => void; onCancelPostpone: () => void;
+  onReactivateForce: () => void; onReactivateRequest: () => void; onCancelReactivate: () => void;
 }) {
   const isHome = fixture.homeMember.id === myMemberId;
   const isAway = fixture.awayMember.id === myMemberId;
@@ -518,14 +568,23 @@ function FixtureCard({
   const pendingIsMe = fixture.resultSubmitterId === myMemberId;
   const canConfirmResult = hasPending && !pendingIsMe && isParticipant;
 
-  const borderColor = fixture.status === "in_progress" ? "#F59E0B40" : fixture.status === "finished" ? "#22C55E20" : "#ffffff08";
+  const postponeRequestedByMe = fixture.postponeRequestedBy === myMemberId;
+  const postponeRequestedByRival = !!fixture.postponeRequestedBy && !postponeRequestedByMe;
+  const reactivateRequestedByMe = fixture.reactivateRequestedBy === myMemberId;
+  const reactivateRequestedByRival = !!fixture.reactivateRequestedBy && !reactivateRequestedByMe;
+
+  const borderColor = fixture.status === "postponed" ? "#3B82F640"
+    : fixture.status === "in_progress" ? "#F59E0B40"
+    : fixture.status === "finished" ? "#22C55E20"
+    : "#ffffff08";
 
   return (
     <motion.div layout className="bg-[#131722] rounded-2xl border overflow-hidden transition-colors duration-300"
       style={{ borderColor }}>
-      {/* Top stripe for in_progress */}
+      {/* Top stripe */}
       {fixture.status === "in_progress" && <div className="h-0.5 bg-[#F59E0B]" />}
       {fixture.status === "finished" && <div className="h-0.5 bg-[#22C55E]" />}
+      {fixture.status === "postponed" && <div className="h-0.5 bg-[#3B82F6]" />}
 
       <div className="p-5">
         {/* Match header */}
@@ -617,8 +676,8 @@ function FixtureCard({
               </button>
             )}
 
-            {/* Submit result */}
-            {fixture.status === "in_progress" && isParticipant && !hasPending && (
+            {/* Submit result — hidden if there's a pending postpone request */}
+            {fixture.status === "in_progress" && isParticipant && !hasPending && !fixture.postponeRequestedBy && (
               <button onClick={onOpenResult}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#8B5CF6]/10 border border-[#8B5CF6]/25 text-[#8B5CF6] hover:bg-[#8B5CF6]/20 transition-colors cursor-pointer">
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
@@ -637,7 +696,6 @@ function FixtureCard({
             {/* Confirm or dispute result */}
             {canConfirmResult && (
               <div className="flex flex-col gap-2 w-full">
-                {/* Score + cards submitted by first player */}
                 <div className="flex items-center gap-2 flex-wrap">
                   <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#F59E0B]/8 border border-[#F59E0B]/20">
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
@@ -645,8 +703,6 @@ function FixtureCard({
                       Resultado pendiente: <span className="font-black">{fixture.pendingHomeGoals} – {fixture.pendingAwayGoals}</span>
                     </span>
                   </div>
-
-                  {/* Cards already registered by first player */}
                   {fixture.pendingCards?.length > 0 && (
                     <div className="flex items-center gap-1 flex-wrap">
                       {fixture.pendingCards.map((c, i) => (
@@ -658,8 +714,6 @@ function FixtureCard({
                     </div>
                   )}
                 </div>
-
-                {/* Action buttons */}
                 <div className="flex items-center gap-2">
                   <button onClick={onOpenConfirm} disabled={submitting}
                     className="px-3 py-1.5 rounded-lg bg-[#22C55E]/10 border border-[#22C55E]/25 text-[#22C55E] text-xs font-semibold hover:bg-[#22C55E]/20 transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1">
@@ -674,10 +728,93 @@ function FixtureCard({
               </div>
             )}
 
+            {/* ── Postpone actions (for non-postponed matches) ── */}
+            {fixture.status !== "postponed" && isParticipant && !hasPending && (
+              <>
+                {/* I requested postpone — show cancel */}
+                {postponeRequestedByMe && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-[#3B82F6] text-xs font-medium flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#3B82F6]/10 border border-[#3B82F6]/20">
+                      <svg className="animate-pulse w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                      Solicitud de aplazamiento enviada
+                    </span>
+                    <button onClick={onCancelPostpone}
+                      className="px-2.5 py-1.5 rounded-lg bg-[#EF4444]/10 border border-[#EF4444]/25 text-[#EF4444] text-xs font-medium hover:bg-[#EF4444]/20 transition-colors cursor-pointer">
+                      Cancelar
+                    </button>
+                  </div>
+                )}
+                {/* Rival requested postpone — show accept */}
+                {postponeRequestedByRival && (
+                  <button onClick={onPostponeRequest}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#3B82F6]/10 border border-[#3B82F6]/25 text-[#3B82F6] hover:bg-[#3B82F6]/20 transition-colors cursor-pointer">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                    Aceptar aplazamiento
+                  </button>
+                )}
+                {/* No request yet — show request button */}
+                {!fixture.postponeRequestedBy && (
+                  <button onClick={onPostponeRequest}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[#131722] border border-white/8 text-[#9CA3AF] hover:text-[#3B82F6] hover:border-[#3B82F6]/30 transition-colors cursor-pointer">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                    Solicitar aplazar
+                  </button>
+                )}
+              </>
+            )}
+
+            {/* ── Reactivate actions (for postponed matches) ── */}
+            {fixture.status === "postponed" && isParticipant && (
+              <>
+                {reactivateRequestedByMe && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-[#22C55E] text-xs font-medium flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#22C55E]/10 border border-[#22C55E]/20">
+                      <svg className="animate-pulse w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                      Solicitud de reactivación enviada
+                    </span>
+                    <button onClick={onCancelReactivate}
+                      className="px-2.5 py-1.5 rounded-lg bg-[#EF4444]/10 border border-[#EF4444]/25 text-[#EF4444] text-xs font-medium hover:bg-[#EF4444]/20 transition-colors cursor-pointer">
+                      Cancelar
+                    </button>
+                  </div>
+                )}
+                {reactivateRequestedByRival && (
+                  <button onClick={onReactivateRequest}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#22C55E]/10 border border-[#22C55E]/25 text-[#22C55E] hover:bg-[#22C55E]/20 transition-colors cursor-pointer">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                    Aceptar reactivación
+                  </button>
+                )}
+                {!fixture.reactivateRequestedBy && (
+                  <button onClick={onReactivateRequest}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[#131722] border border-white/8 text-[#9CA3AF] hover:text-[#22C55E] hover:border-[#22C55E]/30 transition-colors cursor-pointer">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+                    Solicitar reactivar
+                  </button>
+                )}
+              </>
+            )}
+
+            {/* Admin force buttons */}
+            {isAdmin && fixture.status !== "postponed" && fixture.status !== "finished" && (
+              <button onClick={onPostponeForce}
+                className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[#131722] border border-white/8 text-[#9CA3AF] hover:text-[#3B82F6] hover:border-[#3B82F6]/30 transition-colors cursor-pointer">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                Forzar aplazar
+              </button>
+            )}
+            {isAdmin && fixture.status === "postponed" && (
+              <button onClick={onReactivateForce}
+                className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[#131722] border border-white/8 text-[#9CA3AF] hover:text-[#22C55E] hover:border-[#22C55E]/30 transition-colors cursor-pointer">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+                Forzar reactivar
+              </button>
+            )}
+
             {/* Admin force validate */}
             {isAdmin && fixture.status === "in_progress" && (
               <button onClick={onForceValidate}
-                className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[#131722] border border-white/8 text-[#9CA3AF] hover:text-[#F3F4F6] hover:border-white/20 transition-colors cursor-pointer">
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[#131722] border border-white/8 text-[#9CA3AF] hover:text-[#F3F4F6] hover:border-white/20 transition-colors cursor-pointer">
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
                 Forzar validar
               </button>

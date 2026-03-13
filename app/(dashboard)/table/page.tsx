@@ -11,6 +11,7 @@ interface TableRow {
 }
 
 interface DisciplineRow {
+  playerId: string; playerName: string;
   memberId: string; displayName: string; teamName: string;
   yellows: number; reds: number; suspended: boolean; yellowsToSuspension: number;
 }
@@ -219,76 +220,94 @@ export default function TablePage() {
       )}
 
       {/* Discipline */}
-      {tab === "discipline" && (
-        <div className="flex flex-col gap-3">
-          {discipline.length === 0 && (
-            <p className="text-[#9CA3AF] text-sm text-center py-12">Sin tarjetas registradas aún.</p>
-          )}
-          {discipline.filter(d => d.yellows > 0 || d.reds > 0 || d.suspended).map((d, idx) => (
-            <motion.div key={d.memberId}
-              initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.05 }}
-              className={`bg-[#131722] rounded-2xl border p-4 flex items-center gap-4
-                ${d.suspended ? "border-[#EF4444]/30" : "border-white/5"}`}>
+      {tab === "discipline" && (() => {
+        const visible = discipline.filter(d => d.yellows > 0 || d.reds > 0 || d.suspended);
+        const grouped: Record<string, DisciplineRow[]> = {};
+        for (const d of visible) {
+          (grouped[d.memberId] ??= []).push(d);
+        }
 
-              {/* Avatar */}
-              <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 font-black text-sm
-                ${d.suspended ? "bg-[#EF4444]/10 text-[#EF4444]" : "bg-[#8B5CF6]/10 text-[#8B5CF6]"}`}>
-                {d.displayName.charAt(0).toUpperCase()}
-              </div>
+        return (
+          <div className="flex flex-col gap-4">
+            {visible.length === 0 && (
+              <p className="text-[#9CA3AF] text-sm text-center py-12">Sin tarjetas registradas aún.</p>
+            )}
+            {Object.entries(grouped).map(([memberId, players], gIdx) => {
+              const first = players[0];
+              const isMe = memberId === myMemberId;
+              return (
+                <motion.div key={memberId}
+                  initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: gIdx * 0.05 }}
+                  className="bg-[#131722] rounded-2xl border border-white/5 overflow-hidden">
 
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <p className={`text-sm font-semibold ${d.memberId === myMemberId ? "text-[#8B5CF6]" : "text-[#F3F4F6]"}`}>
-                    {d.displayName}
-                  </p>
-                  {d.suspended && (
-                    <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-[#EF4444]/15 text-[#EF4444] uppercase tracking-wide">
-                      Sancionado
-                    </span>
-                  )}
-                </div>
-                <p className="text-[#9CA3AF] text-xs">{d.teamName}</p>
-              </div>
-
-              {/* Card counts */}
-              <div className="flex items-center gap-4 shrink-0">
-                {d.yellows > 0 && (
-                  <div className="flex flex-col items-center gap-1">
-                    <div className="flex items-center gap-1">
-                      {Array.from({ length: Math.min(d.yellows, 6) }).map((_, i) => (
-                        <div key={i} className="w-3 h-4 bg-[#F59E0B] rounded-sm" />
-                      ))}
-                      {d.yellows > 6 && <span className="text-[#F59E0B] text-[10px] font-bold">+{d.yellows - 6}</span>}
+                  {/* Member header */}
+                  <div className="px-4 py-3 border-b border-white/4 flex items-center gap-3">
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 font-black text-xs ${isMe ? "bg-[#8B5CF6]/10 text-[#8B5CF6]" : "bg-[#1A1F2E] text-[#9CA3AF]"}`}>
+                      {first.displayName.charAt(0).toUpperCase()}
                     </div>
-                    <span className="text-[#9CA3AF] text-[9px]">{d.yellows} amarilla{d.yellows !== 1 ? "s" : ""}</span>
-                  </div>
-                )}
-                {d.reds > 0 && (
-                  <div className="flex flex-col items-center gap-1">
-                    <div className="flex items-center gap-1">
-                      {Array.from({ length: Math.min(d.reds, 4) }).map((_, i) => (
-                        <div key={i} className="w-3 h-4 bg-[#EF4444] rounded-sm" />
-                      ))}
+                    <div className="min-w-0">
+                      <p className={`text-sm font-semibold ${isMe ? "text-[#8B5CF6]" : "text-[#F3F4F6]"}`}>{first.displayName}</p>
+                      <p className="text-[#9CA3AF] text-[10px]">{first.teamName}</p>
                     </div>
-                    <span className="text-[#9CA3AF] text-[9px]">{d.reds} roja{d.reds !== 1 ? "s" : ""}</span>
                   </div>
-                )}
-                {!d.suspended && d.yellows > 0 && (
-                  <div className="text-center">
-                    <p className="text-[#F59E0B] text-sm font-black">{d.yellowsToSuspension}</p>
-                    <p className="text-[#9CA3AF] text-[9px]">para sanción</p>
-                  </div>
-                )}
-              </div>
-            </motion.div>
-          ))}
 
-          <div className="mt-2 px-4 py-3 rounded-xl bg-[#131722]/50 border border-white/4 text-[#9CA3AF] text-[11px] flex flex-col gap-1">
-            <p>🟥 Tarjeta roja → 2 fechas de suspensión</p>
-            <p>🟨 3 tarjetas amarillas → 1 fecha de suspensión</p>
+                  {/* Player rows */}
+                  <div className="divide-y divide-white/3">
+                    {players.map((d) => (
+                      <div key={d.playerId} className={`px-4 py-3 flex items-center gap-3 ${d.suspended ? "bg-[#EF4444]/4" : ""}`}>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="text-[#F3F4F6] text-sm font-medium truncate">{d.playerName}</p>
+                            {d.suspended && (
+                              <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-[#EF4444]/15 text-[#EF4444] uppercase tracking-wide shrink-0">
+                                Sancionado
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-4 shrink-0">
+                          {d.yellows > 0 && (
+                            <div className="flex items-center gap-1.5">
+                              <div className="flex items-center gap-0.5">
+                                {Array.from({ length: Math.min(d.yellows, 6) }).map((_, i) => (
+                                  <div key={i} className="w-2.5 h-3.5 bg-[#F59E0B] rounded-sm" />
+                                ))}
+                                {d.yellows > 6 && <span className="text-[#F59E0B] text-[10px] font-bold">+{d.yellows - 6}</span>}
+                              </div>
+                              <span className="text-[#9CA3AF] text-[9px]">{d.yellows}</span>
+                            </div>
+                          )}
+                          {d.reds > 0 && (
+                            <div className="flex items-center gap-1.5">
+                              <div className="flex items-center gap-0.5">
+                                {Array.from({ length: Math.min(d.reds, 4) }).map((_, i) => (
+                                  <div key={i} className="w-2.5 h-3.5 bg-[#EF4444] rounded-sm" />
+                                ))}
+                              </div>
+                              <span className="text-[#9CA3AF] text-[9px]">{d.reds}</span>
+                            </div>
+                          )}
+                          {!d.suspended && d.yellows > 0 && (
+                            <div className="text-center">
+                              <p className="text-[#F59E0B] text-xs font-black">{d.yellowsToSuspension}</p>
+                              <p className="text-[#9CA3AF] text-[8px]">p/sanción</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </motion.div>
+              );
+            })}
+
+            <div className="mt-2 px-4 py-3 rounded-xl bg-[#131722]/50 border border-white/4 text-[#9CA3AF] text-[11px] flex flex-col gap-1">
+              <p>🟥 Tarjeta roja → 2 fechas de suspensión</p>
+              <p>🟨 3 tarjetas amarillas → 1 fecha de suspensión</p>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </motion.div>
   );
 }

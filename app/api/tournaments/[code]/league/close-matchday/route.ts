@@ -32,8 +32,8 @@ export async function POST(request: NextRequest, { params }: Params) {
     .eq("session_id", sessionId)
     .eq("matchday", currentMatchday);
 
-  const allFinished = (currentFixtures ?? []).every((f: any) => f.status === "finished");
-  if (!allFinished)
+  const allResolved = (currentFixtures ?? []).every((f: any) => f.status === "finished" || f.status === "postponed");
+  if (!allResolved)
     return NextResponse.json({ error: "Hay partidos pendientes en esta fecha." }, { status: 400 });
 
   const nextMatchday = currentMatchday + 1;

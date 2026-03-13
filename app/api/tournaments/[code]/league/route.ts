@@ -108,6 +108,8 @@ export async function GET(request: NextRequest, { params }: Params) {
     pendingCards: f.pending_cards ?? [],
     startedAt: f.started_at,
     finishedAt: f.finished_at,
+    postponeRequestedBy: f.postpone_requested_by ?? null,
+    reactivateRequestedBy: f.reactivate_requested_by ?? null,
   });
 
   const allFixtures = (allFixturesRaw ?? []).map(enrichFixture);
@@ -232,7 +234,7 @@ export async function GET(request: NextRequest, { params }: Params) {
   };
 
   // All matchday done?
-  const currentMatchdayFinished = currentFixtures.every((f) => f.status === "finished");
+  const currentMatchdayFinished = currentFixtures.every((f) => f.status === "finished" || f.status === "postponed");
 
   return NextResponse.json({
     status: (session as any).status,
