@@ -144,6 +144,18 @@ const navItems: NavItem[] = [
       </svg>
     ),
   },
+  {
+    href: "/feed",
+    label: "Feed",
+    icon: (active) => (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={active ? "#8B5CF6" : "#9CA3AF"} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+        <circle cx="9" cy="7" r="4"/>
+        <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+        <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+      </svg>
+    ),
+  },
 ];
 
 const quickItems: NavItem[] = [
@@ -273,7 +285,7 @@ export default function Sidebar() {
 
               const noTeam = href === "/squad" && !hasTeam;
               const marketLocked = (href === "/market" || href === "/subastas") && status !== "market";
-              const leagueLocked = (href === "/calendar" || href === "/table") && status !== "league";
+              const leagueLocked = (href === "/calendar" || href === "/table" || href === "/feed") && status !== "league";
               const locked = noTeam || marketLocked || leagueLocked;
 
               if (locked) {
