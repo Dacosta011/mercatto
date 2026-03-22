@@ -350,63 +350,65 @@ export default function CalendarPage() {
 
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}
-      className="p-8 max-w-5xl mx-auto">
+      className="px-4 py-5 lg:p-8 max-w-5xl mx-auto">
 
       {/* Header */}
-      <div className="flex items-start justify-between mb-8 gap-4">
-        <div>
-          <p className="text-[#9CA3AF] text-xs uppercase tracking-widest font-medium mb-1">Calendario</p>
-          <h1 className="text-[#F3F4F6] text-2xl font-bold tracking-tight">{data.tournamentName}</h1>
-          <div className="flex items-center gap-3 mt-2">
-            <span className="text-[#9CA3AF] text-sm">
-              Fecha <span className="text-[#F3F4F6] font-bold">{session.currentMatchday}</span> de <span className="text-[#F3F4F6] font-bold">{session.totalMatchdays}</span>
-            </span>
-            {data.status === "finished" && (
-              <>
+      <div className="flex flex-col gap-3 mb-5 lg:mb-8">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[#9CA3AF] text-[10px] lg:text-xs uppercase tracking-widest font-medium mb-0.5">Calendario</p>
+            <h1 className="text-[#F3F4F6] text-lg lg:text-2xl font-bold tracking-tight">{data.tournamentName}</h1>
+            <div className="flex items-center gap-2 mt-1 flex-wrap">
+              <span className="text-[#9CA3AF] text-xs lg:text-sm">
+                Fecha <span className="text-[#F3F4F6] font-bold">{session.currentMatchday}</span>/<span className="text-[#F3F4F6] font-bold">{session.totalMatchdays}</span>
+              </span>
+              {data.status === "finished" && (
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#8B5CF6]/15 text-[#8B5CF6]">FINALIZADA</span>
-                <span className="text-[10px] text-[#9CA3AF] animate-pulse">Redirigiendo a clasificación…</span>
-              </>
-            )}
+              )}
+            </div>
           </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          {/* My discipline pills */}
-          {myDiscipline.yellows > 0 && (
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#F59E0B]/10 border border-[#F59E0B]/20">
-              <div className="w-3 h-4 bg-[#F59E0B] rounded-sm" />
-              <span className="text-[#F59E0B] text-xs font-bold">{myDiscipline.yellows}</span>
-              <span className="text-[#9CA3AF] text-[10px]">amarillas</span>
-            </div>
-          )}
-          {myDiscipline.suspended && (
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#EF4444]/10 border border-[#EF4444]/20">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-              </svg>
-              <span className="text-[#EF4444] text-xs font-bold">SANCIONADO</span>
-            </div>
-          )}
 
           {/* Admin: close matchday */}
           {isAdmin && data.status !== "finished" && displayMatchday === session.currentMatchday && (
             <button onClick={closeMatchday} disabled={!currentMatchdayFinished || closingMatchday}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold border transition-all duration-200 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border transition-all duration-200 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
               style={currentMatchdayFinished
                 ? { background: "#8B5CF615", borderColor: "#8B5CF640", color: "#8B5CF6" }
                 : { background: "#1A1F2E", borderColor: "#ffffff10", color: "#9CA3AF" }}>
               {closingMatchday
-                ? <><svg className="animate-spin w-3 h-3" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>Cerrando…</>
+                ? <><svg className="animate-spin w-3 h-3" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg><span className="hidden sm:inline">Cerrando…</span></>
                 : <><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                  {session.currentMatchday >= session.totalMatchdays ? "Finalizar Liga" : "Cerrar Fecha"}</>
+                  <span className="hidden sm:inline">{session.currentMatchday >= session.totalMatchdays ? "Finalizar Liga" : "Cerrar Fecha"}</span>
+                  <span className="sm:hidden">{session.currentMatchday >= session.totalMatchdays ? "Finalizar" : "Cerrar"}</span></>
               }
             </button>
           )}
         </div>
+
+        {/* My discipline pills */}
+        {(myDiscipline.yellows > 0 || myDiscipline.suspended) && (
+          <div className="flex items-center gap-2 flex-wrap">
+            {myDiscipline.yellows > 0 && (
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#F59E0B]/10 border border-[#F59E0B]/20">
+                <div className="w-2.5 h-3.5 bg-[#F59E0B] rounded-sm" />
+                <span className="text-[#F59E0B] text-[11px] font-bold">{myDiscipline.yellows}</span>
+                <span className="text-[#9CA3AF] text-[10px]">amarillas</span>
+              </div>
+            )}
+            {myDiscipline.suspended && (
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#EF4444]/10 border border-[#EF4444]/20">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                </svg>
+                <span className="text-[#EF4444] text-[11px] font-bold">SANCIONADO</span>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Matchday selector */}
-      <div className="flex items-center gap-2 mb-6 overflow-x-auto pb-2">
+      <div className="flex items-center gap-1.5 lg:gap-2 mb-5 lg:mb-6 overflow-x-auto pb-2 -mx-1 px-1">
         {Array.from({ length: session.totalMatchdays }, (_, i) => i + 1).map((md) => {
           const isCurrentMd = md === session.currentMatchday;
           const isPast = md < session.currentMatchday;
@@ -423,7 +425,7 @@ export default function CalendarPage() {
 
       {/* Rest notice */}
       {restForDay && (
-        <div className="mb-5 rounded-2xl bg-gradient-to-r from-[#F59E0B]/8 via-[#131722] to-[#F59E0B]/8 border border-[#F59E0B]/20 p-4">
+        <div className="mb-5 rounded-2xl bg-linear-to-r from-[#F59E0B]/8 via-[#131722] to-[#F59E0B]/8 border border-[#F59E0B]/20 p-4">
           <div className="flex items-center gap-4">
             <div className="w-10 h-10 rounded-xl bg-[#F59E0B]/15 border border-[#F59E0B]/25 flex items-center justify-center shrink-0">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -586,14 +588,14 @@ function FixtureCard({
       {fixture.status === "finished" && <div className="h-0.5 bg-[#22C55E]" />}
       {fixture.status === "postponed" && <div className="h-0.5 bg-[#3B82F6]" />}
 
-      <div className="p-5">
+      <div className="p-3 sm:p-4 lg:p-5">
         {/* Match header */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 sm:gap-3 lg:gap-4">
           {/* Home */}
-          <div className={`flex-1 flex items-center justify-end gap-3 ${isHome ? "opacity-100" : "opacity-75"}`}>
+          <div className={`flex-1 flex items-center justify-end gap-2 lg:gap-3 min-w-0 ${isHome ? "opacity-100" : "opacity-75"}`}>
             <div className="text-right min-w-0">
-              <p className="text-[#F3F4F6] font-bold text-sm leading-tight truncate">{fixture.homeMember.displayName}</p>
-              <p className="text-[#9CA3AF] text-xs mt-0.5 truncate">{fixture.homeMember.teamName}</p>
+              <p className="text-[#F3F4F6] font-bold text-xs sm:text-sm leading-tight truncate">{fixture.homeMember.displayName}</p>
+              <p className="text-[#9CA3AF] text-[10px] sm:text-xs mt-0.5 truncate">{fixture.homeMember.teamName}</p>
               {fixture.status === "pending" && isCurrentMatchday && (
                 <div className="flex justify-end mt-1">
                   <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full ${fixture.homeConfirmed ? "bg-[#22C55E]/15 text-[#22C55E]" : "bg-[#9CA3AF]/10 text-[#9CA3AF]"}`}>
@@ -609,21 +611,21 @@ function FixtureCard({
               )}
             </div>
             {fixture.homeMember.crestUrl ? (
-              <img src={fixture.homeMember.crestUrl} alt={fixture.homeMember.teamName} className="w-10 h-10 object-contain shrink-0" />
+              <img src={fixture.homeMember.crestUrl} alt={fixture.homeMember.teamName} className="w-8 h-8 sm:w-9 sm:h-9 lg:w-10 lg:h-10 object-contain shrink-0" />
             ) : (
-              <div className="w-10 h-10 rounded-full bg-[#8B5CF6]/10 flex items-center justify-center shrink-0">
-                <span className="text-[#8B5CF6] text-sm font-bold">{fixture.homeMember.displayName.charAt(0)}</span>
+              <div className="w-8 h-8 sm:w-9 sm:h-9 lg:w-10 lg:h-10 rounded-full bg-[#8B5CF6]/10 flex items-center justify-center shrink-0">
+                <span className="text-[#8B5CF6] text-xs sm:text-sm font-bold">{fixture.homeMember.displayName.charAt(0)}</span>
               </div>
             )}
           </div>
 
           {/* Score / Status */}
-          <div className="flex flex-col items-center gap-1 w-20 shrink-0">
+          <div className="flex flex-col items-center gap-1 w-14 sm:w-16 lg:w-20 shrink-0">
             {fixture.status === "finished" ? (
-              <div className="flex items-center gap-2">
-                <span className="text-[#F3F4F6] text-2xl font-black tabular-nums">{fixture.homeGoals}</span>
-                <span className="text-[#9CA3AF] text-sm font-medium">—</span>
-                <span className="text-[#F3F4F6] text-2xl font-black tabular-nums">{fixture.awayGoals}</span>
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <span className="text-[#F3F4F6] text-xl sm:text-2xl font-black tabular-nums">{fixture.homeGoals}</span>
+                <span className="text-[#9CA3AF] text-xs sm:text-sm font-medium">—</span>
+                <span className="text-[#F3F4F6] text-xl sm:text-2xl font-black tabular-nums">{fixture.awayGoals}</span>
               </div>
             ) : (
               <div className="flex flex-col items-center gap-0.5">
@@ -636,17 +638,17 @@ function FixtureCard({
           </div>
 
           {/* Away */}
-          <div className={`flex-1 flex items-center gap-3 ${isAway ? "opacity-100" : "opacity-75"}`}>
+          <div className={`flex-1 flex items-center gap-2 lg:gap-3 min-w-0 ${isAway ? "opacity-100" : "opacity-75"}`}>
             {fixture.awayMember.crestUrl ? (
-              <img src={fixture.awayMember.crestUrl} alt={fixture.awayMember.teamName} className="w-10 h-10 object-contain shrink-0" />
+              <img src={fixture.awayMember.crestUrl} alt={fixture.awayMember.teamName} className="w-8 h-8 sm:w-9 sm:h-9 lg:w-10 lg:h-10 object-contain shrink-0" />
             ) : (
-              <div className="w-10 h-10 rounded-full bg-[#8B5CF6]/10 flex items-center justify-center shrink-0">
-                <span className="text-[#8B5CF6] text-sm font-bold">{fixture.awayMember.displayName.charAt(0)}</span>
+              <div className="w-8 h-8 sm:w-9 sm:h-9 lg:w-10 lg:h-10 rounded-full bg-[#8B5CF6]/10 flex items-center justify-center shrink-0">
+                <span className="text-[#8B5CF6] text-xs sm:text-sm font-bold">{fixture.awayMember.displayName.charAt(0)}</span>
               </div>
             )}
             <div className="min-w-0">
-              <p className="text-[#F3F4F6] font-bold text-sm leading-tight truncate">{fixture.awayMember.displayName}</p>
-              <p className="text-[#9CA3AF] text-xs mt-0.5 truncate">{fixture.awayMember.teamName}</p>
+              <p className="text-[#F3F4F6] font-bold text-xs sm:text-sm leading-tight truncate">{fixture.awayMember.displayName}</p>
+              <p className="text-[#9CA3AF] text-[10px] sm:text-xs mt-0.5 truncate">{fixture.awayMember.teamName}</p>
               {fixture.status === "pending" && isCurrentMatchday && (
                 <div className="mt-1">
                   <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full ${fixture.awayConfirmed ? "bg-[#22C55E]/15 text-[#22C55E]" : "bg-[#9CA3AF]/10 text-[#9CA3AF]"}`}>
@@ -666,96 +668,93 @@ function FixtureCard({
 
         {/* Actions */}
         {isCurrentMatchday && fixture.status !== "finished" && (
-          <div className="mt-4 pt-4 border-t border-white/4 flex items-center gap-2 flex-wrap">
+          <div className="mt-2.5 sm:mt-3 lg:mt-4 pt-2.5 sm:pt-3 lg:pt-4 border-t border-white/4 flex flex-col sm:flex-row sm:items-center gap-1.5 lg:gap-2 sm:flex-wrap">
             {/* Confirm start */}
             {fixture.status === "pending" && isParticipant && (
               <button onClick={onConfirmStart} disabled={submitting || (isHome && fixture.homeConfirmed) || (isAway && fixture.awayConfirmed)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#22C55E]/10 border border-[#22C55E]/25 text-[#22C55E] hover:bg-[#22C55E]/20 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+                className="flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-semibold bg-[#22C55E]/10 border border-[#22C55E]/25 text-[#22C55E] hover:bg-[#22C55E]/20 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
                 {(isHome && fixture.homeConfirmed) || (isAway && fixture.awayConfirmed) ? "Confirmado" : "Confirmar inicio"}
               </button>
             )}
 
-            {/* Submit result — hidden if there's a pending postpone request */}
+            {/* Submit result */}
             {fixture.status === "in_progress" && isParticipant && !hasPending && !fixture.postponeRequestedBy && (
               <button onClick={onOpenResult}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#8B5CF6]/10 border border-[#8B5CF6]/25 text-[#8B5CF6] hover:bg-[#8B5CF6]/20 transition-colors cursor-pointer">
+                className="flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-semibold bg-[#8B5CF6]/10 border border-[#8B5CF6]/25 text-[#8B5CF6] hover:bg-[#8B5CF6]/20 transition-colors cursor-pointer">
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                 Registrar resultado
               </button>
             )}
 
-            {/* Pending result — waiting confirmation */}
+            {/* Pending result */}
             {hasPending && pendingIsMe && (
-              <span className="text-[#F59E0B] text-xs font-medium flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#F59E0B]/10 border border-[#F59E0B]/20">
-                <svg className="animate-pulse w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              <span className="text-[#F59E0B] text-[11px] sm:text-xs font-medium flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-[#F59E0B]/10 border border-[#F59E0B]/20">
+                <svg className="animate-pulse w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                 Esperando confirmación del rival
               </span>
             )}
 
             {/* Confirm or dispute result */}
             {canConfirmResult && (
-              <div className="flex flex-col gap-2 w-full">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#F59E0B]/8 border border-[#F59E0B]/20">
+              <div className="flex flex-col gap-1.5 sm:gap-2 w-full">
+                <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                  <div className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-lg bg-[#F59E0B]/8 border border-[#F59E0B]/20">
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                    <span className="text-[#F59E0B] text-xs font-medium">
-                      Resultado pendiente: <span className="font-black">{fixture.pendingHomeGoals} – {fixture.pendingAwayGoals}</span>
+                    <span className="text-[#F59E0B] text-[11px] sm:text-xs font-medium">
+                      Pendiente: <span className="font-black">{fixture.pendingHomeGoals} – {fixture.pendingAwayGoals}</span>
                     </span>
                   </div>
                   {fixture.pendingCards?.length > 0 && (
                     <div className="flex items-center gap-1 flex-wrap">
                       {fixture.pendingCards.map((c, i) => (
-                        <div key={i} className="flex items-center gap-1 px-2 py-1 rounded-lg bg-[#131722] border border-white/6 text-[10px]">
+                        <div key={i} className="flex items-center gap-1 px-1.5 sm:px-2 py-1 rounded-lg bg-[#131722] border border-white/6 text-[10px]">
                           <div className={`w-2 h-3 rounded-sm shrink-0 ${c.cardType === "yellow" ? "bg-[#F59E0B]" : "bg-[#EF4444]"}`} />
-                          <span className="text-[#9CA3AF] truncate max-w-20">{c.playerName}</span>
+                          <span className="text-[#9CA3AF] truncate max-w-16 sm:max-w-20">{c.playerName}</span>
                         </div>
                       ))}
                     </div>
                   )}
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 sm:gap-2">
                   <button onClick={onOpenConfirm} disabled={submitting}
-                    className="px-3 py-1.5 rounded-lg bg-[#22C55E]/10 border border-[#22C55E]/25 text-[#22C55E] text-xs font-semibold hover:bg-[#22C55E]/20 transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1">
+                    className="px-2.5 sm:px-3 py-1.5 rounded-lg bg-[#22C55E]/10 border border-[#22C55E]/25 text-[#22C55E] text-[11px] sm:text-xs font-semibold hover:bg-[#22C55E]/20 transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1">
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                    Confirmar + mis tarjetas
+                    Confirmar
                   </button>
                   <button onClick={onDisputeResult} disabled={submitting}
-                    className="px-2.5 py-1.5 rounded-lg bg-[#EF4444]/10 border border-[#EF4444]/25 text-[#EF4444] text-xs font-medium hover:bg-[#EF4444]/20 transition-colors cursor-pointer disabled:opacity-50">
-                    ✗ Disputar
+                    className="px-2 sm:px-2.5 py-1.5 rounded-lg bg-[#EF4444]/10 border border-[#EF4444]/25 text-[#EF4444] text-[11px] sm:text-xs font-medium hover:bg-[#EF4444]/20 transition-colors cursor-pointer disabled:opacity-50">
+                    Disputar
                   </button>
                 </div>
               </div>
             )}
 
-            {/* ── Postpone actions (for non-postponed matches) ── */}
+            {/* ── Postpone actions ── */}
             {fixture.status !== "postponed" && isParticipant && !hasPending && (
               <>
-                {/* I requested postpone — show cancel */}
                 {postponeRequestedByMe && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-[#3B82F6] text-xs font-medium flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#3B82F6]/10 border border-[#3B82F6]/20">
-                      <svg className="animate-pulse w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                      Solicitud de aplazamiento enviada
+                  <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                    <span className="text-[#3B82F6] text-[11px] sm:text-xs font-medium flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-[#3B82F6]/10 border border-[#3B82F6]/20">
+                      <svg className="animate-pulse w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                      Aplazamiento enviado
                     </span>
                     <button onClick={onCancelPostpone}
-                      className="px-2.5 py-1.5 rounded-lg bg-[#EF4444]/10 border border-[#EF4444]/25 text-[#EF4444] text-xs font-medium hover:bg-[#EF4444]/20 transition-colors cursor-pointer">
+                      className="px-2 sm:px-2.5 py-1.5 rounded-lg bg-[#EF4444]/10 border border-[#EF4444]/25 text-[#EF4444] text-[11px] sm:text-xs font-medium hover:bg-[#EF4444]/20 transition-colors cursor-pointer">
                       Cancelar
                     </button>
                   </div>
                 )}
-                {/* Rival requested postpone — show accept */}
                 {postponeRequestedByRival && (
                   <button onClick={onPostponeRequest}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#3B82F6]/10 border border-[#3B82F6]/25 text-[#3B82F6] hover:bg-[#3B82F6]/20 transition-colors cursor-pointer">
+                    className="flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-semibold bg-[#3B82F6]/10 border border-[#3B82F6]/25 text-[#3B82F6] hover:bg-[#3B82F6]/20 transition-colors cursor-pointer">
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
                     Aceptar aplazamiento
                   </button>
                 )}
-                {/* No request yet — show request button */}
                 {!fixture.postponeRequestedBy && (
                   <button onClick={onPostponeRequest}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[#131722] border border-white/8 text-[#9CA3AF] hover:text-[#3B82F6] hover:border-[#3B82F6]/30 transition-colors cursor-pointer">
+                    className="flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-medium bg-[#131722] border border-white/8 text-[#9CA3AF] hover:text-[#3B82F6] hover:border-[#3B82F6]/30 transition-colors cursor-pointer">
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
                     Solicitar aplazar
                   </button>
@@ -763,31 +762,31 @@ function FixtureCard({
               </>
             )}
 
-            {/* ── Reactivate actions (for postponed matches) ── */}
+            {/* ── Reactivate actions ── */}
             {fixture.status === "postponed" && isParticipant && (
               <>
                 {reactivateRequestedByMe && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-[#22C55E] text-xs font-medium flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#22C55E]/10 border border-[#22C55E]/20">
-                      <svg className="animate-pulse w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                      Solicitud de reactivación enviada
+                  <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                    <span className="text-[#22C55E] text-[11px] sm:text-xs font-medium flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-[#22C55E]/10 border border-[#22C55E]/20">
+                      <svg className="animate-pulse w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                      Reactivación enviada
                     </span>
                     <button onClick={onCancelReactivate}
-                      className="px-2.5 py-1.5 rounded-lg bg-[#EF4444]/10 border border-[#EF4444]/25 text-[#EF4444] text-xs font-medium hover:bg-[#EF4444]/20 transition-colors cursor-pointer">
+                      className="px-2 sm:px-2.5 py-1.5 rounded-lg bg-[#EF4444]/10 border border-[#EF4444]/25 text-[#EF4444] text-[11px] sm:text-xs font-medium hover:bg-[#EF4444]/20 transition-colors cursor-pointer">
                       Cancelar
                     </button>
                   </div>
                 )}
                 {reactivateRequestedByRival && (
                   <button onClick={onReactivateRequest}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#22C55E]/10 border border-[#22C55E]/25 text-[#22C55E] hover:bg-[#22C55E]/20 transition-colors cursor-pointer">
+                    className="flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-semibold bg-[#22C55E]/10 border border-[#22C55E]/25 text-[#22C55E] hover:bg-[#22C55E]/20 transition-colors cursor-pointer">
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
                     Aceptar reactivación
                   </button>
                 )}
                 {!fixture.reactivateRequestedBy && (
                   <button onClick={onReactivateRequest}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[#131722] border border-white/8 text-[#9CA3AF] hover:text-[#22C55E] hover:border-[#22C55E]/30 transition-colors cursor-pointer">
+                    className="flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-medium bg-[#131722] border border-white/8 text-[#9CA3AF] hover:text-[#22C55E] hover:border-[#22C55E]/30 transition-colors cursor-pointer">
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
                     Solicitar reactivar
                   </button>
@@ -798,14 +797,14 @@ function FixtureCard({
             {/* Admin force buttons */}
             {isAdmin && fixture.status !== "postponed" && fixture.status !== "finished" && (
               <button onClick={onPostponeForce}
-                className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[#131722] border border-white/8 text-[#9CA3AF] hover:text-[#3B82F6] hover:border-[#3B82F6]/30 transition-colors cursor-pointer">
+                className="sm:ml-auto flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-medium bg-[#131722] border border-white/8 text-[#9CA3AF] hover:text-[#3B82F6] hover:border-[#3B82F6]/30 transition-colors cursor-pointer">
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
                 Forzar aplazar
               </button>
             )}
             {isAdmin && fixture.status === "postponed" && (
               <button onClick={onReactivateForce}
-                className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[#131722] border border-white/8 text-[#9CA3AF] hover:text-[#22C55E] hover:border-[#22C55E]/30 transition-colors cursor-pointer">
+                className="sm:ml-auto flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-medium bg-[#131722] border border-white/8 text-[#9CA3AF] hover:text-[#22C55E] hover:border-[#22C55E]/30 transition-colors cursor-pointer">
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
                 Forzar reactivar
               </button>
@@ -814,7 +813,7 @@ function FixtureCard({
             {/* Admin force validate */}
             {isAdmin && fixture.status === "in_progress" && (
               <button onClick={onForceValidate}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[#131722] border border-white/8 text-[#9CA3AF] hover:text-[#F3F4F6] hover:border-white/20 transition-colors cursor-pointer">
+                className="flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-medium bg-[#131722] border border-white/8 text-[#9CA3AF] hover:text-[#F3F4F6] hover:border-white/20 transition-colors cursor-pointer">
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
                 Forzar validar
               </button>

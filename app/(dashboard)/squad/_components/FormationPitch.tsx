@@ -68,14 +68,14 @@ function EmptySlot({
       style={{ left: `${slot.x}%`, top: `${slot.y}%` }}
     >
       <div
-        className={`w-[130px] h-[68px] rounded-2xl border-2 border-dashed flex flex-col items-center justify-center gap-1 transition-all duration-200 ${borderClass} ${bgClass}`}
+        className={`w-13 h-13 sm:w-20 sm:h-11 lg:w-32.5 lg:h-17 rounded-full sm:rounded-xl lg:rounded-2xl border-2 border-dashed flex flex-col items-center justify-center gap-0.5 lg:gap-1 transition-all duration-200 ${borderClass} ${bgClass}`}
         style={glowStyle}
       >
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-[#9CA3AF]/50">
+        <span className="text-[9px] sm:text-[9px] lg:text-[11px] font-semibold uppercase tracking-wider text-[#9CA3AF]/50">
           {slot.label}
         </span>
         {isDragActive && isCompatible && (
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8B5CF6" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="opacity-60">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#8B5CF6" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="opacity-60 hidden sm:block">
             <line x1="12" y1="5" x2="12" y2="19" />
             <line x1="5" y1="12" x2="19" y2="12" />
           </svg>
@@ -131,7 +131,7 @@ function FilledSlot({
         ref={setDragRef}
         {...(locked ? {} : listeners)}
         {...attributes}
-        className={`w-[130px] rounded-2xl border bg-[#131722] flex flex-col items-center py-2.5 px-2 select-none transition-all duration-200 ${
+        className={`w-13 sm:w-20 lg:w-32.5 rounded-xl sm:rounded-xl lg:rounded-2xl border bg-[#131722] flex flex-col items-center py-1 sm:py-1.5 lg:py-2.5 px-0.5 sm:px-1.5 lg:px-2 select-none transition-all duration-200 ${
           isDragging ? "opacity-30 scale-95" : "opacity-100 scale-100"
         } ${
           locked ? "cursor-default" : "cursor-grab active:cursor-grabbing"
@@ -144,49 +144,49 @@ function FilledSlot({
           ...dragStyle,
         }}
       >
-        <span className="text-[9px] font-bold uppercase tracking-widest text-[#9CA3AF]/40 mb-1.5">
+        <span className="text-[7px] sm:text-[8px] lg:text-[9px] font-bold uppercase tracking-widest text-[#9CA3AF]/40 mb-0.5 lg:mb-1.5">
           {slot.label}
         </span>
         {player.headshotUrl ? (
           <img
             src={player.headshotUrl}
             alt=""
-            className="w-12 h-12 rounded-xl object-cover object-top mb-1 border-2 border-white/8 shadow-lg"
+            className="w-8 h-8 sm:w-9 sm:h-9 lg:w-12 lg:h-12 rounded-full sm:rounded-lg lg:rounded-xl object-cover object-top mb-0.5 lg:mb-1 border border-white/8 lg:border-2 shadow-lg"
             draggable={false}
           />
         ) : (
           <div
-            className="w-12 h-12 rounded-xl flex items-center justify-center mb-1 border-2 border-white/8"
+            className="w-8 h-8 sm:w-9 sm:h-9 lg:w-12 lg:h-12 rounded-full sm:rounded-lg lg:rounded-xl flex items-center justify-center mb-0.5 lg:mb-1 border border-white/8 lg:border-2"
             style={{ background: `${color}15` }}
           >
-            <span className="text-sm font-bold" style={{ color }}>
+            <span className="text-xs sm:text-xs lg:text-sm font-bold" style={{ color }}>
               {player.ovr}
             </span>
           </div>
         )}
-        <span className="text-[12px] font-semibold text-[#F3F4F6] truncate max-w-full leading-tight text-center">
+        <span className="text-[8px] sm:text-[10px] lg:text-[12px] font-semibold text-[#F3F4F6] truncate max-w-full leading-tight text-center">
           {lastName(player.name)}
         </span>
-        <div className="flex items-center gap-1.5 mt-1">
+        <div className="hidden sm:flex items-center gap-1 lg:gap-1.5 mt-0.5 lg:mt-1">
           {player.headshotUrl && (
-            <span className="text-[12px] font-black leading-none" style={{ color }}>
+            <span className="text-[10px] lg:text-[12px] font-black leading-none" style={{ color }}>
               {player.ovr}
             </span>
           )}
-          <span className="text-[9px] text-[#9CA3AF]/60 uppercase">
+          <span className="text-[8px] lg:text-[9px] text-[#9CA3AF]/60 uppercase">
             {player.position}
           </span>
         </div>
 
         {/* Suspension / yellow badges */}
         {isSuspended && (
-          <div className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-[#EF4444] flex items-center justify-center shadow-md shadow-[#EF4444]/30">
-            <span className="text-[9px] font-black text-white">!</span>
+          <div className="absolute -top-1 -right-1 lg:-top-1.5 lg:-right-1.5 w-4 h-4 lg:w-5 lg:h-5 rounded-full bg-[#EF4444] flex items-center justify-center shadow-md shadow-[#EF4444]/30">
+            <span className="text-[7px] lg:text-[9px] font-black text-white">!</span>
           </div>
         )}
         {!isSuspended && (player.yellowCards ?? 0) >= 4 && (
-          <div className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-[#F59E0B] flex items-center justify-center shadow-md shadow-[#F59E0B]/30">
-            <span className="text-[9px] font-black text-white">{player.yellowCards}</span>
+          <div className="absolute -top-1 -right-1 lg:-top-1.5 lg:-right-1.5 w-4 h-4 lg:w-5 lg:h-5 rounded-full bg-[#F59E0B] flex items-center justify-center shadow-md shadow-[#F59E0B]/30">
+            <span className="text-[7px] lg:text-[9px] font-black text-white">{player.yellowCards}</span>
           </div>
         )}
       </div>
@@ -235,10 +235,10 @@ export default function FormationPitch({
   const isDragActive = activeDragPlayer !== null;
 
   return (
-    <div className="flex-1 min-h-0 flex items-center justify-center px-6 py-2">
+    <div className="flex-1 min-h-0 flex items-center justify-center px-2 sm:px-4 lg:px-6 py-2">
       <div
         className="relative h-full w-full"
-        style={{ aspectRatio: "10 / 12", maxWidth: "720px" }}
+        style={{ aspectRatio: "10 / 14", maxWidth: "720px" }}
       >
         {/* Pitch surface */}
         <div className="absolute inset-0 rounded-2xl bg-linear-to-b from-[#0A0D12] via-[#0D1117] to-[#0A0D12] border border-white/4 overflow-hidden">

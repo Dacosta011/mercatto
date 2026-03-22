@@ -93,7 +93,7 @@ function RejoinContent() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6 bg-[#0D0F14]">
+    <div className="min-h-dvh flex items-center justify-center p-4 sm:p-6 bg-[#0D0F14]">
       <div
         className="fixed pointer-events-none"
         style={{
@@ -157,7 +157,7 @@ function RejoinContent() {
                 Volver al inicio
               </Link>
 
-              <div className="mb-8">
+              <div className="mb-6 sm:mb-8">
                 <div className="flex items-center gap-3 mb-3">
                   <div className="w-10 h-10 rounded-xl bg-[#8B5CF6]/10 border border-[#8B5CF6]/20 flex items-center justify-center">
                     <svg
@@ -176,7 +176,7 @@ function RejoinContent() {
                     </svg>
                   </div>
                   <div>
-                    <h1 className="text-[#F3F4F6] text-2xl font-bold tracking-tight">
+                    <h1 className="text-[#F3F4F6] text-xl sm:text-2xl font-bold tracking-tight">
                       Reingresar al Torneo
                     </h1>
                     <p className="text-[#9CA3AF] text-sm">
@@ -192,7 +192,7 @@ function RejoinContent() {
               >
                 <div className="h-px w-full bg-linear-to-r from-transparent via-[#8B5CF6]/40 to-transparent" />
 
-                <div className="p-6 flex flex-col gap-5">
+                <div className="p-4 sm:p-6 flex flex-col gap-5">
                   {/* Code */}
                   <div>
                     <label className="block text-[#9CA3AF] text-xs font-semibold uppercase tracking-wider mb-2">

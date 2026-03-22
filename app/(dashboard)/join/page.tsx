@@ -238,7 +238,7 @@ function JoinForm() {
     : "";
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6">
+    <div className="min-h-dvh flex items-center justify-center p-4 sm:p-6">
       <div
         className="fixed pointer-events-none"
         style={{
@@ -282,8 +282,8 @@ function JoinForm() {
                 Volver al inicio
               </Link>
 
-              <div className="mb-8">
-                <h1 className="text-[#F3F4F6] text-3xl font-bold tracking-tight mb-2">
+              <div className="mb-6 sm:mb-8">
+                <h1 className="text-[#F3F4F6] text-2xl sm:text-3xl font-bold tracking-tight mb-1.5 sm:mb-2">
                   Unirse al Torneo
                 </h1>
                 <p className="text-[#9CA3AF] text-sm">
@@ -297,7 +297,7 @@ function JoinForm() {
               >
                 <div className="h-px w-full bg-linear-to-r from-transparent via-[#8B5CF6]/40 to-transparent" />
 
-                <div className="p-8 flex flex-col gap-6">
+                <div className="p-5 sm:p-8 flex flex-col gap-5 sm:gap-6">
                   <FormInput
                     label="Código del Torneo"
                     placeholder="Ej. XYZ-1234-ABC"
@@ -471,9 +471,9 @@ function JoinForm() {
               <div className="bg-[#131722] rounded-2xl border border-[#8B5CF6]/20 overflow-hidden shadow-2xl shadow-[#8B5CF6]/5">
                 <div className="h-1 w-full bg-linear-to-r from-transparent via-[#8B5CF6]/60 to-transparent" />
 
-                <div className="p-8">
+                <div className="p-5 sm:p-8">
                   {/* Header */}
-                  <div className="flex items-center gap-4 mb-6">
+                  <div className="flex items-center gap-3 sm:gap-4 mb-5 sm:mb-6">
                     <div className="w-12 h-12 rounded-2xl bg-[#22C55E]/10 border border-[#22C55E]/20 flex items-center justify-center shrink-0">
                       <svg
                         width="22"
@@ -490,7 +490,7 @@ function JoinForm() {
                       </svg>
                     </div>
                     <div>
-                      <h2 className="text-[#F3F4F6] text-xl font-bold tracking-tight">
+                      <h2 className="text-[#F3F4F6] text-lg sm:text-xl font-bold tracking-tight">
                         ¡Te uniste a {result?.tournamentName}!
                       </h2>
                       <p className="text-[#9CA3AF] text-sm mt-0.5">
@@ -542,9 +542,9 @@ function JoinForm() {
                     </div>
                   </div>
 
-                  {/* QR + Info side by side */}
-                  <div className="flex gap-5 mb-6">
-                    <div className="shrink-0">
+                  {/* QR + Info */}
+                  <div className="flex flex-col sm:flex-row gap-4 sm:gap-5 mb-5 sm:mb-6">
+                    <div className="shrink-0 flex flex-col items-center sm:items-start">
                       <QRCode url={magicLink} />
                       <p className="text-[#6B7280] text-[10px] text-center mt-2">
                         Referencia visual

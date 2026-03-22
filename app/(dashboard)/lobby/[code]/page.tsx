@@ -394,115 +394,102 @@ export default function LobbyPage() {
 
   // ── Main ───────────────────────────────────────────────────────────────────
   return (
-    <div className="p-8 max-w-5xl mx-auto">
+    <div className="px-4 py-5 lg:p-8 max-w-5xl mx-auto">
       {/* Header */}
-      <div className="flex items-start justify-between mb-8 gap-4">
-        <div>
-          <div className="flex items-center gap-3 mb-1.5 flex-wrap">
-            <h1 className="text-[#F3F4F6] text-2xl font-bold tracking-tight">
-              {tournament.name}
-            </h1>
-            <StatusBadge status={tournament.status} />
-            {isAdmin && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-[#8B5CF6]/10 text-[#8B5CF6] border border-[#8B5CF6]/20">
-                <svg
-                  width="10"
-                  height="10"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-                </svg>
-                Admin
-              </span>
-            )}
+      <div className="flex flex-col gap-4 mb-6 lg:mb-8">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+              <h1 className="text-[#F3F4F6] text-xl lg:text-2xl font-bold tracking-tight">
+                {tournament.name}
+              </h1>
+              <StatusBadge status={tournament.status} />
+              {isAdmin && (
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium bg-[#8B5CF6]/10 text-[#8B5CF6] border border-[#8B5CF6]/20">
+                  <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                  </svg>
+                  Admin
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="text-[#9CA3AF] text-xs lg:text-sm">
+                {assigned}/{total} equipos
+              </p>
+              <span className="text-[#9CA3AF]/30">·</span>
+              <p className="text-[#9CA3AF] text-xs lg:text-sm font-mono tracking-wider">
+                {tournament.code}
+              </p>
+            </div>
           </div>
-          <div className="flex items-center gap-3">
-            <p className="text-[#9CA3AF] text-sm">
-              {assigned} de {total} equipos asignados
-            </p>
-            <span className="text-[#9CA3AF]/30">·</span>
-            <p className="text-[#9CA3AF] text-sm font-mono tracking-wider">
-              {tournament.code}
-            </p>
-          </div>
-        </div>
 
-        <div className="flex items-center gap-2 shrink-0">
-          {isAdmin && (
-            <button
-              onClick={async () => {
-                const shareUrl = `${window.location.origin}/join?code=${tournament.code}`;
-                if (navigator.share) {
-                  try {
-                    await navigator.share({
-                      title: `Únete a ${tournament.name} en Mercatto`,
-                      text: `Entra al torneo "${tournament.name}" con este enlace:`,
-                      url: shareUrl,
-                    });
-                  } catch {
-                    /* user cancelled */
+          {/* Mobile: compact action buttons */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            {isAdmin && (
+              <button
+                onClick={async () => {
+                  const shareUrl = `${window.location.origin}/join?code=${tournament.code}`;
+                  if (navigator.share) {
+                    try {
+                      await navigator.share({
+                        title: `Únete a ${tournament.name} en Mercatto`,
+                        text: `Entra al torneo "${tournament.name}" con este enlace:`,
+                        url: shareUrl,
+                      });
+                    } catch { /* user cancelled */ }
+                  } else {
+                    await navigator.clipboard.writeText(shareUrl);
+                    setShareCopied(true);
+                    setTimeout(() => setShareCopied(false), 2500);
                   }
-                } else {
-                  await navigator.clipboard.writeText(shareUrl);
-                  setShareCopied(true);
-                  setTimeout(() => setShareCopied(false), 2500);
-                }
-              }}
-              className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-medium transition-all duration-200 cursor-pointer ${
-                shareCopied
-                  ? "bg-[#22C55E]/10 border-[#22C55E]/25 text-[#22C55E]"
-                  : "bg-[#8B5CF6]/10 border-[#8B5CF6]/20 hover:bg-[#8B5CF6]/15 text-[#8B5CF6] hover:text-[#A78BFA]"
-              }`}
-            >
-              {shareCopied ? (
-                <>
+                }}
+                className={`flex items-center gap-1.5 px-2.5 py-2 lg:px-3 rounded-xl border text-xs font-medium transition-all duration-200 cursor-pointer ${
+                  shareCopied
+                    ? "bg-[#22C55E]/10 border-[#22C55E]/25 text-[#22C55E]"
+                    : "bg-[#8B5CF6]/10 border-[#8B5CF6]/20 text-[#8B5CF6]"
+                }`}
+              >
+                {shareCopied ? (
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="20 6 9 17 4 12" />
                   </svg>
-                  Enlace copiado
-                </>
-              ) : (
-                <>
+                ) : (
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
                     <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
                   </svg>
-                  Compartir
-                </>
-              )}
+                )}
+                <span className="hidden lg:inline">{shareCopied ? "Copiado" : "Compartir"}</span>
+              </button>
+            )}
+            <button
+              onClick={() => fetchTournament(true)}
+              disabled={refreshing}
+              className="flex items-center justify-center w-9 h-9 lg:w-auto lg:h-auto lg:gap-2 lg:px-3 lg:py-2 rounded-xl bg-[#131722] border border-white/6 hover:bg-[#1A1F2E] text-[#9CA3AF] hover:text-[#F3F4F6] text-xs font-medium transition-all duration-200 disabled:opacity-50 cursor-pointer"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={refreshing ? "animate-spin" : ""}>
+                <polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+              </svg>
+              <span className="hidden lg:inline">Actualizar</span>
             </button>
-          )}
-          <button
-            onClick={() => fetchTournament(true)}
-            disabled={refreshing}
-            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-[#131722] border border-white/6 hover:bg-[#1A1F2E] text-[#9CA3AF] hover:text-[#F3F4F6] text-xs font-medium transition-all duration-200 disabled:opacity-50 cursor-pointer"
-          >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={refreshing ? "animate-spin" : ""}>
-              <polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
-            </svg>
-            Actualizar
-          </button>
-          <button
-            onClick={() => { clearTournamentTokens(code); router.replace("/"); }}
-            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-[#131722] border border-[#EF4444]/20 hover:bg-[#EF4444]/10 text-[#EF4444]/70 hover:text-[#EF4444] text-xs font-medium transition-all duration-200 cursor-pointer"
-          >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
-            </svg>
-            Salir
-          </button>
+            <button
+              onClick={() => { clearTournamentTokens(code); router.replace("/"); }}
+              className="flex items-center justify-center w-9 h-9 lg:w-auto lg:h-auto lg:gap-2 lg:px-3 lg:py-2 rounded-xl bg-[#131722] border border-[#EF4444]/20 hover:bg-[#EF4444]/10 text-[#EF4444]/70 hover:text-[#EF4444] text-xs font-medium transition-all duration-200 cursor-pointer"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+              </svg>
+              <span className="hidden lg:inline">Salir</span>
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Progress card */}
-      <div className="mb-6 bg-[#131722] rounded-2xl p-5 border border-white/[0.04]">
+      <div className="mb-5 lg:mb-6 bg-[#131722] rounded-2xl p-4 lg:p-5 border border-white/[0.04]">
         <div className="flex items-center justify-between mb-3">
-          <span className="text-[#9CA3AF] text-xs uppercase tracking-wider font-medium">
+          <span className="text-[#9CA3AF] text-[10px] lg:text-xs uppercase tracking-wider font-medium">
             Progreso del draft
           </span>
           <span className="text-[#F3F4F6] text-sm font-semibold tabular-nums">
@@ -517,18 +504,18 @@ export default function LobbyPage() {
             transition={{ duration: 0.8, ease: "easeOut" }}
           />
         </div>
-        <div className="flex gap-6 mt-3">
-          <span className="text-[#9CA3AF] text-xs">
+        <div className="flex gap-4 lg:gap-6 mt-3 flex-wrap">
+          <span className="text-[#9CA3AF] text-[11px] lg:text-xs">
             <span className="text-[#22C55E] font-semibold">{assigned}</span>{" "}
             asignados
           </span>
-          <span className="text-[#9CA3AF] text-xs">
+          <span className="text-[#9CA3AF] text-[11px] lg:text-xs">
             <span className="text-yellow-400 font-semibold">
               {total - assigned}
             </span>{" "}
             pendientes
           </span>
-          <span className="text-[#9CA3AF] text-xs">
+          <span className="text-[#9CA3AF] text-[11px] lg:text-xs">
             <span className="text-[#F3F4F6] font-semibold">{total}</span>{" "}
             participantes
           </span>
@@ -537,9 +524,9 @@ export default function LobbyPage() {
 
       {/* ── Admin Control Panel ──────────────────────────────────────────── */}
       {isAdmin && (
-        <div className="mb-6">
+        <div className="mb-5 lg:mb-6">
           {/* Panel header */}
-          <div className="flex items-center gap-3 mb-4">
+          <div className="flex items-center gap-3 mb-3 lg:mb-4">
             <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
               style={{ background: "linear-gradient(135deg,#7C3AED,#8B5CF6)", boxShadow: "0 0 12px #8B5CF640" }}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -552,7 +539,7 @@ export default function LobbyPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {/* Iniciar Mercado */}
             <AdminAction
               icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>}
@@ -653,10 +640,10 @@ export default function LobbyPage() {
         </div>
       )}
 
-      {/* Participants table */}
+      {/* Participants */}
       <div className="bg-[#131722] rounded-2xl border border-white/[0.04] overflow-hidden">
         {/* Toolbar */}
-        <div className="px-6 py-4 border-b border-white/[0.04] flex items-center justify-between gap-4">
+        <div className="px-4 lg:px-6 py-3 lg:py-4 border-b border-white/[0.04] flex items-center justify-between gap-3">
           <h2 className="text-[#F3F4F6] text-sm font-semibold">
             Participantes
           </h2>
@@ -664,7 +651,6 @@ export default function LobbyPage() {
             {refreshing && (
               <span className="text-[#9CA3AF] text-xs flex items-center gap-1.5">
                 <span className="w-3 h-3 border border-[#9CA3AF]/30 border-t-[#9CA3AF] rounded-full animate-spin" />
-                Actualizando…
               </span>
             )}
             <button
@@ -675,16 +661,7 @@ export default function LobbyPage() {
               }}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0D0F14] border border-white/[0.06] hover:border-[#8B5CF6]/30 text-[#9CA3AF] hover:text-[#F3F4F6] text-xs font-medium transition-all duration-200 cursor-pointer"
             >
-              <svg
-                width="12"
-                height="12"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
                 <polyline points="16 6 12 2 8 6" />
                 <line x1="12" y1="2" x2="12" y2="15" />
@@ -694,8 +671,8 @@ export default function LobbyPage() {
           </div>
         </div>
 
-        {/* Column headers */}
-        <div className={`grid px-6 py-3 border-b border-white/[0.04] ${isAdmin ? "grid-cols-[2fr_2fr_1fr_auto]" : "grid-cols-[2fr_2fr_1fr]"}`}>
+        {/* Desktop column headers — hidden on mobile */}
+        <div className={`hidden lg:grid px-6 py-3 border-b border-white/[0.04] ${isAdmin ? "grid-cols-[2fr_2fr_1fr_auto]" : "grid-cols-[2fr_2fr_1fr]"}`}>
           {["Nombre", "Equipo", "Estado", ...(isAdmin ? [""] : [])].map((col, i) => (
             <span key={i} className="text-[#9CA3AF] text-[11px] font-semibold uppercase tracking-wider">
               {col}
@@ -703,21 +680,11 @@ export default function LobbyPage() {
           ))}
         </div>
 
-        {/* Rows */}
         <AnimatePresence initial={false}>
           {tournament.members.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-center">
+            <div className="flex flex-col items-center justify-center py-12 lg:py-16 text-center px-4">
               <div className="w-12 h-12 rounded-2xl bg-[#0D0F14] border border-white/[0.04] flex items-center justify-center mb-3">
-                <svg
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="#9CA3AF"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
                   <circle cx="9" cy="7" r="4" />
                   <line x1="19" y1="8" x2="19" y2="14" />
@@ -729,9 +696,7 @@ export default function LobbyPage() {
               </p>
               <p className="text-[#9CA3AF] text-xs mt-1">
                 Comparte el código{" "}
-                <span className="font-mono text-[#8B5CF6]">
-                  {tournament.code}
-                </span>{" "}
+                <span className="font-mono text-[#8B5CF6]">{tournament.code}</span>{" "}
                 para que se unan
               </p>
             </div>
@@ -744,67 +709,103 @@ export default function LobbyPage() {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, x: -10 }}
                   transition={{ duration: 0.25, delay: idx * 0.03 }}
-                  className={`grid px-6 py-4 hover:bg-[#1A1F2E]/50 transition-colors duration-150 items-center
-                    ${isAdmin ? "grid-cols-[2fr_2fr_1fr_auto]" : "grid-cols-[2fr_2fr_1fr]"}`}
                 >
-                  {/* Name */}
-                  <div className="flex items-center gap-3">
-                    <div className="w-7 h-7 rounded-full bg-linear-to-br from-[#8B5CF6]/20 to-[#6D28D9]/20 border border-[#8B5CF6]/15 flex items-center justify-center shrink-0">
+                  {/* Mobile: stacked card layout */}
+                  <div className="flex lg:hidden items-center gap-3 px-4 py-3.5 active:bg-[#1A1F2E]/50 transition-colors duration-150">
+                    <div className="w-9 h-9 rounded-full bg-linear-to-br from-[#8B5CF6]/20 to-[#6D28D9]/20 border border-[#8B5CF6]/15 flex items-center justify-center shrink-0">
                       <span className="text-[#8B5CF6] text-xs font-semibold">
                         {member.displayName.charAt(0).toUpperCase()}
                       </span>
                     </div>
-                    <span className="text-[#F3F4F6] text-sm font-medium">
-                      {member.displayName}
-                    </span>
-                  </div>
-
-                  {/* Team */}
-                  <div className="flex items-center gap-2">
-                    {member.team?.crestUrl && (
-                      <img src={member.team.crestUrl} alt={member.team.name} className="w-5 h-5 object-contain shrink-0" />
-                    )}
-                    <span className={`text-sm ${member.team ? "text-[#F3F4F6]" : "text-[#9CA3AF]/40 italic"}`}>
-                      {member.team?.name ?? "Sin asignar"}
-                    </span>
-                  </div>
-
-                  {/* Status */}
-                  <div>
-                    <Badge
-                      status={member.team ? "assigned" : "pending"}
-                      label={member.team ? "Asignado" : "Pendiente"}
-                    />
-                  </div>
-
-                  {/* Delete — solo admin */}
-                  {isAdmin && (
-                    <button
-                      onClick={() => handleDeleteMember(member.id)}
-                      disabled={deletingId === member.id}
-                      title={confirmDelete === member.id ? "Haz clic de nuevo para confirmar" : "Eliminar participante"}
-                      className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all duration-150 cursor-pointer ml-2
-                        ${confirmDelete === member.id
-                          ? "bg-[#EF4444]/20 text-[#EF4444] border border-[#EF4444]/40"
-                          : "bg-transparent hover:bg-[#EF4444]/10 text-[#9CA3AF]/40 hover:text-[#EF4444] border border-transparent hover:border-[#EF4444]/20"
-                        } disabled:opacity-40`}
-                    >
-                      {deletingId === member.id ? (
-                        <span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
-                      ) : confirmDelete === member.id ? (
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                          <polyline points="20 6 9 17 4 12" />
-                        </svg>
-                      ) : (
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <polyline points="3 6 5 6 21 6" />
-                          <path d="M19 6l-1 14H6L5 6" />
-                          <path d="M10 11v6M14 11v6" />
-                          <path d="M9 6V4h6v2" />
-                        </svg>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[#F3F4F6] text-sm font-medium truncate">{member.displayName}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        {member.team?.crestUrl && (
+                          <img src={member.team.crestUrl} alt={member.team.name} className="w-4 h-4 object-contain shrink-0" />
+                        )}
+                        <span className={`text-xs truncate ${member.team ? "text-[#9CA3AF]" : "text-[#9CA3AF]/40 italic"}`}>
+                          {member.team?.name ?? "Sin asignar"}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="shrink-0 flex items-center gap-2">
+                      <Badge
+                        status={member.team ? "assigned" : "pending"}
+                        label={member.team ? "Asignado" : "Pendiente"}
+                      />
+                      {isAdmin && (
+                        <button
+                          onClick={() => handleDeleteMember(member.id)}
+                          disabled={deletingId === member.id}
+                          className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all duration-150 cursor-pointer
+                            ${confirmDelete === member.id
+                              ? "bg-[#EF4444]/20 text-[#EF4444] border border-[#EF4444]/40"
+                              : "text-[#9CA3AF]/30 active:bg-[#EF4444]/10 active:text-[#EF4444] border border-transparent"
+                            } disabled:opacity-40`}
+                        >
+                          {deletingId === member.id ? (
+                            <span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
+                          ) : confirmDelete === member.id ? (
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                              <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                          ) : (
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4h6v2" />
+                            </svg>
+                          )}
+                        </button>
                       )}
-                    </button>
-                  )}
+                    </div>
+                  </div>
+
+                  {/* Desktop: table row */}
+                  <div className={`hidden lg:grid px-6 py-4 hover:bg-[#1A1F2E]/50 transition-colors duration-150 items-center
+                    ${isAdmin ? "grid-cols-[2fr_2fr_1fr_auto]" : "grid-cols-[2fr_2fr_1fr]"}`}>
+                    <div className="flex items-center gap-3">
+                      <div className="w-7 h-7 rounded-full bg-linear-to-br from-[#8B5CF6]/20 to-[#6D28D9]/20 border border-[#8B5CF6]/15 flex items-center justify-center shrink-0">
+                        <span className="text-[#8B5CF6] text-xs font-semibold">
+                          {member.displayName.charAt(0).toUpperCase()}
+                        </span>
+                      </div>
+                      <span className="text-[#F3F4F6] text-sm font-medium">{member.displayName}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {member.team?.crestUrl && (
+                        <img src={member.team.crestUrl} alt={member.team.name} className="w-5 h-5 object-contain shrink-0" />
+                      )}
+                      <span className={`text-sm ${member.team ? "text-[#F3F4F6]" : "text-[#9CA3AF]/40 italic"}`}>
+                        {member.team?.name ?? "Sin asignar"}
+                      </span>
+                    </div>
+                    <div>
+                      <Badge status={member.team ? "assigned" : "pending"} label={member.team ? "Asignado" : "Pendiente"} />
+                    </div>
+                    {isAdmin && (
+                      <button
+                        onClick={() => handleDeleteMember(member.id)}
+                        disabled={deletingId === member.id}
+                        title={confirmDelete === member.id ? "Haz clic de nuevo para confirmar" : "Eliminar participante"}
+                        className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all duration-150 cursor-pointer ml-2
+                          ${confirmDelete === member.id
+                            ? "bg-[#EF4444]/20 text-[#EF4444] border border-[#EF4444]/40"
+                            : "bg-transparent hover:bg-[#EF4444]/10 text-[#9CA3AF]/40 hover:text-[#EF4444] border border-transparent hover:border-[#EF4444]/20"
+                          } disabled:opacity-40`}
+                      >
+                        {deletingId === member.id ? (
+                          <span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
+                        ) : confirmDelete === member.id ? (
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="20 6 9 17 4 12" />
+                          </svg>
+                        ) : (
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4h6v2" />
+                          </svg>
+                        )}
+                      </button>
+                    )}
+                  </div>
                 </motion.div>
               ))}
             </div>
@@ -812,22 +813,13 @@ export default function LobbyPage() {
         </AnimatePresence>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-white/[0.04] flex items-center justify-between">
+        <div className="px-4 lg:px-6 py-3 lg:py-4 border-t border-white/[0.04] flex items-center justify-between">
           {isAdmin && (
-            <span className="text-[#9CA3AF] text-xs flex items-center gap-1.5">
-              <svg
-                width="11"
-                height="11"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="#8B5CF6"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
+            <span className="text-[#9CA3AF] text-[11px] lg:text-xs flex items-center gap-1.5">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#8B5CF6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
               </svg>
-              Eres el administrador de este torneo
+              Administrador de este torneo
             </span>
           )}
         </div>

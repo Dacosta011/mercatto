@@ -211,50 +211,20 @@ export default function SubastasPage() {
   const finishedAuctions = auctions.filter((a) => a.phase === "finished");
 
   return (
-    <div className="min-h-screen bg-[#0D0F14] p-6">
+    <div className="min-h-screen bg-[#0D0F14] px-4 py-5 lg:p-6">
       <div className="max-w-6xl mx-auto">
         {/* Header */}
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-[#F3F4F6] text-2xl font-bold tracking-tight flex items-center gap-3">
-              <svg
-                width="28"
-                height="28"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="#8B5CF6"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-              </svg>
-              Subastas de Íconos
-            </h1>
-            <p className="text-[#9CA3AF] text-sm mt-1">
-              Puja por leyendas del fútbol. Las subastas son estilo eBay con
-              protección anti-sniping.
-            </p>
-          </div>
-          <div className="flex items-center gap-4">
-            {/* My budget */}
-            <div className="bg-[#131722] rounded-xl border border-white/8 px-4 py-2.5">
-              <p className="text-[#6B7280] text-[10px] uppercase font-medium">
-                Disponible
-              </p>
-              <p className="text-[#F3F4F6] text-base font-bold">{fmt(myBudget - myBudgetReserved)}</p>
-              {myBudgetReserved > 0 && (
-                <p className="text-[#F59E0B] text-[10px]">Reservado: {fmt(myBudgetReserved)}</p>
-              )}
-            </div>
-            <div className="bg-[#131722] rounded-xl border border-white/8 px-4 py-2.5">
-              <p className="text-[#6B7280] text-[10px] uppercase font-medium">
-                Slot ícono
-              </p>
-              <p
-                className={`text-base font-bold ${myIconSlotUsed ? "text-[#EF4444]" : "text-[#22C55E]"}`}
-              >
-                {myIconSlotUsed ? "Usado" : "Disponible"}
+        <div className="mb-5 lg:mb-8">
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <div className="min-w-0">
+              <h1 className="text-[#F3F4F6] text-lg lg:text-2xl font-bold tracking-tight flex items-center gap-2 lg:gap-3">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8B5CF6" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 lg:w-7 lg:h-7">
+                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                </svg>
+                Subastas
+              </h1>
+              <p className="text-[#9CA3AF] text-xs lg:text-sm mt-1">
+                Puja por leyendas. Anti-sniping activo.
               </p>
             </div>
             {adminToken && (
@@ -275,24 +245,31 @@ export default function SubastasPage() {
                     alert(d.error ?? "Error al crear subasta");
                   }
                 }}
-                className="px-5 py-2.5 rounded-xl bg-[#8B5CF6] hover:bg-[#7C3AED] text-white font-semibold text-sm transition-colors cursor-pointer flex items-center gap-2"
+                className="px-3 lg:px-5 py-2 lg:py-2.5 rounded-xl bg-[#8B5CF6] hover:bg-[#7C3AED] text-white font-semibold text-xs lg:text-sm transition-colors cursor-pointer flex items-center gap-1.5 shrink-0"
               >
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <line x1="12" y1="5" x2="12" y2="19" />
-                  <line x1="5" y1="12" x2="19" y2="12" />
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
                 </svg>
-                Iniciar Subasta
+                <span className="hidden sm:inline">Iniciar</span> Subasta
               </button>
             )}
+          </div>
+
+          {/* Budget summary — horizontal scroll on mobile */}
+          <div className="flex gap-2.5 overflow-x-auto pb-1 -mx-1 px-1">
+            <div className="bg-[#131722] rounded-xl border border-white/8 px-3.5 py-2.5 shrink-0 min-w-[120px]">
+              <p className="text-[#6B7280] text-[10px] uppercase font-medium">Disponible</p>
+              <p className="text-[#F3F4F6] text-sm lg:text-base font-bold">{fmt(myBudget - myBudgetReserved)}</p>
+              {myBudgetReserved > 0 && (
+                <p className="text-[#F59E0B] text-[10px]">Reserv: {fmt(myBudgetReserved)}</p>
+              )}
+            </div>
+            <div className="bg-[#131722] rounded-xl border border-white/8 px-3.5 py-2.5 shrink-0 min-w-[110px]">
+              <p className="text-[#6B7280] text-[10px] uppercase font-medium">Slot ícono</p>
+              <p className={`text-sm lg:text-base font-bold ${myIconSlotUsed ? "text-[#EF4444]" : "text-[#22C55E]"}`}>
+                {myIconSlotUsed ? "Usado" : "Disponible"}
+              </p>
+            </div>
           </div>
         </div>
 
@@ -524,7 +501,7 @@ function VotingCard({
       </div>
 
       {/* Candidates grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3 lg:gap-4">
         {a.candidates.map((icon) => {
           const col = ovrColor(icon.ovr);
           const voteCount = a.voteCounts[icon.id] ?? 0;

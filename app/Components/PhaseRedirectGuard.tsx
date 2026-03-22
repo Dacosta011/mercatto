@@ -8,6 +8,8 @@ import {
   getMemberId,
   clearTournamentTokens,
   saveTournamentStatus,
+  saveMarketOpen,
+  getMarketOpen,
   getTournamentStatus,
   type TournamentStatus,
 } from "@/lib/tokenStorage";
@@ -55,6 +57,15 @@ export default function PhaseRedirectGuard() {
       if (SUPPRESS_PREFIXES.some((p) => current.startsWith(p))) return;
       if (current === dest || current.startsWith(dest + "/")) return;
 
+      // In hybrid mode, don't redirect away from market pages during league transition
+      const marketStillOpen = getMarketOpen(code!);
+      if (
+        marketStillOpen &&
+        newStatus === "league" &&
+        (current === "/market" || current.startsWith("/market/") ||
+         current === "/subastas" || current.startsWith("/subastas/"))
+      ) return;
+
       router.push(dest);
     }
 
@@ -65,6 +76,9 @@ export default function PhaseRedirectGuard() {
         if (!res.ok) return;
         const data = await res.json();
         if (data.status) maybeRedirect(data.status as TournamentStatus);
+        if (typeof data.marketOpen === "boolean") {
+          saveMarketOpen(code!, data.marketOpen);
+        }
       } catch { /* non-blocking */ }
     }
     fetchStatus();
@@ -78,6 +92,9 @@ export default function PhaseRedirectGuard() {
         (payload: any) => {
           const newStatus = payload?.new?.status as TournamentStatus | undefined;
           if (newStatus) maybeRedirect(newStatus);
+          if (typeof payload?.new?.market_open === "boolean") {
+            saveMarketOpen(code!, payload.new.market_open);
+          }
         },
       )
       .subscribe();

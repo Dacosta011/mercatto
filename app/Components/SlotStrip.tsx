@@ -177,36 +177,64 @@ export default function SlotStrip({ teams, availableTeams, spinning, onTeamSelec
     if (spinning) hasResult.current = false;
   }, [spinning]);
 
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(1);
+
+  useEffect(() => {
+    const measure = () => {
+      if (!wrapperRef.current) return;
+      const available = wrapperRef.current.clientWidth;
+      setScale(available >= VIEWPORT ? 1 : available / VIEWPORT);
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
+
+  const scaledHeight = (CARD_W + 24) * scale;
+
   if (order.length === 0) return null;
 
   return (
-    <div className="relative" style={{ width: VIEWPORT, height: CARD_W + 24, overflow: "hidden" }}>
-      <StripInner x={x} strip={strip} />
-
-      {/* Side fades */}
-      <div className="absolute left-0 top-0 bottom-0 z-10 pointer-events-none"
-        style={{ width: 228, background: "linear-gradient(to right, #0D0F14 50%, transparent 100%)" }} />
-      <div className="absolute right-0 top-0 bottom-0 z-10 pointer-events-none"
-        style={{ width: 228, background: "linear-gradient(to left, #0D0F14 50%, transparent 100%)" }} />
-
-      {/* Center selector frame */}
-      <div className="absolute z-20 pointer-events-none"
+    <div ref={wrapperRef} className="w-full" style={{ height: scaledHeight }}>
+      <div
+        className="relative origin-top-left"
         style={{
-          top: 4, bottom: 4,
-          left: "50%",
-          width: CARD_W + 8,
-          transform: "translateX(-50%)",
-          border: "2px solid #8B5CF6",
-          borderRadius: 22,
-          boxShadow: "0 0 0 1px #8B5CF620, 0 0 32px #8B5CF650, 0 0 64px #8B5CF620",
-          background: "linear-gradient(180deg, #8B5CF608 0%, transparent 100%)",
-        }} />
+          width: VIEWPORT,
+          height: CARD_W + 24,
+          overflow: "hidden",
+          transform: scale < 1 ? `scale(${scale})` : undefined,
+          transformOrigin: "top center",
+          marginLeft: scale < 1 ? `calc(50% - ${VIEWPORT / 2 * scale}px)` : undefined,
+        }}
+      >
+        <StripInner x={x} strip={strip} />
 
-      {/* Top / bottom depth */}
-      <div className="absolute inset-x-0 top-0 h-3 z-10 pointer-events-none"
-        style={{ background: "linear-gradient(to bottom, #0D0F14, transparent)" }} />
-      <div className="absolute inset-x-0 bottom-0 h-3 z-10 pointer-events-none"
-        style={{ background: "linear-gradient(to top, #0D0F14, transparent)" }} />
+        {/* Side fades */}
+        <div className="absolute left-0 top-0 bottom-0 z-10 pointer-events-none"
+          style={{ width: 228, background: "linear-gradient(to right, #0D0F14 50%, transparent 100%)" }} />
+        <div className="absolute right-0 top-0 bottom-0 z-10 pointer-events-none"
+          style={{ width: 228, background: "linear-gradient(to left, #0D0F14 50%, transparent 100%)" }} />
+
+        {/* Center selector frame */}
+        <div className="absolute z-20 pointer-events-none"
+          style={{
+            top: 4, bottom: 4,
+            left: "50%",
+            width: CARD_W + 8,
+            transform: "translateX(-50%)",
+            border: "2px solid #8B5CF6",
+            borderRadius: 22,
+            boxShadow: "0 0 0 1px #8B5CF620, 0 0 32px #8B5CF650, 0 0 64px #8B5CF620",
+            background: "linear-gradient(180deg, #8B5CF608 0%, transparent 100%)",
+          }} />
+
+        {/* Top / bottom depth */}
+        <div className="absolute inset-x-0 top-0 h-3 z-10 pointer-events-none"
+          style={{ background: "linear-gradient(to bottom, #0D0F14, transparent)" }} />
+        <div className="absolute inset-x-0 bottom-0 h-3 z-10 pointer-events-none"
+          style={{ background: "linear-gradient(to top, #0D0F14, transparent)" }} />
+      </div>
     </div>
   );
 }
