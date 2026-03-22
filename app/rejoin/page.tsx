@@ -93,7 +93,7 @@ function RejoinContent() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6 bg-[#0D0F14]">
+    <div className="min-h-dvh flex items-center justify-center p-4 sm:p-6 bg-[#0D0F14]">
       <div
         className="fixed pointer-events-none"
         style={{
@@ -157,7 +157,7 @@ function RejoinContent() {
                 Volver al inicio
               </Link>
 
-              <div className="mb-8">
+              <div className="mb-6 sm:mb-8">
                 <div className="flex items-center gap-3 mb-3">
                   <div className="w-10 h-10 rounded-xl bg-[#8B5CF6]/10 border border-[#8B5CF6]/20 flex items-center justify-center">
                     <svg
@@ -176,7 +176,7 @@ function RejoinContent() {
                     </svg>
                   </div>
                   <div>
-                    <h1 className="text-[#F3F4F6] text-2xl font-bold tracking-tight">
+                    <h1 className="text-[#F3F4F6] text-xl sm:text-2xl font-bold tracking-tight">
                       Reingresar al Torneo
                     </h1>
                     <p className="text-[#9CA3AF] text-sm">
@@ -192,7 +192,41 @@ function RejoinContent() {
               >
                 <div className="h-px w-full bg-linear-to-r from-transparent via-[#8B5CF6]/40 to-transparent" />
 
-                <div className="p-6 flex flex-col gap-5">
+                <div className="p-4 sm:p-6 flex flex-col gap-5">
+                  {/* Paste magic link */}
+                  <div>
+                    <label className="block text-[#9CA3AF] text-xs font-semibold uppercase tracking-wider mb-2">
+                      Pegar enlace mágico
+                    </label>
+                    <input
+                      type="url"
+                      placeholder="Pega tu enlace completo aquí…"
+                      autoComplete="off"
+                      onChange={(e) => {
+                        const val = e.target.value.trim();
+                        if (!val) return;
+                        try {
+                          const url = new URL(val);
+                          const c = url.searchParams.get("code");
+                          const t = url.searchParams.get("token");
+                          if (c && t) {
+                            setCode(c.toUpperCase());
+                            setToken(t);
+                            setError(null);
+                            doRejoin(c, t);
+                          }
+                        } catch {}
+                      }}
+                      className="w-full bg-[#0D0F14] border border-white/8 rounded-xl px-4 py-3 text-[#F3F4F6] text-sm placeholder:text-[#9CA3AF]/30 focus:outline-none focus:border-[#8B5CF6]/40 transition-colors"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <div className="h-px flex-1 bg-white/6" />
+                    <span className="text-[#9CA3AF]/40 text-[10px] uppercase tracking-widest">o ingresa manualmente</span>
+                    <div className="h-px flex-1 bg-white/6" />
+                  </div>
+
                   {/* Code */}
                   <div>
                     <label className="block text-[#9CA3AF] text-xs font-semibold uppercase tracking-wider mb-2">
@@ -245,8 +279,8 @@ function RejoinContent() {
                       <line x1="12" y1="16" x2="12.01" y2="16" />
                     </svg>
                     <p className="text-[#9CA3AF] text-xs leading-relaxed">
-                      Si tienes tu enlace mágico, ábrelo directamente. Los
-                      campos se completarán automáticamente.
+                      Pega tu enlace mágico arriba para reingresar
+                      automáticamente, o ingresa el código y token manualmente.
                     </p>
                   </div>
 

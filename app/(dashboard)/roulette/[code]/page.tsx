@@ -240,7 +240,7 @@ export default function RoulettePage() {
   // ── Locked ────────────────────────────────────────────────────────────────
   if (phase === "locked" && pendingTeam) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-8 relative">
+      <div className="min-h-dvh flex flex-col items-center justify-center p-4 sm:p-8 relative">
         <div className="absolute pointer-events-none"
           style={{ width: 600, height: 600, background: "radial-gradient(circle, #8B5CF612 0%, transparent 65%)", top: "50%", left: "50%", transform: "translate(-50%,-50%)" }} />
         <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}
@@ -271,8 +271,8 @@ export default function RoulettePage() {
 
   // ── Error ─────────────────────────────────────────────────────────────────
   if (phase === "error") return (
-    <div className="min-h-screen flex items-center justify-center p-8">
-      <div className="bg-[#131722] rounded-2xl border border-[#EF4444]/20 p-10 max-w-sm w-full flex flex-col items-center gap-5 text-center">
+    <div className="min-h-dvh flex items-center justify-center p-4 sm:p-8">
+      <div className="bg-[#131722] rounded-2xl border border-[#EF4444]/20 p-6 sm:p-10 max-w-sm w-full flex flex-col items-center gap-5 text-center">
         <div className="w-12 h-12 rounded-2xl bg-[#EF4444]/10 flex items-center justify-center">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
@@ -292,26 +292,26 @@ export default function RoulettePage() {
 
   // ── Main layout ───────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-dvh flex flex-col overflow-x-hidden">
       {/* Header */}
-      <div className="px-8 pt-8 pb-6 flex items-center justify-between gap-4 shrink-0">
+      <div className="px-4 sm:px-8 pt-5 sm:pt-8 pb-4 sm:pb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 shrink-0">
         <div>
-          <h1 className="text-[#F3F4F6] text-2xl font-bold tracking-tight">Asignación de Equipos</h1>
-          <p className="text-[#9CA3AF] text-sm mt-0.5">El destino asigna. El mercado castiga.</p>
+          <h1 className="text-[#F3F4F6] text-xl sm:text-2xl font-bold tracking-tight">Asignación de Equipos</h1>
+          <p className="text-[#9CA3AF] text-xs sm:text-sm mt-0.5">El destino asigna. El mercado castiga.</p>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#131722] border border-white/6 text-[#9CA3AF] text-xs font-medium">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 overflow-x-auto">
+          <span className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full bg-[#131722] border border-white/6 text-[#9CA3AF] text-[11px] sm:text-xs font-medium shrink-0">
             <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E]" />
             {availableTeams.length} disponibles
           </span>
           {takenIds.size > 0 && (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#131722] border border-white/6 text-[#9CA3AF] text-xs font-medium">
+            <span className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full bg-[#131722] border border-white/6 text-[#9CA3AF] text-[11px] sm:text-xs font-medium shrink-0">
               <span className="w-1.5 h-1.5 rounded-full bg-[#EF4444]/60" />
               {takenIds.size} asignados
             </span>
           )}
           {rerollsAllowed > 0 && (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#131722] border border-white/6 text-[#9CA3AF] text-xs font-medium">
+            <span className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full bg-[#131722] border border-white/6 text-[#9CA3AF] text-[11px] sm:text-xs font-medium shrink-0">
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
               </svg>
@@ -322,7 +322,7 @@ export default function RoulettePage() {
       </div>
 
       {/* Body */}
-      <div className="flex-1 flex flex-col items-center px-8 pb-8 gap-8">
+      <div className="flex-1 flex flex-col items-center px-4 sm:px-8 pb-6 sm:pb-8 gap-5 sm:gap-8">
 
         {/* Strip + CTA */}
         <div className="flex flex-col items-center gap-5 w-full">
@@ -466,7 +466,7 @@ export default function RoulettePage() {
                     {availableTeams.length} disponibles · {takenIds.size} asignados
                   </span>
                 </div>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {allTeams.map((team) => (
                     <TeamCard
                       key={team.id ?? team.name}
@@ -550,7 +550,7 @@ function ResultCard({
       }}>
       <div className="h-1" style={{ background: "linear-gradient(90deg, #8B5CF6, #6D28D9)" }} />
 
-      <div className="p-8 flex flex-col items-center gap-6">
+      <div className="p-5 sm:p-8 flex flex-col items-center gap-5 sm:gap-6">
         {preview && (
           <span className="text-[10px] uppercase tracking-widest font-semibold px-3 py-1 rounded-full bg-[#8B5CF6]/12 text-[#8B5CF6] border border-[#8B5CF6]/20">
             Vista previa — pendiente de confirmar
@@ -578,7 +578,7 @@ function ResultCard({
         <motion.h2
           initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, delay: 0.2 }}
-          className="text-[#F3F4F6] text-3xl font-bold tracking-tight text-center"
+          className="text-[#F3F4F6] text-2xl sm:text-3xl font-bold tracking-tight text-center"
         >
           {team.name}
         </motion.h2>
@@ -586,7 +586,7 @@ function ResultCard({
         {budget && (
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.35, delay: 0.3 }}>
-            <div className="bg-[#22C55E]/8 border border-[#22C55E]/20 rounded-2xl px-8 py-4 text-center">
+            <div className="bg-[#22C55E]/8 border border-[#22C55E]/20 rounded-2xl px-6 sm:px-8 py-3 sm:py-4 text-center">
               <p className="text-[#9CA3AF] text-[10px] uppercase tracking-wider mb-1">Presupuesto</p>
               <p className="text-[#22C55E] text-2xl font-bold">{budget}</p>
             </div>

@@ -23,11 +23,13 @@ export async function registerPushSubscription(
   if (!VAPID_PUBLIC_KEY) return false;
 
   try {
-    const registration = await navigator.serviceWorker.register("/sw.js");
-    await navigator.serviceWorker.ready;
-
+    // Permission MUST be the first await — Safari/iOS blocks it
+    // if any async operation runs before the user-gesture context expires
     const permission = await Notification.requestPermission();
     if (permission !== "granted") return false;
+
+    const registration = await navigator.serviceWorker.register("/sw.js");
+    await navigator.serviceWorker.ready;
 
     const subscription = await registration.pushManager.subscribe({
       userVisibleOnly: true,

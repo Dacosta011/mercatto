@@ -141,6 +141,80 @@ export function subscribeToStore(callback: () => void): () => void {
   return () => window.removeEventListener("mercatto:store-change", callback);
 }
 
+// ─── Market Open flag (hybrid state: market active during league) ─────────────
+
+const MARKET_OPEN_KEY = (tournamentCode: string) =>
+  `mercatto:marketOpen:${tournamentCode}`;
+
+export function saveMarketOpen(tournamentCode: string, open: boolean) {
+  if (open) {
+    localStorage.setItem(MARKET_OPEN_KEY(tournamentCode), "true");
+  } else {
+    localStorage.removeItem(MARKET_OPEN_KEY(tournamentCode));
+  }
+  window.dispatchEvent(new Event("mercatto:store-change"));
+}
+
+export function getMarketOpen(tournamentCode: string): boolean {
+  return localStorage.getItem(MARKET_OPEN_KEY(tournamentCode)) === "true";
+}
+
+// ─── Derived active-state helpers ────────────────────────────────────────────
+
+export function isMarketActive(tournamentCode: string): boolean {
+  const status = getTournamentStatus(tournamentCode);
+  return status === "market" || getMarketOpen(tournamentCode);
+}
+
+export function isLeagueActive(tournamentCode: string): boolean {
+  const status = getTournamentStatus(tournamentCode);
+  return status === "league" || status === "complete";
+}
+
+// ─── Navigation badges ──────────────────────────────────────────────────────
+
+export type BadgePriority = "critical" | "important" | "info";
+
+export interface NavBadge {
+  count: number;
+  priority: BadgePriority;
+}
+
+const BADGE_KEY = (tournamentCode: string, tab: string) =>
+  `mercatto:badge:${tab}:${tournamentCode}`;
+
+export function saveNavBadge(
+  tournamentCode: string,
+  tab: string,
+  badge: NavBadge | null
+) {
+  const key = BADGE_KEY(tournamentCode, tab);
+  if (badge && badge.count > 0) {
+    localStorage.setItem(key, JSON.stringify(badge));
+  } else {
+    localStorage.removeItem(key);
+  }
+  window.dispatchEvent(new Event("mercatto:store-change"));
+}
+
+export function getNavBadge(
+  tournamentCode: string,
+  tab: string
+): NavBadge | null {
+  const raw = localStorage.getItem(BADGE_KEY(tournamentCode, tab));
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+export function clearNavBadge(tournamentCode: string, tab: string) {
+  localStorage.removeItem(BADGE_KEY(tournamentCode, tab));
+  window.dispatchEvent(new Event("mercatto:store-change"));
+}
+
 // ─── Limpiar (logout de un torneo) ───────────────────────────────────────────
 
 export function clearTournamentTokens(tournamentCode: string) {
@@ -153,5 +227,9 @@ export function clearTournamentTokens(tournamentCode: string) {
   localStorage.removeItem(TEAM_CREST_KEY(tournamentCode));
   localStorage.removeItem(TEAM_KEY(tournamentCode));
   localStorage.removeItem(LAST_TOURNAMENT_KEY);
+  localStorage.removeItem(MARKET_OPEN_KEY(tournamentCode));
+  for (const tab of ["market", "torneo", "feed"]) {
+    localStorage.removeItem(BADGE_KEY(tournamentCode, tab));
+  }
   window.dispatchEvent(new Event("mercatto:store-change"));
 }

@@ -127,7 +127,7 @@ export default function CreateTournamentPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6">
+    <div className="min-h-dvh flex items-center justify-center p-4 sm:p-6">
       {/* Faint background glow */}
       <div
         className="fixed pointer-events-none"
@@ -163,8 +163,8 @@ export default function CreateTournamentPage() {
               </Link>
 
               {/* Header */}
-              <div className="mb-8">
-                <h1 className="text-[#F3F4F6] text-3xl font-bold tracking-tight mb-2">
+              <div className="mb-6 sm:mb-8">
+                <h1 className="text-[#F3F4F6] text-2xl sm:text-3xl font-bold tracking-tight mb-1.5 sm:mb-2">
                   Crear Torneo
                 </h1>
                 <p className="text-[#9CA3AF] text-sm">
@@ -180,7 +180,7 @@ export default function CreateTournamentPage() {
                 {/* Top accent */}
                 <div className="h-px w-full bg-linear-to-r from-transparent via-[#8B5CF6]/40 to-transparent" />
 
-                <div className="p-8 flex flex-col gap-7">
+                <div className="p-5 sm:p-8 flex flex-col gap-5 sm:gap-7">
                   {/* Tournament name */}
                   <FormInput
                     label="Nombre del Torneo"
@@ -225,21 +225,21 @@ export default function CreateTournamentPage() {
                       </label>
                       <span className="text-[#9CA3AF] text-xs">Fijo</span>
                     </div>
-                    <div className="bg-[#0D0F14] border border-white/[0.07] rounded-xl p-4">
+                    <div className="bg-[#0D0F14] border border-white/[0.07] rounded-xl p-3 sm:p-4">
                       <div className="flex items-center justify-between mb-3">
                         <div className="text-center">
                           <p className="text-[#9CA3AF] text-[10px] uppercase tracking-wider mb-1">Mínimo</p>
-                          <p className="text-[#F3F4F6] text-lg font-semibold">€100M</p>
+                          <p className="text-[#F3F4F6] text-base sm:text-lg font-semibold">€100M</p>
                         </div>
-                        <div className="flex-1 mx-5 flex flex-col items-center gap-2">
+                        <div className="flex-1 mx-3 sm:mx-5 flex flex-col items-center gap-1.5 sm:gap-2">
                           <div className="w-full h-1 bg-[#1A1F2E] rounded-full overflow-hidden">
                             <div className="h-full bg-linear-to-r from-[#8B5CF6] to-[#6D28D9] rounded-full w-full" />
                           </div>
-                          <span className="text-[#9CA3AF] text-[10px]">Asignado por ruleta</span>
+                          <span className="text-[#9CA3AF] text-[9px] sm:text-[10px]">Asignado por ruleta</span>
                         </div>
                         <div className="text-center">
                           <p className="text-[#9CA3AF] text-[10px] uppercase tracking-wider mb-1">Máximo</p>
-                          <p className="text-[#F3F4F6] text-lg font-semibold">€400M</p>
+                          <p className="text-[#F3F4F6] text-base sm:text-lg font-semibold">€400M</p>
                         </div>
                       </div>
                     </div>
@@ -256,11 +256,11 @@ export default function CreateTournamentPage() {
                       </label>
                       <span className="text-[#9CA3AF] text-xs">Por participante</span>
                     </div>
-                    <div className="bg-[#0D0F14] border border-white/[0.07] rounded-xl px-4 py-3 flex items-center justify-between">
-                      <p className="text-[#9CA3AF] text-sm">
+                    <div className="bg-[#0D0F14] border border-white/[0.07] rounded-xl px-3 sm:px-4 py-3 flex items-center justify-between gap-3">
+                      <p className="text-[#9CA3AF] text-xs sm:text-sm">
                         Veces que se puede girar de nuevo
                       </p>
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
                         <button
                           type="button"
                           onClick={() => setRerolls((r) => Math.max(0, r - 1))}
@@ -295,11 +295,11 @@ export default function CreateTournamentPage() {
                       </label>
                       <span className="text-[#9CA3AF] text-xs">Por participante</span>
                     </div>
-                    <div className="bg-[#0D0F14] border border-white/[0.07] rounded-xl px-4 py-3 flex items-center justify-between">
-                      <p className="text-[#9CA3AF] text-sm">
+                    <div className="bg-[#0D0F14] border border-white/[0.07] rounded-xl px-3 sm:px-4 py-3 flex items-center justify-between gap-3">
+                      <p className="text-[#9CA3AF] text-xs sm:text-sm">
                         Máximo de fichajes permitidos
                       </p>
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
                         <button
                           type="button"
                           onClick={() => setMaxTransfers((v) => Math.max(1, v - 1))}
@@ -331,9 +331,9 @@ export default function CreateTournamentPage() {
                     <label className="text-[#F3F4F6] text-sm font-medium">
                       Protección de Cláusula
                     </label>
-                    <div className="bg-[#0D0F14] border border-white/[0.07] rounded-xl px-4 py-3 flex items-center justify-between">
+                    <div className="bg-[#0D0F14] border border-white/[0.07] rounded-xl px-3 sm:px-4 py-3 flex items-center justify-between gap-3">
                       <div>
-                        <p className="text-[#9CA3AF] text-sm">
+                        <p className="text-[#9CA3AF] text-xs sm:text-sm">
                           Cada equipo solo puede perder 1 jugador por cláusula
                         </p>
                       </div>
@@ -407,9 +407,9 @@ export default function CreateTournamentPage() {
                 {/* Green accent top bar */}
                 <div className="h-1 w-full bg-linear-to-r from-transparent via-[#22C55E]/60 to-transparent" />
 
-                <div className="p-8">
+                <div className="p-5 sm:p-8">
                   {/* Icon + title */}
-                  <div className="flex items-center gap-4 mb-8">
+                  <div className="flex items-center gap-3 sm:gap-4 mb-6 sm:mb-8">
                     <div className="w-12 h-12 rounded-2xl bg-[#22C55E]/10 border border-[#22C55E]/20 flex items-center justify-center shrink-0">
                       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#22C55E" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
@@ -417,7 +417,7 @@ export default function CreateTournamentPage() {
                       </svg>
                     </div>
                     <div>
-                      <h2 className="text-[#F3F4F6] text-xl font-bold tracking-tight">
+                      <h2 className="text-[#F3F4F6] text-lg sm:text-xl font-bold tracking-tight">
                         ¡Torneo creado!
                       </h2>
                       <p className="text-[#9CA3AF] text-sm mt-0.5">
@@ -483,7 +483,7 @@ export default function CreateTournamentPage() {
                   </div>
 
                   {/* Actions */}
-                  <div className="flex gap-3 mt-8">
+                  <div className="flex flex-col sm:flex-row gap-3 mt-6 sm:mt-8">
                     <Button
                       variant="primary"
                       size="md"

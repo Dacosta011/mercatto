@@ -95,35 +95,33 @@ export default function TablePage() {
 
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}
-      className="p-8 max-w-5xl mx-auto">
+      className="px-4 py-5 lg:p-8 max-w-5xl mx-auto">
 
       {/* Header */}
-      <div className="flex items-start justify-between mb-8 gap-4">
-        <div>
-          <p className="text-[#9CA3AF] text-xs uppercase tracking-widest font-medium mb-1">Clasificación</p>
-          <h1 className="text-[#F3F4F6] text-2xl font-bold tracking-tight">{data.tournamentName}</h1>
-          <p className="text-[#9CA3AF] text-sm mt-1">
-            Fecha {session.currentMatchday} de {session.totalMatchdays}
-            {isFinished && <span className="ml-2 text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#8B5CF6]/15 text-[#8B5CF6] uppercase">Finalizada</span>}
-          </p>
-        </div>
+      <div className="mb-5 lg:mb-8">
+        <p className="text-[#9CA3AF] text-[10px] lg:text-xs uppercase tracking-widest font-medium mb-0.5">Clasificación</p>
+        <h1 className="text-[#F3F4F6] text-lg lg:text-2xl font-bold tracking-tight">{data.tournamentName}</h1>
+        <p className="text-[#9CA3AF] text-xs lg:text-sm mt-1">
+          Fecha {session.currentMatchday}/{session.totalMatchdays}
+          {isFinished && <span className="ml-2 text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#8B5CF6]/15 text-[#8B5CF6] uppercase">Finalizada</span>}
+        </p>
       </div>
 
       {/* Champion reveal */}
       {isFinished && champion && (
         <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.2 }}
-          className="mb-8 rounded-2xl overflow-hidden relative"
+          className="mb-5 lg:mb-8 rounded-2xl overflow-hidden relative"
           style={{ background: "linear-gradient(135deg, #4C1D95, #2D1B69)", border: "1px solid #8B5CF640", boxShadow: "0 0 40px #8B5CF630" }}>
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,#8B5CF620,transparent_60%)]" />
-          <div className="relative p-8 flex items-center gap-6">
-            <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-4xl shrink-0"
+          <div className="relative p-5 lg:p-8 flex items-center gap-4 lg:gap-6">
+            <div className="w-12 h-12 lg:w-16 lg:h-16 rounded-2xl flex items-center justify-center text-3xl lg:text-4xl shrink-0"
               style={{ background: "#8B5CF620", border: "1px solid #8B5CF640" }}>
               🏆
             </div>
-            <div>
-              <p className="text-[#A78BFA] text-xs uppercase tracking-widest font-bold mb-1">Campeón del Torneo</p>
-              <p className="text-white text-2xl font-black">{champion.displayName}</p>
-              <p className="text-[#C4B5FD] text-sm mt-0.5">{champion.teamName} · {champion.points} pts · {champion.wins}V {champion.draws}E {champion.losses}D</p>
+            <div className="min-w-0">
+              <p className="text-[#A78BFA] text-[10px] lg:text-xs uppercase tracking-widest font-bold mb-0.5">Campeón</p>
+              <p className="text-white text-lg lg:text-2xl font-black truncate">{champion.displayName}</p>
+              <p className="text-[#C4B5FD] text-xs lg:text-sm mt-0.5 truncate">{champion.teamName} · {champion.points} pts</p>
             </div>
           </div>
         </motion.div>
@@ -143,21 +141,8 @@ export default function TablePage() {
       {/* Table */}
       {tab === "table" && (
         <div className="bg-[#131722] rounded-2xl border border-white/4 overflow-hidden">
-          {/* Headers */}
-          <div className="grid grid-cols-[2rem_2fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr_1.5rem] gap-2 px-5 py-3 border-b border-white/4 text-[#9CA3AF] text-[10px] font-bold uppercase tracking-wider">
-            <span>#</span>
-            <span>Equipo</span>
-            <span className="text-center">PJ</span>
-            <span className="text-center">G</span>
-            <span className="text-center">E</span>
-            <span className="text-center">P</span>
-            <span className="text-center">GF</span>
-            <span className="text-center">GC</span>
-            <span className="text-center">DG</span>
-            <span className="text-center">Pts</span>
-          </div>
-
-          <div className="divide-y divide-white/3">
+          {/* Mobile: compact ranking cards */}
+          <div className="lg:hidden divide-y divide-white/3">
             {table.map((row, idx) => {
               const isMe = row.memberId === myMemberId;
               const isTop3 = idx < 3;
@@ -165,56 +150,96 @@ export default function TablePage() {
 
               return (
                 <motion.div key={row.memberId}
-                  initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: idx * 0.04 }}
-                  className={`grid grid-cols-[2rem_2fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr_1.5rem] gap-2 px-5 py-3.5 items-center transition-colors duration-150
-                    ${isMe ? "bg-[#8B5CF6]/5" : "hover:bg-[#1A1F2E]/40"}`}
-                  style={isTop3 ? { borderLeft: `2px solid ${topColors[idx]}` } : {}}>
-
-                  {/* Position */}
-                  <div className="flex items-center justify-center">
-                    {isTop3
-                      ? <span className="text-sm">{MEDAL[idx]}</span>
-                      : <span className="text-[#9CA3AF] text-xs font-semibold tabular-nums">{idx + 1}</span>
-                    }
-                  </div>
-
-                  {/* Name */}
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
+                  initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: idx * 0.03 }}
+                  className={`px-4 py-3 ${isMe ? "bg-[#8B5CF6]/5" : ""}`}
+                  style={isTop3 ? { borderLeft: `3px solid ${topColors[idx]}` } : {}}>
+                  <div className="flex items-center gap-3">
+                    <div className="w-7 flex items-center justify-center shrink-0">
+                      {isTop3
+                        ? <span className="text-sm">{MEDAL[idx]}</span>
+                        : <span className="text-[#9CA3AF] text-xs font-bold tabular-nums">{idx + 1}</span>
+                      }
+                    </div>
+                    <div className="flex-1 min-w-0">
                       <p className={`text-sm font-semibold truncate ${isMe ? "text-[#8B5CF6]" : "text-[#F3F4F6]"}`}>
                         {row.displayName}
-                        {isMe && <span className="ml-1 text-[9px] font-bold text-[#8B5CF6]/60">(tú)</span>}
+                        {isMe && <span className="ml-1 text-[9px] text-[#8B5CF6]/60">(tú)</span>}
                       </p>
+                      <p className="text-[#9CA3AF] text-[10px] truncate">{row.teamName}</p>
                     </div>
-                    <p className="text-[#9CA3AF] text-[10px] truncate">{row.teamName}</p>
-                  </div>
-
-                  <span className="text-center text-[#9CA3AF] text-xs tabular-nums">{row.played}</span>
-                  <span className="text-center text-[#22C55E] text-xs font-semibold tabular-nums">{row.wins}</span>
-                  <span className="text-center text-[#F59E0B] text-xs font-semibold tabular-nums">{row.draws}</span>
-                  <span className="text-center text-[#EF4444] text-xs font-semibold tabular-nums">{row.losses}</span>
-                  <span className="text-center text-[#F3F4F6] text-xs tabular-nums">{row.gf}</span>
-                  <span className="text-center text-[#9CA3AF] text-xs tabular-nums">{row.ga}</span>
-                  <div className="text-center text-xs tabular-nums"><GdCell gd={row.gd} /></div>
-
-                  {/* Points */}
-                  <div className="flex items-center justify-center">
-                    <span className={`text-sm font-black tabular-nums ${isTop3 ? "" : "text-[#F3F4F6]"}`}
-                      style={isTop3 ? { color: topColors[idx] } : {}}>
-                      {row.points}
-                    </span>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <div className="flex items-center gap-1 text-[10px] font-medium">
+                        <span className="text-[#22C55E]">{row.wins}V</span>
+                        <span className="text-[#F59E0B]">{row.draws}E</span>
+                        <span className="text-[#EF4444]">{row.losses}D</span>
+                      </div>
+                      <div className="text-[10px] tabular-nums"><GdCell gd={row.gd} /></div>
+                      <span className={`text-base font-black tabular-nums min-w-[24px] text-right ${isTop3 ? "" : "text-[#F3F4F6]"}`}
+                        style={isTop3 ? { color: topColors[idx] } : {}}>
+                        {row.points}
+                      </span>
+                    </div>
                   </div>
                 </motion.div>
               );
             })}
           </div>
 
+          {/* Desktop: full table */}
+          <div className="hidden lg:block">
+            <div className="grid grid-cols-[2rem_2fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr_1.5rem] gap-2 px-5 py-3 border-b border-white/4 text-[#9CA3AF] text-[10px] font-bold uppercase tracking-wider">
+              <span>#</span><span>Equipo</span>
+              <span className="text-center">PJ</span><span className="text-center">G</span>
+              <span className="text-center">E</span><span className="text-center">P</span>
+              <span className="text-center">GF</span><span className="text-center">GC</span>
+              <span className="text-center">DG</span><span className="text-center">Pts</span>
+            </div>
+
+            <div className="divide-y divide-white/3">
+              {table.map((row, idx) => {
+                const isMe = row.memberId === myMemberId;
+                const isTop3 = idx < 3;
+                const topColors = ["#F59E0B", "#9CA3AF", "#CD7C3F"];
+
+                return (
+                  <motion.div key={row.memberId}
+                    initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: idx * 0.04 }}
+                    className={`grid grid-cols-[2rem_2fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr_1.5rem] gap-2 px-5 py-3.5 items-center transition-colors duration-150
+                      ${isMe ? "bg-[#8B5CF6]/5" : "hover:bg-[#1A1F2E]/40"}`}
+                    style={isTop3 ? { borderLeft: `2px solid ${topColors[idx]}` } : {}}>
+                    <div className="flex items-center justify-center">
+                      {isTop3 ? <span className="text-sm">{MEDAL[idx]}</span> : <span className="text-[#9CA3AF] text-xs font-semibold tabular-nums">{idx + 1}</span>}
+                    </div>
+                    <div className="min-w-0">
+                      <p className={`text-sm font-semibold truncate ${isMe ? "text-[#8B5CF6]" : "text-[#F3F4F6]"}`}>
+                        {row.displayName}{isMe && <span className="ml-1 text-[9px] font-bold text-[#8B5CF6]/60">(tú)</span>}
+                      </p>
+                      <p className="text-[#9CA3AF] text-[10px] truncate">{row.teamName}</p>
+                    </div>
+                    <span className="text-center text-[#9CA3AF] text-xs tabular-nums">{row.played}</span>
+                    <span className="text-center text-[#22C55E] text-xs font-semibold tabular-nums">{row.wins}</span>
+                    <span className="text-center text-[#F59E0B] text-xs font-semibold tabular-nums">{row.draws}</span>
+                    <span className="text-center text-[#EF4444] text-xs font-semibold tabular-nums">{row.losses}</span>
+                    <span className="text-center text-[#F3F4F6] text-xs tabular-nums">{row.gf}</span>
+                    <span className="text-center text-[#9CA3AF] text-xs tabular-nums">{row.ga}</span>
+                    <div className="text-center text-xs tabular-nums"><GdCell gd={row.gd} /></div>
+                    <div className="flex items-center justify-center">
+                      <span className={`text-sm font-black tabular-nums ${isTop3 ? "" : "text-[#F3F4F6]"}`}
+                        style={isTop3 ? { color: topColors[idx] } : {}}>{row.points}</span>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+          </div>
+
           {/* Legend */}
-          <div className="px-5 py-3 border-t border-white/4 flex items-center gap-5 text-[10px] text-[#9CA3AF]">
-            <span><span className="font-bold text-[#22C55E]">G</span> Victoria = 3 pts</span>
-            <span><span className="font-bold text-[#F59E0B]">E</span> Empate = 1 pt</span>
-            <span><span className="font-bold text-[#EF4444]">P</span> Derrota = 0 pts</span>
+          <div className="px-4 lg:px-5 py-2.5 lg:py-3 border-t border-white/4 flex items-center gap-3 lg:gap-5 text-[9px] lg:text-[10px] text-[#9CA3AF]">
+            <span><span className="font-bold text-[#22C55E]">G</span> = 3 pts</span>
+            <span><span className="font-bold text-[#F59E0B]">E</span> = 1 pt</span>
+            <span><span className="font-bold text-[#EF4444]">P</span> = 0 pts</span>
           </div>
         </div>
       )}

@@ -177,7 +177,7 @@ export default function MagicLinkPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6">
+    <div className="min-h-dvh flex items-center justify-center p-4 sm:p-6">
       <div
         className="fixed pointer-events-none"
         style={{
@@ -198,8 +198,8 @@ export default function MagicLinkPage() {
         className="w-full max-w-lg z-10"
       >
         {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-[#F3F4F6] text-2xl font-bold tracking-tight flex items-center gap-3">
+        <div className="mb-5 sm:mb-6">
+          <h1 className="text-[#F3F4F6] text-xl sm:text-2xl font-bold tracking-tight flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-[#8B5CF6]/10 border border-[#8B5CF6]/20 flex items-center justify-center shrink-0">
               <svg
                 width="18"
@@ -225,7 +225,7 @@ export default function MagicLinkPage() {
         <div className="bg-[#131722] rounded-2xl border border-white/5 overflow-hidden">
           <div className="h-px w-full bg-linear-to-r from-transparent via-[#8B5CF6]/30 to-transparent" />
 
-          <div className="p-6 space-y-6">
+          <div className="p-4 sm:p-6 space-y-5 sm:space-y-6">
             {/* Magic Link */}
             <div>
               <label className="text-[#9CA3AF] text-xs uppercase tracking-wider font-semibold mb-2 block">
@@ -346,8 +346,8 @@ export default function MagicLinkPage() {
             </div>
 
             {/* Regenerate */}
-            <div className="rounded-xl border border-white/6 bg-[#0D0F14]/50 p-4">
-              <div className="flex items-center justify-between">
+            <div className="rounded-xl border border-white/6 bg-[#0D0F14]/50 p-3 sm:p-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <p className="text-[#F3F4F6] text-sm font-medium">
                     Regenerar enlace

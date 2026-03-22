@@ -779,11 +779,11 @@ export default function MarketPage() {
 
   return (
     <div className="relative h-full overflow-hidden bg-[#0D0F14]">
-      <div className="h-full min-h-0 px-4 md:px-6 pb-6 pt-4">
-        <div className="h-full min-h-0 flex flex-col xl:flex-row gap-4">
-          {/* ── LEFT: Mercatto Insider Feed ─────────────────────────────── */}
+      <div className="h-full min-h-0 px-2 sm:px-4 md:px-6 pb-4 lg:pb-6 pt-3 lg:pt-4">
+        <div className="h-full min-h-0 flex flex-col xl:flex-row gap-3 lg:gap-4">
+          {/* ── LEFT: Mercatto Insider Feed (hidden on mobile) ──────────── */}
           <aside
-            className={`bg-[#131722] border border-white/6 rounded-3xl min-h-0 overflow-hidden transition-all duration-200 ease-out ${
+            className={`hidden xl:block bg-[#131722] border border-white/6 rounded-3xl min-h-0 overflow-hidden transition-all duration-200 ease-out ${
               sidebarCollapsed ? "xl:w-18" : "xl:w-85"
             }`}
           >
@@ -915,25 +915,25 @@ export default function MarketPage() {
           </aside>
 
           {/* ── CENTER: Market Grid ──────────────────────────────────────── */}
-          <section className="flex-1 min-h-0 rounded-3xl border bg-[#131722] overflow-hidden border-white/6">
+          <section className="flex-1 min-h-0 rounded-2xl lg:rounded-3xl border bg-[#131722] overflow-hidden border-white/6">
             <div className="h-full flex flex-col min-h-0">
               {/* Header with timer */}
-              <div className="px-4 md:px-5 py-4 border-b border-white/6">
-                <div className="flex items-center justify-between gap-3 flex-wrap">
-                  <div className="flex items-center gap-3">
+              <div className="px-3 lg:px-5 py-3 lg:py-4 border-b border-white/6">
+                <div className="flex items-center justify-between gap-2 lg:gap-3">
+                  <div className="flex items-center gap-2 lg:gap-3 min-w-0">
                     <div
-                      className={`px-4 py-2.5 rounded-xl bg-[#0D0F14] border ${timerBorder} text-center`}
+                      className={`px-3 lg:px-4 py-2 lg:py-2.5 rounded-xl bg-[#0D0F14] border ${timerBorder} text-center shrink-0`}
                     >
-                      <p className="text-[9px] text-[#9CA3AF] uppercase tracking-widest">
+                      <p className="text-[8px] lg:text-[9px] text-[#9CA3AF] uppercase tracking-widest">
                         Cierra en
                       </p>
                       <p
-                        className={`text-lg font-bold tabular-nums ${timerColor}`}
+                        className={`text-base lg:text-lg font-bold tabular-nums ${timerColor}`}
                       >
                         {formatCountdown(liveTimer)}
                       </p>
                     </div>
-                    <div>
+                    <div className="hidden sm:block">
                       <p className="text-[#F3F4F6] text-sm font-semibold">
                         Mercado Abierto
                       </p>
@@ -942,12 +942,12 @@ export default function MarketPage() {
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5 lg:gap-2">
                     {isAdmin && (
                       <button
                         onClick={doCloseMarket}
                         disabled={actionLoading}
-                        className="px-4 py-2 rounded-xl bg-[#EF4444] hover:bg-[#DC2626] text-white text-sm font-semibold transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-2"
+                        className="px-2.5 lg:px-4 py-2 rounded-xl bg-[#EF4444] hover:bg-[#DC2626] text-white text-xs lg:text-sm font-semibold transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
                       >
                         <svg
                           width="14"
@@ -961,7 +961,8 @@ export default function MarketPage() {
                         >
                           <polyline points="20 6 9 17 4 12" />
                         </svg>
-                        Cerrar Mercado
+                        <span className="hidden sm:inline">Cerrar Mercado</span>
+                        <span className="sm:hidden">Cerrar</span>
                       </button>
                     )}
                     {/* Notification bell */}
@@ -970,11 +971,11 @@ export default function MarketPage() {
                         setModal("notifications");
                         fetchNotifications();
                       }}
-                      className="relative w-10 h-10 rounded-xl border border-white/10 hover:bg-[#1A1F2E] flex items-center justify-center cursor-pointer transition-colors"
+                      className="relative w-9 h-9 lg:w-10 lg:h-10 rounded-xl border border-white/10 hover:bg-[#1A1F2E] flex items-center justify-center cursor-pointer transition-colors"
                     >
                       <svg
-                        width="18"
-                        height="18"
+                        width="16"
+                        height="16"
                         viewBox="0 0 24 24"
                         fill="none"
                         stroke="#F3F4F6"
@@ -1002,12 +1003,12 @@ export default function MarketPage() {
                         if (next) playSound("tap");
                       }}
                       title={soundsOn ? "Sonidos: ON" : "Sonidos: OFF"}
-                      className="relative w-10 h-10 rounded-xl border border-white/10 hover:bg-[#1A1F2E] flex items-center justify-center cursor-pointer transition-colors"
+                      className="relative w-9 h-9 lg:w-10 lg:h-10 rounded-xl border border-white/10 hover:bg-[#1A1F2E] flex items-center justify-center cursor-pointer transition-colors"
                     >
                       {soundsOn ? (
                         <svg
-                          width="18"
-                          height="18"
+                          width="16"
+                          height="16"
                           viewBox="0 0 24 24"
                           fill="none"
                           stroke="#F3F4F6"
@@ -1020,8 +1021,8 @@ export default function MarketPage() {
                         </svg>
                       ) : (
                         <svg
-                          width="18"
-                          height="18"
+                          width="16"
+                          height="16"
                           viewBox="0 0 24 24"
                           fill="none"
                           stroke="#6B7280"
@@ -1035,7 +1036,7 @@ export default function MarketPage() {
                         </svg>
                       )}
                     </button>
-                    <div className="px-2.5 py-1.5 rounded-lg border border-[#22C55E]/20 bg-[#22C55E]/10 text-[#22C55E] text-[10px] font-semibold">
+                    <div className="px-2 lg:px-2.5 py-1 lg:py-1.5 rounded-lg border border-[#22C55E]/20 bg-[#22C55E]/10 text-[#22C55E] text-[9px] lg:text-[10px] font-semibold">
                       EN VIVO
                     </div>
                   </div>
@@ -1043,22 +1044,22 @@ export default function MarketPage() {
               </div>
 
               {/* Filters */}
-              <div className="px-4 md:px-5 py-3 border-b border-white/6 space-y-2">
+              <div className="px-3 lg:px-5 py-2.5 lg:py-3 border-b border-white/6 space-y-2">
                 <div className="flex items-center gap-2 flex-wrap">
                   <div className="relative w-full sm:w-72">
                     <input
                       value={searchQ}
                       onChange={(e) => setSearchQ(e.target.value)}
                       placeholder="Buscar jugador, equipo o dueño..."
-                      className="w-full bg-[#0D0F14] border border-white/10 rounded-xl px-4 py-2.5 text-sm text-[#F3F4F6] placeholder:text-[#9CA3AF]/50 focus:outline-none focus:border-[#8B5CF6]/50"
+                      className="w-full bg-[#0D0F14] border border-white/10 rounded-xl px-3 lg:px-4 py-2 lg:py-2.5 text-sm text-[#F3F4F6] placeholder:text-[#9CA3AF]/50 focus:outline-none focus:border-[#8B5CF6]/50"
                     />
                   </div>
-                  <div className="flex items-center gap-1.5 overflow-x-auto">
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 -mb-0.5">
                     {POS_FILTERS.map((f) => (
                       <button
                         key={f.label}
                         onClick={() => setPosFilter(f.label)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold shrink-0 border cursor-pointer transition-colors ${
+                        className={`px-2.5 lg:px-3 py-1.5 rounded-lg text-[11px] lg:text-xs font-semibold shrink-0 border cursor-pointer transition-colors ${
                           posFilter === f.label
                             ? "bg-[#8B5CF6] border-[#8B5CF6] text-white"
                             : "bg-[#0D0F14] border-white/10 text-[#9CA3AF] hover:bg-[#1A1F2E]"
@@ -1069,12 +1070,12 @@ export default function MarketPage() {
                     ))}
                   </div>
                 </div>
-                <div className="flex items-center gap-1.5 overflow-x-auto">
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 -mb-0.5">
                   {uniqueTeams.map((team) => (
                     <button
                       key={team}
                       onClick={() => setTeamFilter(team)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold shrink-0 border cursor-pointer transition-colors ${
+                      className={`px-2.5 lg:px-3 py-1.5 rounded-lg text-[11px] lg:text-xs font-semibold shrink-0 border cursor-pointer transition-colors ${
                         teamFilter === team
                           ? "bg-[#8B5CF6]/18 text-[#C4B5FD] border-[#8B5CF6]/35"
                           : "bg-[#0D0F14] text-[#9CA3AF] border-white/10 hover:bg-[#1A1F2E]"
@@ -1087,13 +1088,13 @@ export default function MarketPage() {
               </div>
 
               {/* Player grid */}
-              <div className="flex-1 min-h-0 overflow-y-auto px-4 md:px-5 py-4">
+              <div className="flex-1 min-h-0 overflow-y-auto px-3 lg:px-5 py-3 lg:py-4">
                 {filtered.length === 0 ? (
                   <div className="h-40 flex items-center justify-center text-[#9CA3AF]/45 text-sm">
                     No hay jugadores disponibles.
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-3 gap-2.5 lg:gap-3">
                     {filtered.map((p) => (
                       <PlayerMarketCard
                         key={p.playerId}
@@ -1120,25 +1121,44 @@ export default function MarketPage() {
           </section>
 
           {/* ── RIGHT: Personal Panel ──────────────────────────────────── */}
-          <aside className="xl:w-[320px] rounded-3xl border border-white/6 bg-[#131722] p-4 overflow-y-auto">
-            {/* Budget */}
-            <div className="rounded-2xl border border-[#8B5CF6]/25 bg-[#8B5CF6]/10 p-4">
-              <p className="text-[10px] uppercase tracking-[0.18em] text-[#C4B5FD]">
-                Presupuesto Disponible
-              </p>
-              <p className="text-[#F3F4F6] text-3xl font-bold mt-1">
-                <RollingNumber value={data.myStatus.budget - data.myStatus.budgetReserved} format={fmt} />
-              </p>
+          <aside className="xl:w-[320px] rounded-3xl border border-white/6 bg-[#131722] p-3 lg:p-4 overflow-y-auto order-first xl:order-last">
+            {/* Budget — compact on mobile, expanded on desktop */}
+            <div className="rounded-2xl border border-[#8B5CF6]/25 bg-[#8B5CF6]/10 p-3 lg:p-4">
+              <div className="flex items-center justify-between xl:block">
+                <div>
+                  <p className="text-[9px] lg:text-[10px] uppercase tracking-[0.18em] text-[#C4B5FD]">
+                    Presupuesto
+                  </p>
+                  <p className="text-[#F3F4F6] text-xl lg:text-3xl font-bold mt-0.5 lg:mt-1">
+                    <RollingNumber value={data.myStatus.budget - data.myStatus.budgetReserved} format={fmt} />
+                  </p>
+                </div>
+                {/* Mobile inline stats */}
+                <div className="flex items-center gap-3 xl:hidden">
+                  <div className="text-right">
+                    <p className="text-[9px] text-[#9CA3AF] uppercase">Fichajes</p>
+                    <p className="text-[#F3F4F6] text-sm font-bold">{data.myStatus.purchasesUsed}/{data.myStatus.maxPurchases}</p>
+                  </div>
+                  {hasActions && (
+                    <button
+                      onClick={() => setModal("offers")}
+                      className="px-3 py-1.5 rounded-xl bg-[#F59E0B]/15 border border-[#F59E0B]/25 text-[#F59E0B] text-xs font-bold"
+                    >
+                      {data.myStatus.pendingIncoming + data.myStatus.pendingOutgoing} pendientes
+                    </button>
+                  )}
+                </div>
+              </div>
               {data.myStatus.budgetReserved > 0 && (
                 <div className="flex items-center justify-between mt-2 pt-2 border-t border-white/8">
                   <span className="text-[#9CA3AF] text-[10px]">Total: {fmt(data.myStatus.budget)}</span>
-                  <span className="text-[#F59E0B] text-[10px]">Reservado en subastas: {fmt(data.myStatus.budgetReserved)}</span>
+                  <span className="text-[#F59E0B] text-[10px]">Reservado: {fmt(data.myStatus.budgetReserved)}</span>
                 </div>
               )}
             </div>
 
-            {/* Status cards */}
-            <div className="mt-4 rounded-2xl border border-white/8 bg-[#0D0F14] p-4 space-y-3">
+            {/* Status cards — hidden on mobile (shown inline above) */}
+            <div className="hidden xl:block mt-4 rounded-2xl border border-white/8 bg-[#0D0F14] p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-[#9CA3AF] text-sm">Fichajes usados</span>
                 <span className="text-[#F3F4F6] text-base font-semibold">
@@ -1165,9 +1185,9 @@ export default function MarketPage() {
               </div>
             </div>
 
-            {/* Pending actions */}
+            {/* Pending actions — hidden on mobile (shown inline above) */}
             {hasActions && (
-              <div className="mt-4 rounded-2xl border border-[#F59E0B]/20 bg-[#F59E0B]/5 p-4">
+              <div className="hidden xl:block mt-4 rounded-2xl border border-[#F59E0B]/20 bg-[#F59E0B]/5 p-4">
                 <p className="text-[#F59E0B] text-xs font-bold uppercase tracking-widest mb-3">
                   Acciones pendientes
                 </p>
@@ -1208,8 +1228,8 @@ export default function MarketPage() {
               </div>
             )}
 
-            {/* CTA buttons */}
-            <div className="mt-4 space-y-2">
+            {/* CTA buttons — hidden on mobile */}
+            <div className="hidden xl:block mt-4 space-y-2">
               <a
                 href={`/subastas`}
                 className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-[#8B5CF6]/30 text-[#8B5CF6] text-sm font-semibold hover:bg-[#8B5CF6]/8 transition-colors cursor-pointer"
@@ -1268,8 +1288,8 @@ export default function MarketPage() {
               )}
             </div>
 
-            {/* Participants */}
-            <div className="mt-4 rounded-2xl border border-white/8 bg-[#0D0F14] p-4">
+            {/* Participants — hidden on mobile */}
+            <div className="hidden xl:block mt-4 rounded-2xl border border-white/8 bg-[#0D0F14] p-4">
               <p className="text-[#9CA3AF] text-[10px] uppercase tracking-widest mb-3">
                 Participantes
               </p>
@@ -1305,7 +1325,7 @@ export default function MarketPage() {
       </div>
 
       {/* ── Toasts ── */}
-      <div className="fixed top-6 right-6 z-60 flex flex-col gap-3 pointer-events-none">
+      <div className="fixed top-3 right-3 sm:top-6 sm:right-6 z-60 flex flex-col gap-2 sm:gap-3 pointer-events-none">
         <AnimatePresence mode="popLayout">
           {toasts.map((t) => (
             <motion.div
@@ -1315,7 +1335,7 @@ export default function MarketPage() {
               animate={{ opacity: 1, x: 0, scale: 1 }}
               exit={{ opacity: 0, x: 80, scale: 0.9 }}
               transition={{ duration: 0.3, ease: "easeOut" }}
-              className={`flex items-center gap-4 px-5 py-4 rounded-2xl border-2 shadow-2xl min-w-[320px] max-w-sm pointer-events-auto ${
+              className={`flex items-center gap-3 sm:gap-4 px-4 sm:px-5 py-3 sm:py-4 rounded-2xl border-2 shadow-2xl min-w-0 sm:min-w-[320px] max-w-[calc(100vw-1.5rem)] sm:max-w-sm pointer-events-auto ${
                 t.type === "action"
                   ? "bg-[#8B5CF6] border-[#A78BFA] text-white shadow-[#8B5CF6]/40"
                   : t.type === "success"
@@ -1398,10 +1418,10 @@ export default function MarketPage() {
                 )}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-base font-bold leading-tight">{t.message}</p>
+                <p className="text-sm sm:text-base font-bold leading-tight">{t.message}</p>
                 {t.sub && (
                   <p
-                    className={`text-sm mt-1 ${t.type === "action" ? "text-white/80" : "text-[#9CA3AF]"}`}
+                    className={`text-xs sm:text-sm mt-0.5 sm:mt-1 ${t.type === "action" ? "text-white/80" : "text-[#9CA3AF]"}`}
                   >
                     {t.sub}
                   </p>
@@ -1731,10 +1751,10 @@ export default function MarketPage() {
                   return (
                     <div
                       key={o.id}
-                      className="bg-[#0D0F14] rounded-2xl p-5 border border-white/6"
+                      className="bg-[#0D0F14] rounded-2xl p-4 sm:p-5 border border-white/6"
                     >
-                      <div className="flex items-center gap-4">
-                        <div className="w-18 h-18 rounded-2xl overflow-hidden shrink-0 bg-[#131722] border border-white/8 flex items-center justify-center">
+                      <div className="flex items-center gap-3 sm:gap-4">
+                        <div className="w-14 h-14 sm:w-18 sm:h-18 rounded-xl sm:rounded-2xl overflow-hidden shrink-0 bg-[#131722] border border-white/8 flex items-center justify-center">
                           {o.playerHeadshot ? (
                             <img
                               src={o.playerHeadshot}
@@ -1767,10 +1787,10 @@ export default function MarketPage() {
                               {o.playerPosition}
                             </span>
                           </div>
-                          <p className="text-[#F3F4F6] text-lg font-bold leading-tight">
+                          <p className="text-[#F3F4F6] text-base sm:text-lg font-bold leading-tight truncate">
                             {o.playerName}
                           </p>
-                          <p className="text-[#9CA3AF] text-sm mt-0.5">
+                          <p className="text-[#9CA3AF] text-xs sm:text-sm mt-0.5">
                             Oferta de{" "}
                             <span className="text-[#F3F4F6] font-semibold">
                               {o.buyerName}
@@ -1786,7 +1806,7 @@ export default function MarketPage() {
                           <p className="text-[10px] text-[#9CA3AF] uppercase tracking-wider mb-1">
                             Oferta
                           </p>
-                          <p className="text-[#22C55E] text-2xl font-black">
+                          <p className="text-[#22C55E] text-xl sm:text-2xl font-black">
                             {fmt(o.amount)}
                           </p>
                           <div className="mt-1.5 space-y-0.5">
@@ -1985,7 +2005,7 @@ function PlayerMarketCard({
 
   return (
     <div
-      className={`rounded-2xl border transition-colors p-4 bg-[#0D0F14] ${
+      className={`rounded-2xl border transition-colors p-3 lg:p-4 bg-[#0D0F14] ${
         isProtected
           ? "border-[#3B82F6]/30"
           : player.inNegotiation
@@ -1993,8 +2013,8 @@ function PlayerMarketCard({
             : "border-white/8 hover:border-white/18 hover:bg-[#131722]"
       }`}
     >
-      <div className="flex items-center gap-4">
-        <div className="w-18 h-18 rounded-2xl bg-[#131722] border border-white/8 overflow-hidden shrink-0 flex items-center justify-center">
+      <div className="flex items-center gap-3 lg:gap-4">
+        <div className="w-14 h-14 lg:w-18 lg:h-18 rounded-xl lg:rounded-2xl bg-[#131722] border border-white/8 overflow-hidden shrink-0 flex items-center justify-center">
           {player.headshotUrl && !imgError ? (
             <img
               src={player.headshotUrl}
@@ -2004,7 +2024,7 @@ function PlayerMarketCard({
             />
           ) : (
             <span
-              className="text-2xl font-black"
+              className="text-xl lg:text-2xl font-black"
               style={{ color: col.bg }}
             >
               {player.playerName.charAt(0)}
@@ -2012,66 +2032,67 @@ function PlayerMarketCard({
           )}
         </div>
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 lg:gap-2">
             <span
-              className="px-2 py-1 rounded-lg text-xs font-black"
+              className="px-1.5 lg:px-2 py-0.5 lg:py-1 rounded-md lg:rounded-lg text-[11px] lg:text-xs font-black"
               style={{ background: col.bg, color: col.text }}
             >
               {player.ovr}
             </span>
-            <span className="px-2 py-1 rounded-lg text-xs font-bold bg-white/8 text-[#F3F4F6]">
+            <span className="px-1.5 lg:px-2 py-0.5 lg:py-1 rounded-md lg:rounded-lg text-[11px] lg:text-xs font-bold bg-white/8 text-[#F3F4F6]">
               {player.position}
             </span>
             {isProtected && (
-              <span className="ml-auto flex items-center gap-1 text-xs text-[#3B82F6] font-medium">
+              <span className="ml-auto flex items-center gap-1 text-[11px] lg:text-xs text-[#3B82F6] font-medium">
                 <ShieldIcon size={12} filled />
-                Protegido
+                <span className="hidden sm:inline">Protegido</span>
               </span>
             )}
             {player.inNegotiation && !isProtected && (
-              <span className="ml-auto text-xs text-[#F59E0B] font-medium">
-                En negociación
+              <span className="ml-auto text-[11px] lg:text-xs text-[#F59E0B] font-medium">
+                <span className="hidden sm:inline">En negociación</span>
+                <span className="sm:hidden">Negoc.</span>
               </span>
             )}
           </div>
-          <p className="mt-2 text-base font-bold text-[#F3F4F6] truncate">
+          <p className="mt-1 lg:mt-2 text-sm lg:text-base font-bold text-[#F3F4F6] truncate">
             {player.playerName}
           </p>
-          <p className="text-sm text-[#9CA3AF] truncate mt-0.5">
+          <p className="text-xs lg:text-sm text-[#9CA3AF] truncate mt-0.5">
             {player.teamName} · {player.ownerName}
           </p>
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-2.5 mt-4">
-        <div className="rounded-xl bg-[#131722] border border-white/6 px-3 py-2.5">
-          <p className="text-[#6B7280] text-xs uppercase font-medium">
+      <div className="grid grid-cols-2 gap-2 lg:gap-2.5 mt-3 lg:mt-4">
+        <div className="rounded-xl bg-[#131722] border border-white/6 px-2.5 lg:px-3 py-2 lg:py-2.5">
+          <p className="text-[#6B7280] text-[10px] lg:text-xs uppercase font-medium">
             Precio
           </p>
-          <p className="text-[#F3F4F6] text-base font-bold mt-0.5">
+          <p className="text-[#F3F4F6] text-sm lg:text-base font-bold mt-0.5">
             {fmt(player.price)}
           </p>
         </div>
-        <div className="rounded-xl bg-[#131722] border border-white/6 px-3 py-2.5">
-          <p className="text-[#6B7280] text-xs uppercase font-medium">
+        <div className="rounded-xl bg-[#131722] border border-white/6 px-2.5 lg:px-3 py-2 lg:py-2.5">
+          <p className="text-[#6B7280] text-[10px] lg:text-xs uppercase font-medium">
             Cláusula
           </p>
-          <p className="text-[#EF4444] text-base font-bold mt-0.5">
+          <p className="text-[#EF4444] text-sm lg:text-base font-bold mt-0.5">
             {fmt(player.clause)}
           </p>
         </div>
       </div>
-      <div className="flex gap-2.5 mt-4">
+      <div className="flex gap-2 lg:gap-2.5 mt-3 lg:mt-4">
         <button
           onClick={onOffer}
           disabled={!canAct}
-          className="flex-1 h-10 rounded-xl border border-[#8B5CF6]/35 text-[#8B5CF6] text-sm font-semibold hover:bg-[#8B5CF6]/12 transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+          className="flex-1 h-9 lg:h-10 rounded-xl border border-[#8B5CF6]/35 text-[#8B5CF6] text-xs lg:text-sm font-semibold hover:bg-[#8B5CF6]/12 transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
         >
           Ofrecer
         </button>
         <button
           onClick={onClause}
           disabled={!canAct || isProtected}
-          className="flex-1 h-10 rounded-xl border border-[#EF4444]/35 text-[#EF4444] text-sm font-semibold hover:bg-[#EF4444]/12 transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+          className="flex-1 h-9 lg:h-10 rounded-xl border border-[#EF4444]/35 text-[#EF4444] text-xs lg:text-sm font-semibold hover:bg-[#EF4444]/12 transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
         >
           Cláusula
         </button>
@@ -2092,15 +2113,15 @@ function Modal({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-6 bg-black/60 backdrop-blur-sm"
       onClick={onClose}
     >
       <motion.div
-        initial={{ opacity: 0, scale: 0.95, y: 12 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.95 }}
+        initial={{ opacity: 0, y: 24 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: 24 }}
         transition={{ duration: 0.2 }}
-        className="bg-[#131722] rounded-3xl border border-white/10 p-7 w-full max-w-lg shadow-2xl max-h-[85vh] overflow-y-auto"
+        className="bg-[#131722] rounded-t-2xl sm:rounded-3xl border border-white/10 p-5 sm:p-7 w-full max-w-lg shadow-2xl max-h-[90vh] sm:max-h-[85vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {children}
@@ -2144,11 +2165,11 @@ function MarketPending({
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-8">
+    <div className="min-h-screen flex items-center justify-center p-4 sm:p-8">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="bg-[#131722] rounded-3xl border border-white/8 p-10 max-w-md w-full text-center flex flex-col items-center gap-6"
+        className="bg-[#131722] rounded-2xl sm:rounded-3xl border border-white/8 p-6 sm:p-10 max-w-md w-full text-center flex flex-col items-center gap-5 sm:gap-6"
       >
         <div className="w-20 h-20 rounded-3xl bg-[#8B5CF6]/10 border border-[#8B5CF6]/20 flex items-center justify-center">
           <svg
@@ -2301,14 +2322,14 @@ function MarketFinished({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.5 }}
-      className="p-8 max-w-5xl mx-auto"
+      className="px-4 py-6 sm:p-8 max-w-5xl mx-auto"
     >
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, delay: 0.1 }}
-        className="text-center mb-10"
+        className="text-center mb-6 sm:mb-10"
       >
         <div className="inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-[#22C55E]/10 border border-[#22C55E]/20 mb-5">
           <svg
@@ -2324,7 +2345,7 @@ function MarketFinished({
             <polyline points="20 6 9 17 4 12" />
           </svg>
         </div>
-        <h1 className="text-[#F3F4F6] text-3xl font-bold tracking-tight mb-2">
+        <h1 className="text-[#F3F4F6] text-2xl sm:text-3xl font-bold tracking-tight mb-2">
           Mercado Completado
         </h1>
         <p className="text-[#9CA3AF] text-sm">
@@ -2337,35 +2358,35 @@ function MarketFinished({
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, delay: 0.2 }}
-        className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8"
+        className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8"
       >
-        <div className="bg-[#131722] rounded-2xl border border-white/6 p-5 text-center">
+        <div className="bg-[#131722] rounded-2xl border border-white/6 p-4 sm:p-5 text-center">
           <p className="text-[#9CA3AF] text-[10px] uppercase tracking-widest mb-1">
             Transferencias
           </p>
-          <p className="text-[#F3F4F6] text-2xl font-bold">
+          <p className="text-[#F3F4F6] text-xl sm:text-2xl font-bold">
             {realTransfers.length}
           </p>
         </div>
-        <div className="bg-[#131722] rounded-2xl border border-white/6 p-5 text-center">
+        <div className="bg-[#131722] rounded-2xl border border-white/6 p-4 sm:p-5 text-center">
           <p className="text-[#9CA3AF] text-[10px] uppercase tracking-widest mb-1">
             Total movido
           </p>
-          <p className="text-[#22C55E] text-2xl font-bold">
+          <p className="text-[#22C55E] text-xl sm:text-2xl font-bold">
             {fmt(totalSpent)}
           </p>
         </div>
-        <div className="bg-[#131722] rounded-2xl border border-white/6 p-5 text-center">
+        <div className="bg-[#131722] rounded-2xl border border-white/6 p-4 sm:p-5 text-center">
           <p className="text-[#9CA3AF] text-[10px] uppercase tracking-widest mb-1">
             Cláusulas
           </p>
-          <p className="text-[#F59E0B] text-2xl font-bold">{clauseCount}</p>
+          <p className="text-[#F59E0B] text-xl sm:text-2xl font-bold">{clauseCount}</p>
         </div>
-        <div className="bg-[#131722] rounded-2xl border border-white/6 p-5 text-center">
+        <div className="bg-[#131722] rounded-2xl border border-white/6 p-4 sm:p-5 text-center">
           <p className="text-[#9CA3AF] text-[10px] uppercase tracking-widest mb-1">
             Subastas
           </p>
-          <p className="text-[#8B5CF6] text-2xl font-bold">{auctionCount}</p>
+          <p className="text-[#8B5CF6] text-xl sm:text-2xl font-bold">{auctionCount}</p>
         </div>
       </motion.div>
 
@@ -2375,7 +2396,7 @@ function MarketFinished({
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.4, delay: 0.3 }}
-          className="bg-[#131722] rounded-2xl border border-[#8B5CF6]/20 p-6 mb-8 flex items-center gap-5 shadow-[0_0_40px_rgba(139,92,246,0.06)]"
+          className="bg-[#131722] rounded-2xl border border-[#8B5CF6]/20 p-4 sm:p-6 mb-6 sm:mb-8 flex items-center gap-3 sm:gap-5 shadow-[0_0_40px_rgba(139,92,246,0.06)]"
         >
           <div className="w-14 h-14 rounded-2xl bg-[#8B5CF6]/10 border border-[#8B5CF6]/20 flex items-center justify-center shrink-0">
             <svg
@@ -2395,14 +2416,14 @@ function MarketFinished({
             <p className="text-[#9CA3AF] text-[10px] uppercase tracking-widest mb-1">
               Fichaje más caro
             </p>
-            <p className="text-[#F3F4F6] text-lg font-bold truncate">
+            <p className="text-[#F3F4F6] text-base sm:text-lg font-bold truncate">
               {biggestDeal.playerName}
             </p>
-            <p className="text-[#9CA3AF] text-xs">
+            <p className="text-[#9CA3AF] text-[11px] sm:text-xs">
               {biggestDeal.buyerName} ← {biggestDeal.sellerTeamName ?? "Subasta"}
             </p>
           </div>
-          <p className="text-[#22C55E] text-2xl font-bold shrink-0">
+          <p className="text-[#22C55E] text-lg sm:text-2xl font-bold shrink-0">
             {fmt(biggestDeal.amount)}
           </p>
         </motion.div>
@@ -2417,7 +2438,7 @@ function MarketFinished({
         <h2 className="text-[#F3F4F6] text-lg font-semibold mb-4">
           Resumen por Mánager
         </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 mb-6 sm:mb-8">
           {mostActive.map((m, idx) => {
             const tx = transfersByMember[m.id] ?? { bought: [], sold: [] };
             return (
@@ -2426,7 +2447,7 @@ function MarketFinished({
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.3, delay: 0.4 + idx * 0.05 }}
-                className="bg-[#131722] rounded-2xl border border-white/6 p-5 flex flex-col gap-3"
+                className="bg-[#131722] rounded-2xl border border-white/6 p-4 sm:p-5 flex flex-col gap-3"
               >
                 <div className="flex items-center gap-3">
                   {m.teamCrestUrl ? (
@@ -2529,7 +2550,7 @@ function MarketFinished({
             {realTransfers.map((t: any, i: number) => (
               <div
                 key={i}
-                className="flex items-center gap-4 px-5 py-3.5"
+                className="flex items-center gap-3 sm:gap-4 px-3 sm:px-5 py-3"
               >
                 <div
                   className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${

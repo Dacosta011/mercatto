@@ -159,11 +159,11 @@ function ProfileSetupModal({
   const isEdit = !!existing;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm">
       <motion.div
-        initial={{ opacity: 0, scale: 0.95, y: 10 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        className="bg-[#131722] rounded-2xl border border-white/8 w-full max-w-sm p-6 shadow-2xl"
+        initial={{ opacity: 0, y: 24 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="bg-[#131722] rounded-t-2xl sm:rounded-2xl border border-white/8 w-full max-w-sm p-5 sm:p-6 shadow-2xl"
       >
         <div className="flex items-center justify-between mb-5">
           <div>
@@ -724,12 +724,12 @@ export default function FeedPage() {
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
-        className="max-w-xl mx-auto px-4 py-8"
+        className="max-w-xl mx-auto px-3 sm:px-4 py-5 sm:py-8"
       >
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-5 sm:mb-6">
           <div>
-            <p className="text-[#9CA3AF] text-xs uppercase tracking-widest font-medium mb-0.5">Red Social</p>
-            <h1 className="text-[#F3F4F6] text-2xl font-bold tracking-tight">Feed</h1>
+            <p className="text-[#9CA3AF] text-[10px] sm:text-xs uppercase tracking-widest font-medium mb-0.5">Red Social</p>
+            <h1 className="text-[#F3F4F6] text-xl sm:text-2xl font-bold tracking-tight">Feed</h1>
           </div>
           {profile && (
             <button

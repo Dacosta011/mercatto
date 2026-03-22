@@ -56,7 +56,7 @@ function DraggableCard({ player, locked }: { player: LineupPlayer; locked: boole
       ref={setNodeRef}
       {...(locked ? {} : listeners)}
       {...attributes}
-      className={`relative flex items-center gap-5 px-5 py-4 rounded-2xl border bg-[#0D0F14] transition-all duration-150 group ${
+      className={`relative flex items-center gap-3 lg:gap-5 px-3 lg:px-5 py-3 lg:py-4 rounded-2xl border bg-[#0D0F14] transition-all duration-150 group ${
         locked ? "cursor-default" : "cursor-grab active:cursor-grabbing"
       } ${isDragging ? "opacity-30 scale-[0.97]" : "hover:bg-[#151A27] hover:border-[#8B5CF6]/15"} ${
         isSuspended ? "opacity-40 grayscale" : ""
@@ -69,19 +69,19 @@ function DraggableCard({ player, locked }: { player: LineupPlayer; locked: boole
           <img
             src={player.headshotUrl}
             alt=""
-            className={`w-16 h-16 rounded-full object-cover object-top ring-[3px] ${ringClass}`}
+            className={`w-11 h-11 lg:w-16 lg:h-16 rounded-full object-cover object-top ring-[2px] lg:ring-[3px] ${ringClass}`}
             draggable={false}
           />
         ) : (
-          <div className={`w-16 h-16 rounded-full bg-[#131722] ring-[3px] ${ringClass} flex items-center justify-center`}>
-            <span className="text-xl font-bold text-[#9CA3AF]/50">
+          <div className={`w-11 h-11 lg:w-16 lg:h-16 rounded-full bg-[#131722] ring-[2px] lg:ring-[3px] ${ringClass} flex items-center justify-center`}>
+            <span className="text-base lg:text-xl font-bold text-[#9CA3AF]/50">
               {player.name.charAt(0)}
             </span>
           </div>
         )}
         {/* OVR badge overlapping bottom-right */}
         <div
-          className="absolute -bottom-1 -right-1 min-w-[30px] h-[22px] rounded-full flex items-center justify-center text-xs font-black text-white px-1.5"
+          className="absolute -bottom-1 -right-1 min-w-[24px] lg:min-w-[30px] h-[18px] lg:h-[22px] rounded-full flex items-center justify-center text-[10px] lg:text-xs font-black text-white px-1"
           style={{ background: color, boxShadow: `0 0 10px ${color}60` }}
         >
           {player.ovr}
@@ -90,18 +90,18 @@ function DraggableCard({ player, locked }: { player: LineupPlayer; locked: boole
 
       {/* Name + details */}
       <div className="flex-1 min-w-0">
-        <p className="text-base font-semibold text-[#F3F4F6] truncate leading-tight">
+        <p className="text-sm lg:text-base font-semibold text-[#F3F4F6] truncate leading-tight">
           {player.name}
         </p>
-        <div className="flex items-center gap-2 mt-1.5">
+        <div className="flex items-center gap-1.5 lg:gap-2 mt-1">
           <span
-            className="text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded"
+            className="text-[10px] lg:text-xs font-bold uppercase tracking-wider px-1.5 lg:px-2 py-0.5 rounded"
             style={{ color, background: `${color}15` }}
           >
             {player.position}
           </span>
           {player.countryName && (
-            <span className="text-sm text-[#9CA3AF]/60 truncate">
+            <span className="text-xs lg:text-sm text-[#9CA3AF]/60 truncate hidden sm:inline">
               {player.countryName}
             </span>
           )}
@@ -175,27 +175,27 @@ export default function BenchPanel({
   return (
     <div
       ref={setNodeRef}
-      className={`w-[440px] border-l flex flex-col bg-[#131722] shrink-0 transition-colors duration-200 ${
+      className={`lg:w-[440px] lg:border-l border-t lg:border-t-0 flex flex-col bg-[#131722] shrink-0 transition-colors duration-200 ${
         isOver ? "border-[#8B5CF6]/30 bg-[#8B5CF6]/2" : "border-white/4"
       }`}
     >
       {/* Panel header */}
-      <div className="px-5 pt-5 pb-4 border-b border-white/4">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2.5">
-            <h2 className="text-lg font-semibold text-[#F3F4F6]">Plantilla</h2>
-            <span className="text-sm font-medium text-[#9CA3AF] bg-[#0D0F14] px-3 py-0.5 rounded-full">
+      <div className="px-4 lg:px-5 pt-4 lg:pt-5 pb-3 lg:pb-4 border-b border-white/4">
+        <div className="flex items-center justify-between mb-3 lg:mb-4">
+          <div className="flex items-center gap-2">
+            <h2 className="text-base lg:text-lg font-semibold text-[#F3F4F6]">Plantilla</h2>
+            <span className="text-xs lg:text-sm font-medium text-[#9CA3AF] bg-[#0D0F14] px-2.5 py-0.5 rounded-full">
               {benchPlayers.length}
             </span>
           </div>
-          <div className="flex items-center gap-3">
-            <span className={`text-base font-bold tabular-nums ${lineupCount === 11 ? "text-[#22C55E]" : "text-[#9CA3AF]"}`}>
+          <div className="flex items-center gap-2 lg:gap-3">
+            <span className={`text-sm lg:text-base font-bold tabular-nums ${lineupCount === 11 ? "text-[#22C55E]" : "text-[#9CA3AF]"}`}>
               {lineupCount}/11
             </span>
             {!locked && (
               <button
                 onClick={onAutoFill}
-                className="text-sm font-semibold text-[#8B5CF6] hover:text-[#A78BFA] bg-[#8B5CF6]/10 hover:bg-[#8B5CF6]/15 px-4 py-2 rounded-lg transition-colors duration-150 cursor-pointer"
+                className="text-xs lg:text-sm font-semibold text-[#8B5CF6] hover:text-[#A78BFA] bg-[#8B5CF6]/10 hover:bg-[#8B5CF6]/15 px-3 lg:px-4 py-1.5 lg:py-2 rounded-lg transition-colors duration-150 cursor-pointer"
               >
                 Auto XI
               </button>
@@ -204,11 +204,11 @@ export default function BenchPanel({
         </div>
 
         {/* Search */}
-        <div className="relative mb-3">
+        <div className="relative mb-2.5 lg:mb-3">
           <svg
-            width="16" height="16" viewBox="0 0 24 24" fill="none"
+            width="14" height="14" viewBox="0 0 24 24" fill="none"
             stroke="#9CA3AF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-            className="absolute left-3.5 top-1/2 -translate-y-1/2 opacity-40"
+            className="absolute left-3 top-1/2 -translate-y-1/2 opacity-40"
           >
             <circle cx="11" cy="11" r="8" />
             <line x1="21" y1="21" x2="16.65" y2="16.65" />
@@ -218,17 +218,17 @@ export default function BenchPanel({
             placeholder="Buscar jugador…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-[#0D0F14] border border-white/4 rounded-xl pl-10 pr-4 py-3 text-base text-[#F3F4F6] placeholder-[#9CA3AF]/40 outline-none focus:border-[#8B5CF6]/30 transition-colors duration-150"
+            className="w-full bg-[#0D0F14] border border-white/4 rounded-xl pl-9 pr-3 py-2.5 lg:py-3 text-sm lg:text-base text-[#F3F4F6] placeholder-[#9CA3AF]/40 outline-none focus:border-[#8B5CF6]/30 transition-colors duration-150"
           />
         </div>
 
         {/* Filter chips */}
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1 lg:gap-1.5 overflow-x-auto">
           {(["Todos", "POR", "DEF", "MED", "DEL"] as PosFilter[]).map((f) => (
             <button
               key={f}
               onClick={() => setFilter(f)}
-              className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors duration-150 cursor-pointer ${
+              className={`px-3 lg:px-4 py-1.5 lg:py-2 rounded-lg text-xs lg:text-sm font-semibold transition-colors duration-150 cursor-pointer shrink-0 ${
                 filter === f
                   ? "bg-[#8B5CF6]/10 text-[#8B5CF6]"
                   : "text-[#9CA3AF]/60 hover:text-[#9CA3AF] hover:bg-[#1A1F2E]"
@@ -241,7 +241,7 @@ export default function BenchPanel({
       </div>
 
       {/* Player list */}
-      <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-2.5">
+      <div className="flex-1 overflow-y-auto p-3 lg:p-4 flex flex-col gap-2 lg:gap-2.5 max-h-[40vh] lg:max-h-none">
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <p className="text-[#9CA3AF]/40 text-sm">

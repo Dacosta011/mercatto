@@ -5,7 +5,8 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   getLastTournamentCode,
   hasTeamAssignment,
-  getTournamentStatus,
+  isMarketActive,
+  isLeagueActive,
   subscribeToStore,
 } from "@/lib/tokenStorage";
 
@@ -23,29 +24,32 @@ export default function RouteGuard({ children }: { children: React.ReactNode }) 
     );
     if (isPublic) { setAllowed(true); return; }
 
-    // Lobby pages are always allowed when there's a tournament
     if (pathname.startsWith("/lobby")) { setAllowed(true); return; }
 
     const code = getLastTournamentCode();
     if (!code) { router.replace("/"); return; }
 
     const hasTeam = hasTeamAssignment(code);
-    const status  = getTournamentStatus(code);
     const fallback = FALLBACK(code);
+    const mActive = isMarketActive(code);
+    const lActive = isLeagueActive(code);
 
     if ((pathname === "/squad" || pathname.startsWith("/squad/")) && !hasTeam) {
       router.replace(fallback); return;
     }
 
-    if ((pathname === "/market" || pathname.startsWith("/market/")) &&
-        status !== null && status !== "market") {
+    if (
+      (pathname === "/market" || pathname.startsWith("/market/") ||
+       pathname === "/subastas" || pathname.startsWith("/subastas/")) &&
+      !mActive
+    ) {
       router.replace(fallback); return;
     }
 
     if (
       (pathname === "/calendar" || pathname.startsWith("/calendar/") ||
        pathname === "/table"    || pathname.startsWith("/table/")) &&
-      status !== null && status !== "league" && status !== "complete"
+      !lActive
     ) {
       router.replace(fallback); return;
     }
@@ -53,13 +57,11 @@ export default function RouteGuard({ children }: { children: React.ReactNode }) 
     setAllowed(true);
   }, [pathname, router]);
 
-  // Re-check on pathname change
   useEffect(() => {
     setAllowed(false);
     checkAccess();
   }, [checkAccess]);
 
-  // Also re-check when localStorage changes (status update before navigation)
   useEffect(() => subscribeToStore(checkAccess), [checkAccess]);
 
   if (!allowed) {

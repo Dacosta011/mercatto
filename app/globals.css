@@ -10,6 +10,7 @@
   --success: #22C55E;
   --error: #EF4444;
   --border: rgba(255, 255, 255, 0.04);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 @theme inline {
@@ -36,6 +37,11 @@ body {
   height: 100%;
   margin: 0;
   padding: 0;
+  overscroll-behavior: none;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
@@ -44,6 +50,7 @@ body {
   font-family: var(--font-geist-sans), -apple-system, "Inter", sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  -webkit-tap-highlight-color: transparent;
 }
 
 ::selection {
@@ -65,4 +72,70 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(139, 92, 246, 0.4);
+}
+
+@media (max-width: 1023px) {
+  ::-webkit-scrollbar {
+    width: 0;
+    display: none;
+  }
+}
+
+input, select, textarea, button {
+  font-family: inherit;
+}
+
+@media screen and (max-width: 767px) {
+  input[type="text"],
+  input[type="number"],
+  input[type="email"],
+  input[type="tel"],
+  input[type="password"],
+  input[type="search"],
+  input:not([type]),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+@keyframes slide-in-from-bottom-4 {
+  from { transform: translateY(1rem); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.animate-in {
+  animation-fill-mode: both;
+}
+
+.slide-in-from-bottom-4 {
+  animation-name: slide-in-from-bottom-4;
+}
+
+@keyframes badge-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.2); }
+}
+
+@keyframes tab-glow {
+  0%, 100% { box-shadow: 0 0 0 transparent; }
+  50% { box-shadow: 0 -2px 12px rgba(239, 68, 68, 0.25); }
+}
+
+@keyframes section-enter {
+  from { opacity: 0; max-height: 0; }
+  to { opacity: 1; max-height: 200px; }
+}
+
+.badge-critical {
+  animation: badge-pulse 1.5s ease-in-out infinite;
+}
+
+.tab-glow-critical {
+  animation: tab-glow 2s ease-in-out infinite;
+}
+
+.section-animate-in {
+  animation: section-enter 0.3s ease-out forwards;
+  overflow: hidden;
 }
