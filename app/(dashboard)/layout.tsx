@@ -3,6 +3,7 @@ import BottomNav from "../Components/BottomNav";
 import TopBar from "../Components/TopBar";
 import RouteGuard from "../Components/RouteGuard";
 import PhaseRedirectGuard from "../Components/PhaseRedirectGuard";
+import InstallPrompt from "../Components/InstallPrompt";
 
 export default function DashboardLayout({
   children,
@@ -25,6 +26,7 @@ export default function DashboardLayout({
 
           {/* Main content area */}
           <main className="flex-1 overflow-y-auto pb-28 lg:pb-0">
+            <InstallPrompt />
             {children}
           </main>
 

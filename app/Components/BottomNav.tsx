@@ -2,15 +2,27 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, useSyncExternalStore } from "react";
+import { useState, useEffect, useCallback, useSyncExternalStore } from "react";
 import {
   getLastTournamentCode,
+  getMemberToken,
   hasTeamAssignment,
   getTournamentStatus,
   getMarketOpen,
   getNavBadge,
   type NavBadge as NavBadgeType,
 } from "@/lib/tokenStorage";
+import {
+  canInstall as pwaCanInstall,
+  triggerInstall as pwaTriggerInstall,
+  isStandalone as pwaIsStandalone,
+  getNotifPermission,
+  subscribePwa,
+} from "@/lib/pwa";
+import {
+  registerPushSubscription,
+  unregisterPushSubscription,
+} from "@/lib/pushClient";
 
 // ── Snapshot ────────────────────────────────────────────────────────────────────
 
@@ -280,6 +292,39 @@ function MoreDrawer({
 }) {
   const pathname = usePathname();
 
+  const [installAvail, setInstallAvail] = useState(false);
+  const [standalone, setStandalone] = useState(false);
+  const [notifPerm, setNotifPerm] = useState<string>("default");
+
+  useEffect(() => {
+    setInstallAvail(pwaCanInstall());
+    setStandalone(pwaIsStandalone());
+    if ("Notification" in window) setNotifPerm(Notification.permission);
+    const unsub = subscribePwa(() => setInstallAvail(pwaCanInstall()));
+    return unsub;
+  }, [open]);
+
+  const handleInstall = useCallback(async () => {
+    await pwaTriggerInstall();
+    setInstallAvail(false);
+    onClose();
+  }, [onClose]);
+
+  const handleNotifToggle = useCallback(async () => {
+    const code = getLastTournamentCode();
+    const token = code ? getMemberToken(code) : null;
+    if (!code || !token) return;
+
+    if (notifPerm === "granted") {
+      await unregisterPushSubscription(code, token);
+      setNotifPerm("default");
+    } else {
+      const ok = await registerPushSubscription(code, token);
+      setNotifPerm(ok ? "granted" : Notification.permission);
+    }
+    onClose();
+  }, [notifPerm, onClose]);
+
   const items: {
     href: string;
     label: string;
@@ -371,6 +416,68 @@ function MoreDrawer({
             })}
           </div>
         </div>
+        {/* App section */}
+        {(installAvail || standalone || notifPerm !== "unsupported") && (
+          <>
+            <div className="h-px bg-white/4 mx-4" />
+            <div className="px-4 pt-3 pb-2">
+              <p className="text-[#9CA3AF] text-[10px] font-semibold uppercase tracking-widest mb-2">
+                App
+              </p>
+              <div className="flex flex-col gap-0.5">
+                {installAvail && !standalone && (
+                  <button
+                    onClick={handleInstall}
+                    className="flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-[#F3F4F6] active:bg-[#1A1F2E] transition-colors cursor-pointer w-full text-left"
+                  >
+                    <span className="text-[#8B5CF6]">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                        <polyline points="7 10 12 15 17 10" />
+                        <line x1="12" y1="15" x2="12" y2="3" />
+                      </svg>
+                    </span>
+                    Instalar Mercatto
+                  </button>
+                )}
+                {standalone && (
+                  <div className="flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-[#22C55E]">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                      <polyline points="22 4 12 14.01 9 11.01" />
+                    </svg>
+                    App instalada
+                  </div>
+                )}
+                <button
+                  onClick={handleNotifToggle}
+                  className="flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-[#F3F4F6] active:bg-[#1A1F2E] transition-colors cursor-pointer w-full text-left"
+                >
+                  <span className={notifPerm === "granted" ? "text-[#22C55E]" : "text-[#9CA3AF]"}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                      <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                    </svg>
+                  </span>
+                  {notifPerm === "granted"
+                    ? "Notificaciones activadas"
+                    : notifPerm === "denied"
+                    ? "Notificaciones bloqueadas"
+                    : "Activar notificaciones"}
+                  {notifPerm === "granted" && (
+                    <span className="ml-auto w-2 h-2 rounded-full bg-[#22C55E]" />
+                  )}
+                  {notifPerm === "denied" && (
+                    <span className="ml-auto text-[10px] text-[#9CA3AF]/50">
+                      Ajustes del navegador
+                    </span>
+                  )}
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+
         <div className="h-px bg-white/4 mx-4" />
         <button
           onClick={onClose}
