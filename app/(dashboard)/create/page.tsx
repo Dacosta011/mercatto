@@ -72,7 +72,7 @@ export default function CreateTournamentPage() {
   const [displayName, setDisplayName] = useState("");
   const [rerolls, setRerolls] = useState(1);
   const [maxTransfers, setMaxTransfers] = useState(3);
-  const [clauseProtection, setClauseProtection] = useState(true);
+  const [clauseProtection, setClauseProtection] = useState(1);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<TournamentResult | null>(null);
   const [errors, setErrors] = useState<{ name?: string; displayName?: string }>({});
@@ -326,30 +326,44 @@ export default function CreateTournamentPage() {
                     </div>
                   </div>
 
-                  {/* Clause Protection toggle */}
+                  {/* Clause Protection stepper */}
                   <div className="flex flex-col gap-2">
-                    <label className="text-[#F3F4F6] text-sm font-medium">
-                      Protección de Cláusula
-                    </label>
+                    <div className="flex items-center justify-between">
+                      <label className="text-[#F3F4F6] text-sm font-medium">
+                        Protección de Cláusula
+                      </label>
+                      <span className="text-[#9CA3AF] text-xs">Por equipo</span>
+                    </div>
                     <div className="bg-[#0D0F14] border border-white/[0.07] rounded-xl px-3 sm:px-4 py-3 flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-[#9CA3AF] text-xs sm:text-sm">
-                          Cada equipo solo puede perder 1 jugador por cláusula
-                        </p>
+                      <p className="text-[#9CA3AF] text-xs sm:text-sm">
+                        {clauseProtection === 0
+                          ? "Sin límite de cláusulas por equipo"
+                          : `Máx. ${clauseProtection} jugador${clauseProtection > 1 ? "es" : ""} perdido${clauseProtection > 1 ? "s" : ""} por cláusula`}
+                      </p>
+                      <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setClauseProtection((v) => Math.max(0, v - 1))}
+                          className="w-8 h-8 rounded-lg bg-[#131722] border border-white/[0.07] hover:border-[#8B5CF6]/30 hover:bg-[#1A1F2E] flex items-center justify-center text-[#9CA3AF] hover:text-[#F3F4F6] transition-all duration-150 cursor-pointer"
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                            <line x1="5" y1="12" x2="19" y2="12" />
+                          </svg>
+                        </button>
+                        <span className="text-[#F3F4F6] text-lg font-semibold w-6 text-center tabular-nums">
+                          {clauseProtection}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setClauseProtection((v) => Math.min(10, v + 1))}
+                          className="w-8 h-8 rounded-lg bg-[#131722] border border-white/[0.07] hover:border-[#8B5CF6]/30 hover:bg-[#1A1F2E] flex items-center justify-center text-[#9CA3AF] hover:text-[#F3F4F6] transition-all duration-150 cursor-pointer"
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                            <line x1="12" y1="5" x2="12" y2="19" />
+                            <line x1="5" y1="12" x2="19" y2="12" />
+                          </svg>
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => setClauseProtection((v) => !v)}
-                        className={`relative w-11 h-6 rounded-full transition-colors duration-200 cursor-pointer shrink-0 ${
-                          clauseProtection ? "bg-[#8B5CF6]" : "bg-[#1A1F2E] border border-white/10"
-                        }`}
-                      >
-                        <span
-                          className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
-                            clauseProtection ? "translate-x-5" : "translate-x-0"
-                          }`}
-                        />
-                      </button>
                     </div>
                   </div>
 

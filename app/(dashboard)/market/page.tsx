@@ -100,7 +100,7 @@ interface MarketState {
   myIncomingOffers: OfferEntry[];
   myOutgoingOffers: OfferEntry[];
   recentTransfers: any[];
-  clauseProtectionEnabled: boolean;
+  clauseProtectionEnabled: number;
   unreadNotifications: number;
   allMembers: {
     id: string;
@@ -1488,11 +1488,11 @@ export default function MarketPage() {
                   value={fmt(data.myStatus.budget - data.myStatus.budgetReserved - selectedPlayer.clause)}
                 />
               </div>
-              {data.clauseProtectionEnabled && selectedPlayer.clauseProtected && (
+              {data.clauseProtectionEnabled > 0 && selectedPlayer.clauseProtected && (
                 <div className="flex items-center gap-2 bg-[#EF4444]/10 border border-[#EF4444]/20 rounded-xl px-3 py-2.5">
                   <ShieldIcon />
                   <span className="text-[#EF4444] text-xs font-medium">
-                    Este equipo ya está protegido. No puedes pagar la cláusula.
+                    Este equipo ya alcanzó el límite de {data.clauseProtectionEnabled} cláusula{data.clauseProtectionEnabled > 1 ? "s" : ""}. No puedes pagar la cláusula.
                   </span>
                 </div>
               )}
@@ -1517,7 +1517,7 @@ export default function MarketPage() {
                   onClick={doClause}
                   disabled={
                     actionLoading ||
-                    (data.clauseProtectionEnabled && selectedPlayer.clauseProtected) ||
+                    (data.clauseProtectionEnabled > 0 && selectedPlayer.clauseProtected) ||
                     (data.myStatus.budget - data.myStatus.budgetReserved) < selectedPlayer.clause
                   }
                   className="flex-1 py-3 rounded-xl bg-[#EF4444] hover:bg-[#DC2626] text-white text-sm font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
@@ -1995,13 +1995,13 @@ function PlayerMarketCard({
 }: {
   player: PlayerCard;
   canAct: boolean;
-  clauseProtectionEnabled: boolean;
+  clauseProtectionEnabled: number;
   onClause: () => void;
   onOffer: () => void;
 }) {
   const col = ovrColor(player.ovr);
   const [imgError, setImgError] = useState(false);
-  const isProtected = clauseProtectionEnabled && player.clauseProtected;
+  const isProtected = clauseProtectionEnabled > 0 && player.clauseProtected;
 
   return (
     <div
