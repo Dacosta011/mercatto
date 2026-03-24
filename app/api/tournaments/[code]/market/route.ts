@@ -60,11 +60,50 @@ export async function GET(request: NextRequest, { params }: Params) {
         .update({ status: "expired", responded_at: now })
         .eq("session_id", s.id)
         .eq("status", "pending");
-      await supabase
+      const { data: activeAuctions } = await supabase
         .from("icon_auctions")
-        .update({ phase: "finished" })
+        .select("id, selected_icon_id, highest_bid, highest_bidder_id, session_id")
         .eq("session_id", s.id)
-        .eq("phase", "active");
+        .in("phase", ["active", "voting"]);
+
+      for (const ea of activeAuctions ?? []) {
+        const ax = ea as any;
+        if (ax.highest_bidder_id && ax.highest_bid > 0) {
+          await supabase
+            .from("icon_auctions")
+            .update({ phase: "finished", winner_id: ax.highest_bidder_id, final_amount: ax.highest_bid })
+            .eq("id", ax.id);
+
+          const { data: winner } = await supabase
+            .from("members")
+            .select("budget, budget_reserved")
+            .eq("id", ax.highest_bidder_id)
+            .single();
+          const wn = winner as any;
+          await supabase
+            .from("members")
+            .update({
+              budget: Math.max(0, (wn?.budget ?? 0) - ax.highest_bid),
+              budget_reserved: Math.max(0, (wn?.budget_reserved ?? 0) - ax.highest_bid),
+              icon_slot_used: true,
+            })
+            .eq("id", ax.highest_bidder_id);
+
+          await supabase.from("market_transfers").insert({
+            session_id: ax.session_id,
+            player_id: ax.selected_icon_id,
+            buyer_id: ax.highest_bidder_id,
+            seller_id: null,
+            amount: ax.highest_bid,
+            transfer_type: "icon_auction",
+          });
+        } else {
+          await supabase
+            .from("icon_auctions")
+            .update({ phase: "finished" })
+            .eq("id", ax.id);
+        }
+      }
       s.status = "finished";
     }
   }

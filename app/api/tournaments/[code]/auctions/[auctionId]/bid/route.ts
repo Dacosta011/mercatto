@@ -95,8 +95,8 @@ export async function POST(request: NextRequest, { params }: Params) {
     );
   }
 
-  // Bid must be higher than current highest and at least min_bid
-  const minRequired = Math.max(a.min_bid ?? 0, (a.highest_bid ?? 0) + 1);
+  const BID_INCREMENT = 5_000_000;
+  const minRequired = Math.max(a.min_bid ?? 0, (a.highest_bid ?? 0) + BID_INCREMENT);
   if (body.amount < minRequired) {
     return NextResponse.json(
       {

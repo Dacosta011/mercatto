@@ -278,6 +278,20 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       .from("icon_auctions")
       .update({ phase: "finished", ends_at: new Date().toISOString() })
       .eq("id", auctionId);
+
+    if (a.highest_bidder_id) {
+      const { data: stuckMember } = await supabase
+        .from("members")
+        .select("budget_reserved")
+        .eq("id", a.highest_bidder_id)
+        .single();
+      await supabase
+        .from("members")
+        .update({
+          budget_reserved: Math.max(0, ((stuckMember as any)?.budget_reserved ?? 0) - (a.highest_bid ?? 0)),
+        })
+        .eq("id", a.highest_bidder_id);
+    }
   }
 
   return NextResponse.json({ ok: true });

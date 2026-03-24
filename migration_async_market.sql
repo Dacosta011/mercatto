@@ -93,3 +93,6 @@ CREATE TABLE IF NOT EXISTS icon_votes (
   created_at  timestamptz DEFAULT now(),
   UNIQUE(auction_id, member_id)
 );
+
+ALTER TABLE icon_votes REPLICA IDENTITY FULL;
+ALTER PUBLICATION supabase_realtime ADD TABLE icon_votes;
