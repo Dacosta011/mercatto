@@ -11,6 +11,7 @@ interface SocialProfile {
   id: string;
   username: string;
   photo_url: string | null;
+  verified?: boolean;
 }
 
 interface Post {
@@ -20,7 +21,7 @@ interface Post {
   created_at: string;
   parent_id: string | null;
   isMe: boolean;
-  author: { username: string; photo_url: string | null } | null;
+  author: { username: string; photo_url: string | null; verified?: boolean } | null;
   likeCount: number;
   likedByMe: boolean;
   replyCount: number;
@@ -34,6 +35,15 @@ function timeAgo(iso: string): string {
   if (diff < 3600) return `${Math.floor(diff / 60)}m`;
   if (diff < 86400) return `${Math.floor(diff / 3600)}h`;
   return `${Math.floor(diff / 86400)}d`;
+}
+
+function VerifiedBadge() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="shrink-0" title="Verificado">
+      <circle cx="12" cy="12" r="12" fill="#8B5CF6" />
+      <path d="M7 12.5l3.5 3.5 6.5-7" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
 }
 
 function Avatar({
@@ -107,6 +117,47 @@ function compressAvatar(file: File): Promise<string> {
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
+}
+
+// ─── Lightbox ─────────────────────────────────────────────────────────────────
+
+function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [onClose]);
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        onClick={onClose}
+        className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4 cursor-zoom-out"
+      >
+        <motion.img
+          initial={{ scale: 0.92, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          exit={{ scale: 0.92, opacity: 0 }}
+          transition={{ duration: 0.18 }}
+          src={src}
+          alt="imagen ampliada"
+          onClick={(e) => e.stopPropagation()}
+          className="max-w-full max-h-[90vh] rounded-2xl object-contain cursor-default shadow-2xl"
+        />
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors cursor-pointer"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </motion.div>
+    </AnimatePresence>
+  );
 }
 
 // ─── Profile Setup Modal ──────────────────────────────────────────────────────
@@ -217,20 +268,81 @@ function ProfileSetupModal({
   );
 }
 
+// ─── Account Switcher Modal ───────────────────────────────────────────────────
+
+function AccountSwitcherModal({
+  profiles,
+  activeId,
+  onSelect,
+  onNew,
+  onClose,
+}: {
+  profiles: SocialProfile[];
+  activeId: string;
+  onSelect: (p: SocialProfile) => void;
+  onNew: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <motion.div
+        initial={{ opacity: 0, y: 24 }}
+        animate={{ opacity: 1, y: 0 }}
+        onClick={(e) => e.stopPropagation()}
+        className="bg-[#131722] rounded-t-2xl sm:rounded-2xl border border-white/8 w-full max-w-sm p-5 shadow-2xl"
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-[#F3F4F6] font-bold text-sm">Cambiar perfil</h2>
+          <button onClick={onClose} className="w-7 h-7 rounded-lg hover:bg-[#1A1F2E] flex items-center justify-center text-[#9CA3AF] hover:text-[#F3F4F6] transition-colors cursor-pointer">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+        <div className="flex flex-col gap-2 mb-4">
+          {profiles.map((p) => (
+            <button
+              key={p.id}
+              onClick={() => { onSelect(p); onClose(); }}
+              className={`flex items-center gap-3 p-3 rounded-xl border transition-all cursor-pointer text-left ${p.id === activeId ? "border-[#8B5CF6]/40 bg-[#8B5CF6]/8" : "border-white/5 hover:border-white/10 hover:bg-[#1A1F2E]"}`}
+            >
+              <Avatar photo_url={p.photo_url} username={p.username} size={36} />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[#F3F4F6] text-sm font-semibold truncate">@{p.username}</span>
+                  {p.verified && <VerifiedBadge />}
+                </div>
+              </div>
+              {p.id === activeId && (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8B5CF6" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              )}
+            </button>
+          ))}
+        </div>
+        <button
+          onClick={() => { onNew(); onClose(); }}
+          className="w-full py-2.5 rounded-xl border border-dashed border-white/10 hover:border-[#8B5CF6]/30 text-[#9CA3AF] hover:text-[#8B5CF6] text-sm font-medium transition-all cursor-pointer flex items-center justify-center gap-2"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Crear nuevo perfil
+        </button>
+      </motion.div>
+    </div>
+  );
+}
+
 // ─── Compose Box ──────────────────────────────────────────────────────────────
 
 function ComposeBox({
   profile,
   onPost,
   parentId,
-  replyingTo,
+  parentPost,
   onCancelReply,
   autoFocus,
 }: {
   profile: SocialProfile;
   onPost: (post: Post) => void;
   parentId?: string | null;
-  replyingTo?: string | null;
+  parentPost?: Post | null;
   onCancelReply?: () => void;
   autoFocus?: boolean;
 }) {
@@ -292,12 +404,12 @@ function ComposeBox({
 
   return (
     <div className={`bg-[#131722] rounded-2xl border border-white/5 p-4 ${isReply ? "mb-3" : "mb-5"}`}>
-      {replyingTo && (
+      {isReply && onCancelReply && (
         <div className="flex items-center justify-between mb-3 px-1">
-          <span className="text-[#8B5CF6] text-xs font-medium">Respondiendo a @{replyingTo}</span>
-          {onCancelReply && (
-            <button onClick={onCancelReply} className="text-[#4B5563] hover:text-[#9CA3AF] text-xs transition-colors cursor-pointer">Cancelar</button>
-          )}
+          <span className="text-[#8B5CF6] text-xs font-medium">
+            Respondiendo a @{parentPost?.author?.username ?? "usuario"}
+          </span>
+          <button onClick={onCancelReply} className="text-[#4B5563] hover:text-[#9CA3AF] text-xs transition-colors cursor-pointer">Cancelar</button>
         </div>
       )}
       <div className="flex gap-3">
@@ -310,9 +422,27 @@ function ComposeBox({
             className="w-full bg-transparent text-[#F3F4F6] text-sm placeholder-[#4B5563] resize-none focus:outline-none leading-relaxed"
             style={{ minHeight: isReply ? 36 : 56 }}
           />
+
+          {/* Quote preview when replying */}
+          {isReply && parentPost && (
+            <div className="mt-2 rounded-xl border border-white/8 bg-[#0D0F14] p-3 pointer-events-none">
+              <div className="flex items-center gap-1.5 mb-1">
+                <Avatar photo_url={parentPost.author?.photo_url} username={parentPost.author?.username} size={16} />
+                <span className="text-[#9CA3AF] text-[11px] font-medium truncate">@{parentPost.author?.username ?? "usuario"}</span>
+                {parentPost.author?.verified && <VerifiedBadge />}
+              </div>
+              {parentPost.content && (
+                <p className="text-[#6B7280] text-xs leading-relaxed line-clamp-2">{parentPost.content}</p>
+              )}
+              {!parentPost.content && parentPost.image_url && (
+                <p className="text-[#6B7280] text-xs italic">Imagen adjunta</p>
+              )}
+            </div>
+          )}
+
           {imagePreview && (
             <div className="relative mt-2 rounded-xl overflow-hidden w-fit max-w-full">
-              <img src={imagePreview} alt="adjunto" className="max-h-64 rounded-xl object-cover" />
+              <img src={imagePreview} alt="adjunto" className="max-h-[286px] rounded-xl object-cover" />
               <button onClick={removeImage} className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center transition-colors cursor-pointer">
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
               </button>
@@ -346,11 +476,13 @@ function ReplyThread({
   profile,
   code,
   token,
+  onOpenLightbox,
 }: {
   post: Post;
   profile: SocialProfile | null;
   code: string;
   token: string;
+  onOpenLightbox: (src: string) => void;
 }) {
   const [replies, setReplies] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
@@ -417,6 +549,7 @@ function ReplyThread({
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
                         <span className="text-[#F3F4F6] text-xs font-semibold truncate">{reply.author?.username ?? "Usuario"}</span>
+                        {reply.author?.verified && <VerifiedBadge />}
                         {reply.isMe && <span className="text-[8px] font-bold px-1 py-0.5 rounded-full bg-[#8B5CF6]/15 text-[#8B5CF6] uppercase tracking-wide shrink-0">tú</span>}
                         <span className="text-[#4B5563] text-[10px]">{timeAgo(reply.created_at)}</span>
                       </div>
@@ -424,8 +557,19 @@ function ReplyThread({
                   </div>
                   {reply.content && <p className="text-[#D1D5DB] text-xs leading-relaxed whitespace-pre-wrap break-words mb-2">{reply.content}</p>}
                   {reply.image_url && (
-                    <div className="mb-2 rounded-lg overflow-hidden"><img src={reply.image_url} alt="imagen" className="w-full max-h-48 object-cover" /></div>
+                    <div className="mb-2 rounded-lg overflow-hidden cursor-zoom-in" onClick={() => onOpenLightbox(reply.image_url!)}>
+                      <img src={reply.image_url} alt="imagen" className="w-full max-h-[286px] object-cover" />
+                    </div>
                   )}
+                  {/* Quote of parent post inside reply */}
+                  <div className="mb-2 rounded-lg border border-white/6 bg-[#131722] p-2">
+                    <div className="flex items-center gap-1 mb-0.5">
+                      <Avatar photo_url={post.author?.photo_url} username={post.author?.username} size={12} />
+                      <span className="text-[#6B7280] text-[10px] font-medium">@{post.author?.username ?? "usuario"}</span>
+                    </div>
+                    {post.content && <p className="text-[#4B5563] text-[10px] leading-relaxed line-clamp-2">{post.content}</p>}
+                    {!post.content && post.image_url && <p className="text-[#4B5563] text-[10px] italic">Imagen adjunta</p>}
+                  </div>
                   <button
                     onClick={() => handleLikeReply(reply.id)}
                     className={`flex items-center gap-1 text-[10px] font-medium transition-colors cursor-pointer group ${reply.likedByMe ? "text-[#EF4444]" : "text-[#4B5563] hover:text-[#EF4444]"}`}
@@ -445,7 +589,7 @@ function ReplyThread({
               profile={profile}
               onPost={handleNewReply}
               parentId={post.id}
-              replyingTo={post.author?.username}
+              parentPost={post}
               onCancelReply={() => setShowCompose(false)}
               autoFocus
             />
@@ -473,12 +617,16 @@ function PostCard({
   code,
   token,
   onLike,
+  onOpenLightbox,
+  onVerify,
 }: {
   post: Post;
   profile: SocialProfile | null;
   code: string;
   token: string;
   onLike: (postId: string) => void;
+  onOpenLightbox: (src: string) => void;
+  onVerify?: (postId: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [showReplies, setShowReplies] = useState(false);
@@ -494,12 +642,26 @@ function PostCard({
       <div className="flex items-start gap-3 mb-3">
         <Avatar photo_url={post.author?.photo_url} username={post.author?.username ?? "?"} size={38} />
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <span className="text-[#F3F4F6] text-sm font-semibold truncate">{post.author?.username ?? "Usuario"}</span>
+            {post.author?.verified && <VerifiedBadge />}
             {post.isMe && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-[#8B5CF6]/15 text-[#8B5CF6] uppercase tracking-wide shrink-0">tú</span>}
           </div>
           <span className="text-[#4B5563] text-[11px]">{timeAgo(post.created_at)}</span>
         </div>
+        {/* Verify button — only shows on own posts, only if not verified */}
+        {post.isMe && !post.author?.verified && onVerify && (
+          <button
+            onClick={() => onVerify(post.id)}
+            title="Verificar cuenta"
+            className="w-7 h-7 rounded-lg hover:bg-[#8B5CF6]/10 flex items-center justify-center text-[#4B5563] hover:text-[#8B5CF6] transition-colors cursor-pointer shrink-0"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+              <polyline points="22 4 12 14.01 9 11.01"/>
+            </svg>
+          </button>
+        )}
       </div>
 
       {post.content && (
@@ -516,8 +678,11 @@ function PostCard({
       )}
 
       {post.image_url && (
-        <div className="mb-3 rounded-xl overflow-hidden bg-[#0D0F14]">
-          <img src={post.image_url} alt="imagen del post" className="w-full max-h-[360px] object-cover" />
+        <div
+          className="mb-3 rounded-xl overflow-hidden bg-[#0D0F14] cursor-zoom-in"
+          onClick={() => onOpenLightbox(post.image_url!)}
+        >
+          <img src={post.image_url} alt="imagen del post" className="w-full max-h-[286px] object-cover hover:opacity-95 transition-opacity" />
         </div>
       )}
 
@@ -554,7 +719,7 @@ function PostCard({
             exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.2 }}
           >
-            <ReplyThread post={post} profile={profile} code={code} token={token} />
+            <ReplyThread post={post} profile={profile} code={code} token={token} onOpenLightbox={onOpenLightbox} />
           </motion.div>
         )}
       </AnimatePresence>
@@ -568,11 +733,14 @@ export default function FeedPage() {
   const [code, setCode] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
 
-  const [profile, setProfile] = useState<SocialProfile | null | undefined>(undefined);
+  const [profiles, setProfiles] = useState<SocialProfile[]>([]);
+  const [activeProfile, setActiveProfile] = useState<SocialProfile | null | undefined>(undefined);
   const [posts, setPosts] = useState<Post[]>([]);
   const [loadingPosts, setLoadingPosts] = useState(true);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [editingProfile, setEditingProfile] = useState(false);
+  const [showSwitcher, setShowSwitcher] = useState(false);
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
 
   useEffect(() => {
     const c = getLastTournamentCode();
@@ -581,18 +749,26 @@ export default function FeedPage() {
     setToken(t);
   }, []);
 
-  const fetchProfile = useCallback(async () => {
+  // Fetch all profiles for this member
+  const fetchProfiles = useCallback(async () => {
     if (!code || !token) return;
     try {
       const res = await fetch(`/api/tournaments/${code}/social/profile`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
-        const { profile: p } = await res.json();
-        setProfile(p);
-        if (!p) setShowProfileModal(true);
+        const data = await res.json();
+        // API may return { profile } (single) or { profiles } (array) depending on version
+        const list: SocialProfile[] = data.profiles ?? (data.profile ? [data.profile] : []);
+        setProfiles(list);
+        if (list.length > 0) {
+          setActiveProfile(list[0]);
+        } else {
+          setActiveProfile(null);
+          setShowProfileModal(true);
+        }
       }
-    } catch { setProfile(null); }
+    } catch { setActiveProfile(null); }
   }, [code, token]);
 
   const fetchPosts = useCallback(async () => {
@@ -611,51 +787,53 @@ export default function FeedPage() {
 
   useEffect(() => {
     if (code && token) {
-      fetchProfile();
+      fetchProfiles();
       fetchPosts();
     }
-  }, [fetchProfile, fetchPosts, code, token]);
+  }, [fetchProfiles, fetchPosts, code, token]);
 
-  // ── Realtime: nuevos posts en tiempo real ────────────────────────────────
+  // Realtime
   useEffect(() => {
     if (!code || !token) return;
-
     const supabase = getBrowserClient();
-
     const channel = supabase
       .channel(`feed:${code}`)
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "posts" },
-        async (payload) => {
-          // Solo top-level posts se agregan al feed principal
-          if (payload.new?.parent_id) return;
-
-          // Refetch para obtener datos enriquecidos (autor, likes, etc.)
-          try {
-            const res = await fetch(`/api/tournaments/${code}/social/posts`, {
-              headers: { Authorization: `Bearer ${token}` },
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "posts" }, async (payload) => {
+        if (payload.new?.parent_id) return;
+        try {
+          const res = await fetch(`/api/tournaments/${code}/social/posts`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (res.ok) {
+            const { posts: latest } = await res.json();
+            setPosts((prev) => {
+              const existingIds = new Set(prev.map((p) => p.id));
+              const newPosts = (latest as Post[]).filter((p) => !existingIds.has(p.id));
+              if (newPosts.length === 0) return prev;
+              return [...newPosts, ...prev];
             });
-            if (res.ok) {
-              const { posts: latest } = await res.json();
-              setPosts((prev) => {
-                const existingIds = new Set(prev.map((p) => p.id));
-                const newPosts = (latest as Post[]).filter((p) => !existingIds.has(p.id));
-                if (newPosts.length === 0) return prev;
-                return [...newPosts, ...prev];
-              });
-            }
-          } catch { /* silent fail */ }
-        }
-      )
+          }
+        } catch { /* silent fail */ }
+      })
       .subscribe();
-
     return () => { supabase.removeChannel(channel); };
   }, [code, token]);
 
-  const handleLike = useCallback(
-    async (postId: string) => {
-      if (!code || !token) return;
+  const handleLike = useCallback(async (postId: string) => {
+    if (!code || !token) return;
+    setPosts((prev) =>
+      prev.map((p) =>
+        p.id === postId
+          ? { ...p, likedByMe: !p.likedByMe, likeCount: p.likedByMe ? p.likeCount - 1 : p.likeCount + 1 }
+          : p
+      )
+    );
+    try {
+      await fetch(`/api/tournaments/${code}/social/posts/${postId}/like`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    } catch {
       setPosts((prev) =>
         prev.map((p) =>
           p.id === postId
@@ -663,28 +841,38 @@ export default function FeedPage() {
             : p
         )
       );
-      try {
-        await fetch(`/api/tournaments/${code}/social/posts/${postId}/like`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
-        });
-      } catch {
-        setPosts((prev) =>
-          prev.map((p) =>
-            p.id === postId
-              ? { ...p, likedByMe: !p.likedByMe, likeCount: p.likedByMe ? p.likeCount - 1 : p.likeCount + 1 }
-              : p
-          )
-        );
-      }
-    },
-    [code, token]
-  );
+    }
+  }, [code, token]);
+
+  const handleVerify = useCallback(async (postId: string) => {
+    if (!code || !token || !activeProfile) return;
+    // Optimistic update
+    setActiveProfile((p) => p ? { ...p, verified: true } : p);
+    setProfiles((prev) => prev.map((p) => p.id === activeProfile.id ? { ...p, verified: true } : p));
+    setPosts((prev) =>
+      prev.map((p) =>
+        p.id === postId && p.author
+          ? { ...p, author: { ...p.author, verified: true } }
+          : p
+      )
+    );
+    try {
+      await fetch(`/api/tournaments/${code}/social/profile/verify`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    } catch { /* silent fail — badge stays optimistic */ }
+  }, [code, token, activeProfile]);
 
   const handleNewPost = (post: Post) => { setPosts((prev) => [post, ...prev]); };
 
   const handleProfileSaved = (saved: SocialProfile) => {
-    setProfile(saved);
+    setProfiles((prev) => {
+      const idx = prev.findIndex((p) => p.id === saved.id);
+      if (idx >= 0) { const next = [...prev]; next[idx] = saved; return next; }
+      return [...prev, saved];
+    });
+    setActiveProfile(saved);
     setShowProfileModal(false);
     setEditingProfile(false);
   };
@@ -697,7 +885,7 @@ export default function FeedPage() {
     );
   }
 
-  if (profile === undefined) {
+  if (activeProfile === undefined) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
@@ -710,12 +898,23 @@ export default function FeedPage() {
 
   return (
     <>
+      {lightboxSrc && <Lightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />}
+
       <AnimatePresence>
         {(showProfileModal || editingProfile) && (
           <ProfileSetupModal
-            existing={editingProfile ? profile : null}
+            existing={editingProfile ? activeProfile : null}
             onSave={handleProfileSaved}
             onClose={editingProfile ? () => setEditingProfile(false) : undefined}
+          />
+        )}
+        {showSwitcher && activeProfile && (
+          <AccountSwitcherModal
+            profiles={profiles}
+            activeId={activeProfile.id}
+            onSelect={setActiveProfile}
+            onNew={() => setShowProfileModal(true)}
+            onClose={() => setShowSwitcher(false)}
           />
         )}
       </AnimatePresence>
@@ -731,24 +930,23 @@ export default function FeedPage() {
             <p className="text-[#9CA3AF] text-[10px] sm:text-xs uppercase tracking-widest font-medium mb-0.5">Red Social</p>
             <h1 className="text-[#F3F4F6] text-xl sm:text-2xl font-bold tracking-tight">Feed</h1>
           </div>
-          {profile && (
+          {activeProfile && (
             <button
-              onClick={() => setEditingProfile(true)}
+              onClick={() => setShowSwitcher(true)}
               className="flex items-center gap-2 px-3 py-2 rounded-xl bg-[#131722] border border-white/5 hover:border-[#8B5CF6]/30 text-[#9CA3AF] hover:text-[#F3F4F6] text-xs font-medium transition-all cursor-pointer"
-              title="Editar perfil social"
+              title="Cambiar perfil"
             >
-              <Avatar photo_url={profile.photo_url} username={profile.username} size={22} />
-              <span className="truncate max-w-[80px]">@{profile.username}</span>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
-              </svg>
+              <Avatar photo_url={activeProfile.photo_url} username={activeProfile.username} size={22} />
+              <span className="truncate max-w-[80px]">@{activeProfile.username}</span>
+              {activeProfile.verified && <VerifiedBadge />}
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
             </button>
           )}
         </div>
 
-        {profile && <ComposeBox profile={profile} onPost={handleNewPost} />}
+        {activeProfile && <ComposeBox profile={activeProfile} onPost={handleNewPost} />}
 
-        {!profile && (
+        {!activeProfile && (
           <div className="bg-[#131722] rounded-2xl border border-[#8B5CF6]/20 p-5 mb-5 flex items-center gap-4">
             <div className="w-10 h-10 rounded-xl bg-[#8B5CF6]/10 flex items-center justify-center shrink-0">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8B5CF6" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
@@ -779,7 +977,15 @@ export default function FeedPage() {
           <div className="flex flex-col gap-3">
             {posts.map((post, i) => (
               <motion.div key={post.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }}>
-                <PostCard post={post} profile={profile} code={code} token={token} onLike={handleLike} />
+                <PostCard
+                  post={post}
+                  profile={activeProfile}
+                  code={code}
+                  token={token}
+                  onLike={handleLike}
+                  onOpenLightbox={setLightboxSrc}
+                  onVerify={handleVerify}
+                />
               </motion.div>
             ))}
           </div>
