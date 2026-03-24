@@ -39,7 +39,8 @@ function timeAgo(iso: string): string {
 
 function VerifiedBadge() {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="shrink-0" title="Verificado">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="shrink-0">
+      <title>Verificado</title>
       <circle cx="12" cy="12" r="12" fill="#8B5CF6" />
       <path d="M7 12.5l3.5 3.5 6.5-7" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
