@@ -196,10 +196,15 @@ function ProfileSetupModal({
     const token = code ? getMemberToken(code) : null;
     if (!code || !token) { setError("Sin sesión"); setSaving(false); return; }
     try {
+      // Edit existing → PUT with id. Create new → POST
+      const method = existing ? "PUT" : "POST";
+      const body = existing
+        ? { id: existing.id, username: username.trim(), photo_url: photoData }
+        : { username: username.trim(), photo_url: photoData };
       const res = await fetch(`/api/tournaments/${code}/social/profile`, {
-        method: "PUT",
+        method,
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ username: username.trim(), photo_url: photoData }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) { const j = await res.json(); setError(j.error ?? "Error guardando perfil"); return; }
       const { profile } = await res.json();
