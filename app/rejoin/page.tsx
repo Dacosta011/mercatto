@@ -11,6 +11,7 @@ import {
   saveUserProfile,
   saveTeamAssignment,
   saveTournamentStatus,
+  saveAdminToken,
   clearAdminToken,
 } from "@/lib/tokenStorage";
 import type { TournamentStatus } from "@/lib/tokenStorage";
@@ -26,7 +27,7 @@ function RejoinContent() {
   const [autoAttempted, setAutoAttempted] = useState(false);
 
   const doRejoin = useCallback(
-    async (c: string, t: string) => {
+    async (c: string, t: string, adminT?: string) => {
       setLoading(true);
       setError(null);
 
@@ -44,10 +45,15 @@ function RejoinContent() {
           return;
         }
 
-        clearAdminToken(data.code);
+        if (adminT) {
+          saveAdminToken(data.code, adminT.trim());
+          saveUserProfile(data.code, data.displayName, "admin");
+        } else {
+          clearAdminToken(data.code);
+          saveUserProfile(data.code, data.displayName, "member");
+        }
         saveMemberToken(data.code, t.trim());
         saveMemberId(data.code, data.memberId);
-        saveUserProfile(data.code, data.displayName, "member");
         if (data.team) {
           saveTeamAssignment(data.code, data.team.name, data.team.crestUrl);
         }
@@ -72,12 +78,13 @@ function RejoinContent() {
     if (autoAttempted) return;
     const urlCode = searchParams.get("code");
     const urlToken = searchParams.get("token");
+    const urlAdmin = searchParams.get("admin");
     if (urlCode) setCode(urlCode.toUpperCase());
     if (urlToken) setToken(urlToken);
 
     if (urlCode && urlToken) {
       setAutoAttempted(true);
-      doRejoin(urlCode, urlToken);
+      doRejoin(urlCode, urlToken, urlAdmin ?? undefined);
     } else {
       setAutoAttempted(true);
     }
@@ -209,11 +216,12 @@ function RejoinContent() {
                           const url = new URL(val);
                           const c = url.searchParams.get("code");
                           const t = url.searchParams.get("token");
+                          const a = url.searchParams.get("admin");
                           if (c && t) {
                             setCode(c.toUpperCase());
                             setToken(t);
                             setError(null);
-                            doRejoin(c, t);
+                            doRejoin(c, t, a ?? undefined);
                           }
                         } catch {}
                       }}

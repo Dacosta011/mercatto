@@ -5,6 +5,7 @@ import { motion } from "motion/react";
 import {
   getLastTournamentCode,
   getMemberToken,
+  getAdminToken,
   saveMemberToken,
 } from "@/lib/tokenStorage";
 
@@ -80,6 +81,7 @@ function QRCode({ url }: { url: string }) {
 export default function MagicLinkPage() {
   const [code, setCode] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
+  const [adminTokenVal, setAdminTokenVal] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const [showConfirmRegen, setShowConfirmRegen] = useState(false);
@@ -89,12 +91,13 @@ export default function MagicLinkPage() {
     if (c) {
       setCode(c);
       setToken(getMemberToken(c));
+      setAdminTokenVal(getAdminToken(c));
     }
   }, []);
 
   const magicLink =
     code && token
-      ? `${typeof window !== "undefined" ? window.location.origin : ""}/rejoin?code=${code}&token=${token}`
+      ? `${typeof window !== "undefined" ? window.location.origin : ""}/rejoin?code=${code}&token=${token}${adminTokenVal ? `&admin=${adminTokenVal}` : ""}`
       : null;
 
   const handleCopy = useCallback(async () => {
