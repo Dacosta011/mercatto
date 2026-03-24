@@ -1171,16 +1171,33 @@ function AuctionDetailModal({
     fetchDetail();
   }, [fetchDetail]);
 
-  // Realtime polling for active auctions
   useEffect(() => {
-    if (detail.phase !== "active") return;
-    const id = setInterval(fetchDetail, 5000);
-    return () => clearInterval(id);
-  }, [detail.phase, fetchDetail]);
+    if (detail.phase === "finished") return;
+    const sb = getBrowserClient();
+    const ch = sb
+      .channel(`auction-detail:${auction.id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "icon_auctions", filter: `id=eq.${auction.id}` },
+        () => fetchDetail()
+      )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "icon_bids", filter: `auction_id=eq.${auction.id}` },
+        () => fetchDetail()
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "icon_votes", filter: `auction_id=eq.${auction.id}` },
+        () => fetchDetail()
+      )
+      .subscribe();
+    return () => { ch.unsubscribe(); };
+  }, [auction.id, detail.phase, fetchDetail]);
 
   const icon = detail.icon;
   const col = icon ? ovrColor(icon.ovr) : { bg: "#9CA3AF", text: "#fff" };
-  const minNext = Math.max(detail.minBid, detail.highestBid + 1_000_000);
+  const minNext = Math.max(detail.minBid, detail.highestBid + 5_000_000);
   const canBid = !myIconSlotUsed && detail.phase === "active" && !detail.isMyBid;
 
   async function handleBid() {

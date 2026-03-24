@@ -171,6 +171,20 @@ export async function GET(request: NextRequest, { params }: Params) {
         .from("icon_auctions")
         .update({ phase: "finished" })
         .eq("id", ax.id);
+
+      if (ax.highest_bidder_id) {
+        const { data: stuckMember } = await supabase
+          .from("members")
+          .select("budget_reserved")
+          .eq("id", ax.highest_bidder_id)
+          .single();
+        await supabase
+          .from("members")
+          .update({
+            budget_reserved: Math.max(0, ((stuckMember as any)?.budget_reserved ?? 0) - (ax.highest_bid ?? 0)),
+          })
+          .eq("id", ax.highest_bidder_id);
+      }
     }
   }
 
