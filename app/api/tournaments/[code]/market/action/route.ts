@@ -76,10 +76,11 @@ export async function POST(request: NextRequest, { params }: Params) {
 
     const { data: tSettings } = await supabase
       .from("tournaments")
-      .select("max_transfers")
+      .select("max_transfers, clause_protection_limit")
       .eq("id", auth.tournamentId)
       .single();
     const maxT = (tSettings as any)?.max_transfers ?? 3;
+    const clauseProtectionLimit: number = (tSettings as any)?.clause_protection_limit ?? 1;
 
     if ((myMember as any)?.market_purchases >= maxT) {
       return NextResponse.json({ error: `Ya compraste el máximo de ${maxT} jugadores.` }, { status: 422 });
@@ -148,18 +149,18 @@ export async function POST(request: NextRequest, { params }: Params) {
       sellerId = memberByTeam[sellerTeamId] ?? "";
     }
 
-    // Clause protection: only from current iteration (after session.started_at)
-    const { data: prot } = await supabase
-      .from("market_transfers")
-      .select("id")
-      .eq("session_id", (session as any).id)
-      .eq("seller_team_id", sellerTeamId)
-      .eq("transfer_type", "clause")
-      .gte("created_at", (session as any).started_at)
-      .limit(1);
+    if (clauseProtectionLimit > 0) {
+      const { data: prot } = await supabase
+        .from("market_transfers")
+        .select("id")
+        .eq("session_id", (session as any).id)
+        .eq("seller_team_id", sellerTeamId)
+        .eq("transfer_type", "clause")
+        .gte("created_at", (session as any).started_at);
 
-    if ((prot ?? []).length > 0) {
-      return NextResponse.json({ error: "Ese equipo ya está protegido contra cláusulas." }, { status: 422 });
+      if ((prot ?? []).length >= clauseProtectionLimit) {
+        return NextResponse.json({ error: `Ese equipo ya alcanzó el límite de ${clauseProtectionLimit} cláusula${clauseProtectionLimit > 1 ? "s" : ""}.` }, { status: 422 });
+      }
     }
 
     // Deduct buyer budget + increment purchases

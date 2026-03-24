@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
     displayName?: string;
     rerolls?: number;
     maxTransfers?: number;
-    clauseProtection?: boolean;
+    clauseProtection?: number;
   };
 
   // Validación
@@ -111,9 +111,9 @@ export async function POST(request: NextRequest) {
     ? Math.min(10, Math.max(1, Math.floor(maxTransfers)))
     : 3;
 
-  const clauseProtectionVal = typeof clauseProtection === "boolean"
-    ? clauseProtection
-    : true;
+  const clauseProtectionVal = typeof clauseProtection === "number"
+    ? Math.min(10, Math.max(0, Math.floor(clauseProtection)))
+    : 1;
 
   // 1. Crear torneo
   const { data: tournament, error: tournamentError } = await supabase
@@ -125,7 +125,7 @@ export async function POST(request: NextRequest) {
       status: "lobby",
       rerolls_allowed: rerollsAllowed,
       max_transfers: maxTransfersVal,
-      clause_protection: clauseProtectionVal,
+      clause_protection_limit: clauseProtectionVal,
     })
     .select("id, name, code, status, created_at")
     .single();

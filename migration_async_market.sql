@@ -71,8 +71,9 @@ ALTER TABLE market_transfers ALTER COLUMN turn_id DROP NOT NULL;
 
 -- ─── 9. tournaments: parametizable market settings ────────────────────────
 ALTER TABLE tournaments
-  ADD COLUMN IF NOT EXISTS max_transfers      integer NOT NULL DEFAULT 3,
-  ADD COLUMN IF NOT EXISTS clause_protection  boolean NOT NULL DEFAULT true;
+  ADD COLUMN IF NOT EXISTS max_transfers             integer NOT NULL DEFAULT 3,
+  ADD COLUMN IF NOT EXISTS clause_protection         boolean NOT NULL DEFAULT true,
+  ADD COLUMN IF NOT EXISTS clause_protection_limit   integer NOT NULL DEFAULT 1;
 
 -- ─── 10. members: budget reservation for auction bids ─────────────────────
 ALTER TABLE members

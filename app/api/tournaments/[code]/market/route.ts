@@ -17,12 +17,12 @@ export async function GET(request: NextRequest, { params }: Params) {
   // ── 0. Tournament settings ───────────────────────────────────────────────
   const { data: tournamentSettings } = await supabase
     .from("tournaments")
-    .select("max_transfers, clause_protection")
+    .select("max_transfers, clause_protection_limit")
     .eq("id", auth.tournamentId)
     .single();
 
   const maxTransfers = (tournamentSettings as any)?.max_transfers ?? 3;
-  const clauseProtection = (tournamentSettings as any)?.clause_protection ?? true;
+  const clauseProtection: number = (tournamentSettings as any)?.clause_protection_limit ?? 1;
 
   // ── 1. Market session ─────────────────────────────────────────────────────
   const { data: session } = await supabase
@@ -158,11 +158,11 @@ export async function GET(request: NextRequest, { params }: Params) {
     (currentIterationTransfers ?? []).map((t: any) => t.player_id)
   );
 
-  const protectedTeamIds = new Set(
-    (currentIterationTransfers ?? [])
-      .filter((t: any) => t.transfer_type === "clause")
-      .map((t: any) => t.seller_team_id)
-  );
+  const clauseCountByTeam: Record<string, number> = {};
+  for (const t of (currentIterationTransfers ?? []).filter((t: any) => t.transfer_type === "clause")) {
+    const tid = (t as any).seller_team_id;
+    clauseCountByTeam[tid] = (clauseCountByTeam[tid] ?? 0) + 1;
+  }
 
   // ── 5. Available players ──────────────────────────────────────────────────
   const otherPlayerIds = Object.keys(effectiveOwner).filter(
@@ -197,7 +197,7 @@ export async function GET(request: NextRequest, { params }: Params) {
         teamCrestUrl: teamCrestById[ownerTeamId] ?? null,
         ownerId,
         ownerName: memberById[ownerId]?.display_name ?? "—",
-        clauseProtected: clauseProtection && protectedTeamIds.has(ownerTeamId),
+        clauseProtected: clauseProtection > 0 && (clauseCountByTeam[ownerTeamId] ?? 0) >= clauseProtection,
         inNegotiation: false,
       });
     }
