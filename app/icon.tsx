@@ -1,4 +1,5 @@
 import { ImageResponse } from "next/og";
+import { MERCATTO_LOGO_DATA_URI } from "@/lib/logo";
 
 export const size = { width: 32, height: 32 };
 export const contentType = "image/png";
@@ -17,15 +18,8 @@ export default function Icon() {
           borderRadius: "6px",
         }}
       >
-        <span
-          style={{
-            color: "#8B5CF6",
-            fontSize: "22px",
-            fontWeight: 900,
-          }}
-        >
-          M
-        </span>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={MERCATTO_LOGO_DATA_URI} alt="" width={24} height={20} />
       </div>
     ),
     { ...size },

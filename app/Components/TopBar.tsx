@@ -136,17 +136,8 @@ export default function TopBar() {
         {/* Left: Logo + status pills */}
         <div className="flex items-center gap-2 min-w-0">
           <Link href="/" className="flex items-center gap-2 shrink-0">
-            <div className="w-7 h-7 rounded-lg bg-[#8B5CF6] flex items-center justify-center shadow-lg shadow-[#8B5CF6]/20">
-              <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
-                <path
-                  d="M7 1L9.5 5.5H13L9.5 8.5L11 13L7 10.5L3 13L4.5 8.5L1 5.5H4.5L7 1Z"
-                  fill="white"
-                />
-              </svg>
-            </div>
-            <span className="text-[#F3F4F6] font-semibold tracking-widest text-[11px]">
-              MERCATTO
-            </span>
+            <img src="/mercatto-logo.svg" alt="" className="w-6 h-auto" />
+            <img src="/mercatto-text.svg" alt="Mercatto" className="h-2.75 w-auto brightness-0 invert" />
           </Link>
 
           {bar.has &&

@@ -81,16 +81,8 @@ export default function Home() {
           transition={{ duration: 0.5 }}
           className="text-center z-10 w-full max-w-md"
         >
-          <div className="w-16 h-16 rounded-2xl bg-[#8B5CF6]/10 border border-[#8B5CF6]/20 flex items-center justify-center mx-auto mb-6">
-            <span className="text-3xl font-black text-[#8B5CF6]">M</span>
-          </div>
-
-          <h1
-            className="text-[#F3F4F6] text-4xl font-black tracking-tight mb-2"
-            style={{ letterSpacing: "-0.04em" }}
-          >
-            MERCATTO
-          </h1>
+          <img src="/mercatto-logo.svg" alt="" className="w-14 h-auto mx-auto mb-4" />
+          <img src="/mercatto-text.svg" alt="Mercatto" className="h-5 w-auto mx-auto mb-2 brightness-0 invert" />
           <p className="text-[#9CA3AF] text-sm mb-8">
             Pega tu enlace mágico para restaurar tu sesión
           </p>
@@ -238,15 +230,14 @@ export default function Home() {
         </motion.div>
 
         {/* Title */}
-        <motion.h1
+        <motion.div
           initial={{ opacity: 0, scale: 0.92 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 0.2, duration: 0.7, ease: "easeOut" }}
-          className="text-[#F3F4F6] text-[3rem] sm:text-[4.5rem] md:text-[5.5rem] mb-4 sm:mb-5 tracking-tight font-black leading-none"
-          style={{ letterSpacing: "-0.04em" }}
+          className="flex justify-center mb-4 sm:mb-5"
         >
-          MERCATTO
-        </motion.h1>
+          <img src="/mercatto-text.svg" alt="Mercatto" className="h-8 sm:h-12 md:h-14 w-auto brightness-0 invert" />
+        </motion.div>
 
         {/* Subtitle */}
         <motion.p
