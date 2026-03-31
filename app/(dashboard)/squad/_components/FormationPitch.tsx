@@ -14,6 +14,7 @@ export interface LineupPlayer {
   clause?: number;
   suspended?: number;
   yellowCards?: number;
+  newSigning?: boolean;
 }
 
 function ovrColor(ovr: number): string {
@@ -178,13 +179,22 @@ function FilledSlot({
           </span>
         </div>
 
+        {/* Fichado badge */}
+        {player.newSigning && !isSuspended && (
+          <div className="absolute -top-1 -left-1 lg:-top-1.5 lg:-left-1.5 w-4 h-4 lg:w-5 lg:h-5 rounded-full bg-[#22C55E] flex items-center justify-center shadow-md shadow-[#22C55E]/30">
+            <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" className="lg:w-2.5 lg:h-2.5">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+          </div>
+        )}
+
         {/* Suspension / yellow badges */}
         {isSuspended && (
           <div className="absolute -top-1 -right-1 lg:-top-1.5 lg:-right-1.5 w-4 h-4 lg:w-5 lg:h-5 rounded-full bg-[#EF4444] flex items-center justify-center shadow-md shadow-[#EF4444]/30">
             <span className="text-[7px] lg:text-[9px] font-black text-white">!</span>
           </div>
         )}
-        {!isSuspended && (player.yellowCards ?? 0) >= 4 && (
+        {!isSuspended && (player.yellowCards ?? 0) > 0 && (player.yellowCards ?? 0) % 3 === 2 && (
           <div className="absolute -top-1 -right-1 lg:-top-1.5 lg:-right-1.5 w-4 h-4 lg:w-5 lg:h-5 rounded-full bg-[#F59E0B] flex items-center justify-center shadow-md shadow-[#F59E0B]/30">
             <span className="text-[7px] lg:text-[9px] font-black text-white">{player.yellowCards}</span>
           </div>

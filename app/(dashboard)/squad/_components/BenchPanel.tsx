@@ -123,16 +123,24 @@ function DraggableCard({ player, locked }: { player: LineupPlayer; locked: boole
       </div>
 
       {/* Status badges */}
+      {player.newSigning && (
+        <span className="shrink-0 text-[9px] lg:text-[10px] font-bold text-[#22C55E] bg-[#22C55E]/10 px-2 py-0.5 rounded-full uppercase tracking-wider">
+          Fichaje
+        </span>
+      )}
       {isSuspended && (
-        <div className="shrink-0 w-7 h-7 rounded-full bg-[#EF4444]/15 flex items-center justify-center">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="3" strokeLinecap="round">
-            <line x1="18" y1="6" x2="6" y2="18" />
-            <line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
+        <div className="shrink-0 flex items-center gap-1.5 px-2 py-1 rounded-lg bg-[#EF4444]/10">
+          <div className="w-3 h-4 rounded-sm bg-[#EF4444]" />
+          <span className="text-[9px] lg:text-[10px] font-bold text-[#EF4444]">Sanción</span>
         </div>
       )}
-      {!isSuspended && (player.yellowCards ?? 0) >= 4 && (
-        <div className="shrink-0 w-5 h-6 rounded-sm bg-[#F59E0B] shadow-sm shadow-[#F59E0B]/20" />
+      {!isSuspended && (player.yellowCards ?? 0) > 0 && (
+        <div className="shrink-0 flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-[#F59E0B]/10">
+          <div className="w-2.5 h-3.5 rounded-[1px] bg-[#F59E0B]" />
+          <span className={`text-[9px] lg:text-[10px] font-bold ${(player.yellowCards ?? 0) % 3 === 2 ? "text-[#EF4444]" : "text-[#F59E0B]"}`}>
+            {player.yellowCards}
+          </span>
+        </div>
       )}
     </div>
   );
