@@ -93,14 +93,44 @@ export async function GET(request: NextRequest, { params }: Params) {
     ...boughtPlayerIds,
   ];
 
-  // 6. Fetch de datos de jugadores
+  // 6. Fetch de datos de jugadores + disciplina en paralelo
   let players: any[] = [];
   if (finalPlayerIds.length > 0) {
-    const { data: playersData, error: playersErr } = await supabase
-      .from("players")
-      .select("id, name, ovr, position, country_name, price, clause, headshot_url")
-      .in("id", finalPlayerIds)
-      .order("ovr", { ascending: false });
+    const { data: leagueSession } = await supabase
+      .from("league_sessions")
+      .select("id, current_matchday")
+      .eq("tournament_id", tournamentData ? (tournamentData as any).id : "")
+      .maybeSingle();
+
+    const sessionId = leagueSession ? (leagueSession as any).id : null;
+    const currentMatchday = leagueSession ? (leagueSession as any).current_matchday : 0;
+
+    const [{ data: playersData, error: playersErr }, { data: disciplineRaw }, { data: suspensionsRaw }] = await Promise.all([
+      supabase
+        .from("players")
+        .select("id, name, ovr, position, country_name, price, clause, headshot_url")
+        .in("id", finalPlayerIds)
+        .order("ovr", { ascending: false }),
+      sessionId
+        ? supabase.from("discipline").select("player_id, card_type").eq("session_id", sessionId).eq("member_id", auth.memberId)
+        : Promise.resolve({ data: [] }),
+      sessionId
+        ? supabase.from("suspensions").select("player_id, from_matchday, matches_remaining").eq("session_id", sessionId).eq("member_id", auth.memberId)
+        : Promise.resolve({ data: [] }),
+    ]);
+
+    const yellowsByPlayer: Record<string, number> = {};
+    for (const d of disciplineRaw ?? []) {
+      const pid = (d as any).player_id;
+      if (!pid) continue;
+      if ((d as any).card_type === "yellow") yellowsByPlayer[pid] = (yellowsByPlayer[pid] ?? 0) + 1;
+    }
+
+    const suspendedPlayerIds = new Set(
+      (suspensionsRaw ?? [])
+        .filter((s: any) => s.player_id && s.from_matchday <= currentMatchday && s.from_matchday + s.matches_remaining > currentMatchday)
+        .map((s: any) => s.player_id)
+    );
 
     if (playersErr) {
       console.error("[squad] players", playersErr);
@@ -114,7 +144,9 @@ export async function GET(request: NextRequest, { params }: Params) {
         price: p.price ?? 0,
         clause: p.clause ?? 0,
         headshotUrl: p.headshot_url ?? null,
-        newSigning: boughtPlayerIds.has(p.id), // diferenciador de fichaje de mercado
+        newSigning: boughtPlayerIds.has(p.id),
+        suspended: suspendedPlayerIds.has(p.id) ? 1 : 0,
+        yellowCards: yellowsByPlayer[p.id] ?? 0,
       }));
     }
   }

@@ -725,10 +725,26 @@ export default function SquadPage() {
                         </div>
                       </div>
 
+                      {/* Fichaje + discipline badges */}
+                      {player.newSigning && (
+                        <span className="shrink-0 text-[8px] font-bold text-[#22C55E] bg-[#22C55E]/10 px-1.5 py-0.5 rounded-full uppercase tracking-wider">
+                          Fichaje
+                        </span>
+                      )}
+                      {!isSuspended && (player.yellowCards ?? 0) > 0 && (
+                        <div className="shrink-0 flex items-center gap-0.5 px-1 py-0.5 rounded bg-[#F59E0B]/10">
+                          <div className="w-2 h-3 rounded-[1px] bg-[#F59E0B]" />
+                          <span className={`text-[8px] font-bold ${(player.yellowCards ?? 0) % 3 === 2 ? "text-[#EF4444]" : "text-[#F59E0B]"}`}>
+                            {player.yellowCards}
+                          </span>
+                        </div>
+                      )}
+
                       {/* Action */}
                       {isSuspended ? (
-                        <div className="shrink-0 px-2 py-1 rounded-lg bg-[#EF4444]/10 text-[9px] font-semibold text-[#EF4444]">
-                          Sanción
+                        <div className="shrink-0 flex items-center gap-1 px-2 py-1 rounded-lg bg-[#EF4444]/10">
+                          <div className="w-2.5 h-3.5 rounded-[1px] bg-[#EF4444]" />
+                          <span className="text-[9px] font-semibold text-[#EF4444]">Sanción</span>
                         </div>
                       ) : inLineup ? (
                         <button
