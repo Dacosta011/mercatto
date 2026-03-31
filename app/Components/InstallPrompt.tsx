@@ -38,8 +38,8 @@ export default function InstallPrompt() {
 
   return (
     <div className="mx-4 mt-3 lg:mx-6 flex items-center gap-3 px-4 py-3 rounded-2xl bg-[#131722] border border-[#8B5CF6]/15 shadow-lg shadow-[#8B5CF6]/5">
-      <div className="w-10 h-10 rounded-xl bg-[#8B5CF6]/10 border border-[#8B5CF6]/20 flex items-center justify-center shrink-0">
-        <span className="text-lg font-black text-[#8B5CF6]">M</span>
+      <div className="w-10 h-10 rounded-xl bg-[#8B5CF6]/10 border border-[#8B5CF6]/20 flex items-center justify-center shrink-0 p-1.5">
+        <img src="/mercatto-logo.svg" alt="" className="w-full h-auto" />
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-[13px] font-semibold text-[#F3F4F6] leading-tight">

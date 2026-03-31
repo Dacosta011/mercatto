@@ -412,26 +412,16 @@ export default function Sidebar() {
             onClick={toggleCollapse}
             className="w-full flex items-center justify-center py-5 hover:bg-[#1A1F2E] transition-colors duration-200 cursor-pointer"
           >
-            <div className="w-7 h-7 rounded-lg bg-[#8B5CF6] flex items-center justify-center shadow-lg shadow-[#8B5CF6]/30">
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                <path d="M7 1L9.5 5.5H13L9.5 8.5L11 13L7 10.5L3 13L4.5 8.5L1 5.5H4.5L7 1Z" fill="white" />
-              </svg>
-            </div>
+            <img src="/mercatto-logo.svg" alt="Mercatto" className="w-7 h-auto" />
           </button>
         ) : (
           <div className="flex items-center justify-between px-5 py-5">
             <Link
               href="/"
-              className="flex items-center gap-3 hover:opacity-80 transition-opacity duration-200"
+              className="flex items-center gap-2.5 hover:opacity-80 transition-opacity duration-200"
             >
-              <div className="w-7 h-7 rounded-lg bg-[#8B5CF6] flex items-center justify-center shadow-lg shadow-[#8B5CF6]/30">
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                  <path d="M7 1L9.5 5.5H13L9.5 8.5L11 13L7 10.5L3 13L4.5 8.5L1 5.5H4.5L7 1Z" fill="white" />
-                </svg>
-              </div>
-              <span className="text-[#F3F4F6] font-semibold tracking-widest text-xs">
-                MERCATTO
-              </span>
+              <img src="/mercatto-logo.svg" alt="" className="w-7 h-auto" />
+              <img src="/mercatto-text.svg" alt="Mercatto" className="h-3 w-auto brightness-0 invert" />
             </Link>
             <button
               onClick={toggleCollapse}
