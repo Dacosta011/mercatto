@@ -166,6 +166,10 @@ export async function GET(request: NextRequest, { params }: Params) {
         amount: ax.highest_bid,
         transfer_type: "icon_auction",
       });
+
+      // Set icon clause to auction price + 30% markup
+      const newClause = Math.round(ax.highest_bid * 1.3);
+      await supabase.from("players").update({ clause: newClause }).eq("id", ax.selected_icon_id);
     } else {
       await supabase
         .from("icon_auctions")
@@ -200,14 +204,35 @@ export async function GET(request: NextRequest, { params }: Params) {
     return NextResponse.json({ auctions: [] });
   }
 
-  // Gather icon IDs (including candidates) and member IDs for lookups
-  const iconIds = [
+  // Find icons already owned so we can filter them from candidate lists
+  const allCandidateIds = [
     ...new Set(
       (auctionsRaw as any[])
         .flatMap((a) => [a.selected_icon_id, ...(a.candidate_ids ?? [])])
         .filter(Boolean)
     ),
   ];
+
+  const { data: tSessions } = await supabase
+    .from("market_sessions")
+    .select("id")
+    .eq("tournament_id", authTournamentId);
+
+  const tSessionIds = (tSessions ?? []).map((s: any) => s.id);
+
+  let ownedCandidateIds = new Set<string>();
+  if (tSessionIds.length > 0 && allCandidateIds.length > 0) {
+    const { data: ownedTransfers } = await supabase
+      .from("market_transfers")
+      .select("player_id")
+      .in("session_id", tSessionIds)
+      .in("player_id", allCandidateIds);
+
+    ownedCandidateIds = new Set((ownedTransfers ?? []).map((t: any) => t.player_id));
+  }
+
+  // Gather icon IDs (including candidates) and member IDs for lookups
+  const iconIds = allCandidateIds;
   const memberIds = [
     ...new Set(
       (auctionsRaw as any[])
@@ -292,20 +317,22 @@ export async function GET(request: NextRequest, { params }: Params) {
       computedPhase = "active";
     }
 
-    // Build candidates list for voting phase
-    const candidates = (a.candidate_ids ?? []).map((cid: string) => {
-      const ic = iconById[cid];
-      return ic
-        ? {
-            id: ic.id,
-            name: ic.name,
-            ovr: ic.ovr,
-            position: ic.position,
-            nation: ic.country_name ?? "—",
-            headshotUrl: ic.headshot_url ?? null,
-          }
-        : null;
-    }).filter(Boolean);
+    // Build candidates list for voting phase, excluding already-owned icons
+    const candidates = (a.candidate_ids ?? [])
+      .filter((cid: string) => !ownedCandidateIds.has(cid))
+      .map((cid: string) => {
+        const ic = iconById[cid];
+        return ic
+          ? {
+              id: ic.id,
+              name: ic.name,
+              ovr: ic.ovr,
+              position: ic.position,
+              nation: ic.country_name ?? "—",
+              headshotUrl: ic.headshot_url ?? null,
+            }
+          : null;
+      }).filter(Boolean);
 
     // Vote counts per icon
     const auctionVotes = votesByAuction[a.id] ?? [];
@@ -412,24 +439,34 @@ export async function POST(request: NextRequest, { params }: Params) {
     );
   }
 
-  // Get icons already won in this session
-  const { data: wonIcons } = await supabase
-    .from("icon_auctions")
-    .select("selected_icon_id")
-    .eq("session_id", sessionId)
-    .not("winner_id", "is", null);
-
-  const wonIds = new Set((wonIcons ?? []).map((w: any) => w.selected_icon_id).filter(Boolean));
-
-  // Pick 6 random icons not already won
+  // Get all icons and filter out any already purchased in this tournament
   const { data: allIcons } = await supabase
     .from("players")
     .select("id")
     .eq("is_icon", true);
 
-  const available = (allIcons ?? [])
-    .map((p: any) => p.id)
-    .filter((id: string) => !wonIds.has(id));
+  const allIconIds = (allIcons ?? []).map((p: any) => p.id);
+
+  // Find all market session IDs for this tournament
+  const { data: tournamentSessions } = await supabase
+    .from("market_sessions")
+    .select("id")
+    .eq("tournament_id", auth.tournamentId);
+
+  const tournamentSessionIds = (tournamentSessions ?? []).map((s: any) => s.id);
+
+  let ownedIconIds = new Set<string>();
+  if (tournamentSessionIds.length > 0 && allIconIds.length > 0) {
+    const { data: boughtTransfers } = await supabase
+      .from("market_transfers")
+      .select("player_id")
+      .in("session_id", tournamentSessionIds)
+      .in("player_id", allIconIds);
+
+    ownedIconIds = new Set((boughtTransfers ?? []).map((t: any) => t.player_id));
+  }
+
+  const available = allIconIds.filter((id: string) => !ownedIconIds.has(id));
 
   if (available.length === 0) {
     return NextResponse.json(

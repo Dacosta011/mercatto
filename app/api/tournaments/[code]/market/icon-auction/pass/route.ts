@@ -33,6 +33,10 @@ async function finishAuction(
       amount: highestBid,
     });
 
+    // Set icon clause to auction price + 30% markup
+    const newClause = Math.round(highestBid * 1.3);
+    await supabase.from("players").update({ clause: newClause }).eq("id", selectedIconId);
+
     await supabase.from("icon_auctions").update({
       phase: "finished",
       bidder_order: remaining,

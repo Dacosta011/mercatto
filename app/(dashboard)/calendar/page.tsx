@@ -115,6 +115,10 @@ export default function CalendarPage() {
   const [submitting, setSubmitting] = useState(false);
   const [closingMatchday, setClosingMatchday] = useState(false);
   const [suspensionWarning, setSuspensionWarning] = useState<{ fixtureId: string; players: { playerName: string; reason: string; matchesRemaining: number }[] } | null>(null);
+  const [winterModal, setWinterModal] = useState(false);
+  const [winterForm, setWinterForm] = useState({ durationHours: 24, budgetInjection: 100, winterMaxTransfers: 3, winterClauseProtection: 1 });
+  const [winterSubmitting, setWinterSubmitting] = useState(false);
+  const [marketSessionStatus, setMarketSessionStatus] = useState<string | null>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
   const fetchingRef = useRef(false);
 
@@ -310,6 +314,38 @@ export default function CalendarPage() {
     await fetchData(true);
   };
 
+  // ── Check market session status for winter market button ─────────────────────
+  useEffect(() => {
+    if (!code || !token) return;
+    fetch(`/api/tournaments/${code}/market`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setMarketSessionStatus(d.session?.status ?? null); })
+      .catch(() => {});
+  }, [code, token]);
+
+  const openWinterMarket = async () => {
+    if (!code || !adminToken) return;
+    setWinterSubmitting(true);
+    try {
+      const res = await fetch(`/api/tournaments/${code}/market/start`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
+        body: JSON.stringify({
+          marketType: "winter",
+          durationHours: winterForm.durationHours,
+          budgetInjection: winterForm.budgetInjection * 1_000_000,
+          winterMaxTransfers: winterForm.winterMaxTransfers,
+          winterClauseProtection: winterForm.winterClauseProtection,
+        }),
+      });
+      if (res.ok) {
+        setWinterModal(false);
+        setMarketSessionStatus("active");
+        router.push("/market");
+      }
+    } finally { setWinterSubmitting(false); }
+  };
+
   // ── Guard states ─────────────────────────────────────────────────────────────
   if (!code || !token) return (
     <div className="min-h-screen flex items-center justify-center p-8">
@@ -368,21 +404,34 @@ export default function CalendarPage() {
             </div>
           </div>
 
-          {/* Admin: close matchday */}
-          {isAdmin && data.status !== "finished" && displayMatchday === session.currentMatchday && (
-            <button onClick={closeMatchday} disabled={!currentMatchdayFinished || closingMatchday}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border transition-all duration-200 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
-              style={currentMatchdayFinished
-                ? { background: "#8B5CF615", borderColor: "#8B5CF640", color: "#8B5CF6" }
-                : { background: "#1A1F2E", borderColor: "#ffffff10", color: "#9CA3AF" }}>
-              {closingMatchday
-                ? <><svg className="animate-spin w-3 h-3" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg><span className="hidden sm:inline">Cerrando…</span></>
-                : <><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                  <span className="hidden sm:inline">{session.currentMatchday >= session.totalMatchdays ? "Finalizar Liga" : "Cerrar Fecha"}</span>
-                  <span className="sm:hidden">{session.currentMatchday >= session.totalMatchdays ? "Finalizar" : "Cerrar"}</span></>
-              }
-            </button>
-          )}
+          {/* Admin buttons */}
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Admin: open winter market */}
+            {isAdmin && data.status !== "finished" && marketSessionStatus !== "active" && (
+              <button onClick={() => setWinterModal(true)}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border transition-all duration-200 cursor-pointer shrink-0"
+                style={{ background: "#3B82F615", borderColor: "#3B82F640", color: "#3B82F6" }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M19.07 4.93L4.93 19.07"/></svg>
+                <span className="hidden sm:inline">Mercado de Invierno</span>
+                <span className="sm:hidden">Invierno</span>
+              </button>
+            )}
+            {/* Admin: close matchday */}
+            {isAdmin && data.status !== "finished" && displayMatchday === session.currentMatchday && (
+              <button onClick={closeMatchday} disabled={!currentMatchdayFinished || closingMatchday}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border transition-all duration-200 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                style={currentMatchdayFinished
+                  ? { background: "#8B5CF615", borderColor: "#8B5CF640", color: "#8B5CF6" }
+                  : { background: "#1A1F2E", borderColor: "#ffffff10", color: "#9CA3AF" }}>
+                {closingMatchday
+                  ? <><svg className="animate-spin w-3 h-3" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg><span className="hidden sm:inline">Cerrando…</span></>
+                  : <><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                    <span className="hidden sm:inline">{session.currentMatchday >= session.totalMatchdays ? "Finalizar Liga" : "Cerrar Fecha"}</span>
+                    <span className="sm:hidden">{session.currentMatchday >= session.totalMatchdays ? "Finalizar" : "Cerrar"}</span></>
+                }
+              </button>
+            )}
+          </div>
         </div>
 
         {/* My discipline pills */}
@@ -479,6 +528,87 @@ export default function CalendarPage() {
 
       {/* Modals */}
       <AnimatePresence>
+        {/* Winter market modal */}
+        {winterModal && (
+          <Modal onClose={() => setWinterModal(false)}>
+            <div className="flex flex-col gap-5">
+              <div className="flex items-start gap-4">
+                <div className="w-11 h-11 rounded-2xl bg-[#3B82F6]/10 border border-[#3B82F6]/20 flex items-center justify-center shrink-0">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M19.07 4.93L4.93 19.07"/></svg>
+                </div>
+                <div>
+                  <p className="text-[#F3F4F6] font-bold text-base leading-tight">Mercado de Invierno</p>
+                  <p className="text-[#9CA3AF] text-xs mt-1">Abre un mercado sin interrumpir la liga. Se inyecta presupuesto a todos los equipos.</p>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-4">
+                <div>
+                  <label className="text-[#9CA3AF] text-[10px] uppercase tracking-wider font-medium mb-1.5 block">Duración</label>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {[6, 12, 24, 48].map(h => (
+                      <button key={h} onClick={() => setWinterForm(f => ({ ...f, durationHours: h }))}
+                        className={`py-2 rounded-xl text-xs font-semibold border transition-colors cursor-pointer
+                          ${winterForm.durationHours === h ? "bg-[#3B82F6]/15 border-[#3B82F6]/40 text-[#3B82F6]" : "bg-[#0D0F14] border-white/8 text-[#9CA3AF] hover:text-[#F3F4F6]"}`}>
+                        {h}h
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[#9CA3AF] text-[10px] uppercase tracking-wider font-medium mb-1.5 block">Inyección de presupuesto (millones €)</label>
+                  <input type="number" min={0} max={500} value={winterForm.budgetInjection}
+                    onChange={e => setWinterForm(f => ({ ...f, budgetInjection: Math.max(0, parseInt(e.target.value) || 0) }))}
+                    className="w-full bg-[#0D0F14] border border-white/8 rounded-xl px-3 py-2 text-[#F3F4F6] text-sm font-semibold text-center focus:outline-none focus:border-[#3B82F6]/50" />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[#9CA3AF] text-[10px] uppercase tracking-wider font-medium mb-1.5 block">Max fichajes</label>
+                    <div className="flex gap-1">
+                      {[1, 2, 3, 4, 5].map(n => (
+                        <button key={n} onClick={() => setWinterForm(f => ({ ...f, winterMaxTransfers: n }))}
+                          className={`flex-1 py-2 rounded-lg text-xs font-semibold border transition-colors cursor-pointer
+                            ${winterForm.winterMaxTransfers === n ? "bg-[#3B82F6]/15 border-[#3B82F6]/40 text-[#3B82F6]" : "bg-[#0D0F14] border-white/8 text-[#9CA3AF]"}`}>
+                          {n}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[#9CA3AF] text-[10px] uppercase tracking-wider font-medium mb-1.5 block">Max cláusulas/equipo</label>
+                    <div className="flex gap-1">
+                      {[0, 1, 2, 3].map(n => (
+                        <button key={n} onClick={() => setWinterForm(f => ({ ...f, winterClauseProtection: n }))}
+                          className={`flex-1 py-2 rounded-lg text-xs font-semibold border transition-colors cursor-pointer
+                            ${winterForm.winterClauseProtection === n ? "bg-[#3B82F6]/15 border-[#3B82F6]/40 text-[#3B82F6]" : "bg-[#0D0F14] border-white/8 text-[#9CA3AF]"}`}>
+                          {n}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-[#0D0F14] rounded-xl px-3 py-2.5 text-[#9CA3AF] text-xs">
+                Se inyectarán <span className="text-[#F3F4F6] font-bold">{winterForm.budgetInjection}M€</span> a cada equipo. Los jugadores ícono quedan protegidos de cláusula y ofertas.
+              </div>
+
+              <div className="flex gap-3">
+                <button onClick={() => setWinterModal(false)}
+                  className="flex-1 px-4 py-2.5 rounded-xl border border-white/8 text-[#9CA3AF] text-sm font-medium cursor-pointer hover:bg-[#1A1F2E] transition-colors">
+                  Cancelar
+                </button>
+                <button onClick={openWinterMarket} disabled={winterSubmitting}
+                  className="flex-1 px-4 py-2.5 rounded-xl bg-[#3B82F6] text-white text-sm font-semibold cursor-pointer hover:bg-[#2563EB] transition-colors disabled:opacity-50">
+                  {winterSubmitting ? "Abriendo…" : "Abrir Mercado"}
+                </button>
+              </div>
+            </div>
+          </Modal>
+        )}
+
         {/* Suspension warning */}
         {suspensionWarning && (
           <Modal onClose={() => setSuspensionWarning(null)}>

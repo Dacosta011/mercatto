@@ -32,7 +32,7 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   const { data: session } = await supabase
     .from("market_sessions")
-    .select("id, status, started_at, closes_at")
+    .select("id, status, started_at, closes_at, market_type, winter_max_transfers")
     .eq("tournament_id", auth.tournamentId)
     .maybeSingle();
 
@@ -53,14 +53,17 @@ export async function POST(request: NextRequest, { params }: Params) {
     );
   }
 
-  // Tournament settings
+  // Tournament settings — winter sessions override with their own limits
   const { data: tSettings } = await supabase
     .from("tournaments")
     .select("max_transfers")
     .eq("id", auth.tournamentId)
     .single();
 
-  const maxTransfers = (tSettings as any)?.max_transfers ?? 3;
+  const isWinterSession = s.market_type === "winter";
+  const maxTransfers = isWinterSession && s.winter_max_transfers != null
+    ? s.winter_max_transfers
+    : ((tSettings as any)?.max_transfers ?? 3);
 
   // Check purchase limit
   const { data: myMember } = await supabase
@@ -103,19 +106,12 @@ export async function POST(request: NextRequest, { params }: Params) {
     );
   }
 
-  // Find effective seller
+  // Find effective seller (icons won't be in team_players)
   const { data: tp } = await supabase
     .from("team_players")
     .select("team_id")
     .eq("player_id", body.playerId)
-    .single();
-
-  if (!tp) {
-    return NextResponse.json(
-      { error: "Jugador no encontrado en ningún equipo." },
-      { status: 422 }
-    );
-  }
+    .maybeSingle();
 
   const { data: lastTransfer } = await supabase
     .from("market_transfers")
@@ -126,6 +122,13 @@ export async function POST(request: NextRequest, { params }: Params) {
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
+
+  if (!tp && !lastTransfer) {
+    return NextResponse.json(
+      { error: "Jugador no encontrado en ningún equipo." },
+      { status: 422 }
+    );
+  }
 
   let sellerId: string | undefined;
   if (lastTransfer) {

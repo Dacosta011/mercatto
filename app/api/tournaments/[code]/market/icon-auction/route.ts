@@ -112,6 +112,10 @@ export async function GET(request: NextRequest, { params }: Params) {
           amount: highestBid,
         });
 
+        // Set icon clause to auction price + 30% markup
+        const newClause = Math.round(highestBid * 1.3);
+        await supabase.from("players").update({ clause: newClause }).eq("id", selectedIconId);
+
         await supabase.from("icon_auctions").update({
           phase: "finished",
           bidder_order: bidderOrder,
@@ -127,20 +131,29 @@ export async function GET(request: NextRequest, { params }: Params) {
     }
   }
 
-  // Presented icons
+  // Presented icons — filter out any that have already been purchased
   const presentedIds: string[] = (auction as any).presented_icon_ids ?? [];
   let presentedIcons: any[] = [];
   if (presentedIds.length > 0) {
-    const { data: icons } = await supabase
-      .from("players").select("id, name, ovr, position, country_name, headshot_url")
-      .in("id", presentedIds);
-    presentedIcons = (icons ?? []).map((p: any) => ({
-      id: p.id, name: p.name, ovr: p.ovr,
-      position: p.position, nation: p.country_name,
-      minBid: getMinBid(p.ovr), headshotUrl: p.headshot_url ?? null,
-    }));
-    // Keep original order
-    presentedIcons.sort((a, b) => presentedIds.indexOf(a.id) - presentedIds.indexOf(b.id));
+    const { data: alreadyBought } = await supabase
+      .from("market_transfers")
+      .select("player_id")
+      .in("player_id", presentedIds);
+    const boughtIds = new Set((alreadyBought ?? []).map((t: any) => t.player_id));
+
+    const filteredIds = presentedIds.filter((id) => !boughtIds.has(id));
+
+    if (filteredIds.length > 0) {
+      const { data: icons } = await supabase
+        .from("players").select("id, name, ovr, position, country_name, headshot_url")
+        .in("id", filteredIds);
+      presentedIcons = (icons ?? []).map((p: any) => ({
+        id: p.id, name: p.name, ovr: p.ovr,
+        position: p.position, nation: p.country_name,
+        minBid: getMinBid(p.ovr), headshotUrl: p.headshot_url ?? null,
+      }));
+      presentedIcons.sort((a, b) => filteredIds.indexOf(a.id) - filteredIds.indexOf(b.id));
+    }
   }
 
   // Activation votes

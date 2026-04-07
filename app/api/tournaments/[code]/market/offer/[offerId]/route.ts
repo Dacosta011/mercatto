@@ -60,7 +60,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
   const { data: session } = await supabase
     .from("market_sessions")
-    .select("id, status")
+    .select("id, status, market_type, winter_max_transfers")
     .eq("tournament_id", auth.tournamentId)
     .maybeSingle();
 
@@ -73,7 +73,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
   const { data: playerData } = await supabase
     .from("players")
-    .select("name")
+    .select("name, is_icon")
     .eq("id", o.player_id)
     .single();
   const playerName = (playerData as any)?.name ?? "jugador";
@@ -190,7 +190,10 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     .eq("id", auth.tournamentId)
     .single();
 
-  const maxTransfers = (tSettings as any)?.max_transfers ?? 3;
+  const isWinterSession = (session as any).market_type === "winter";
+  const maxTransfers = isWinterSession && (session as any).winter_max_transfers != null
+    ? (session as any).winter_max_transfers
+    : ((tSettings as any)?.max_transfers ?? 3);
 
   const { data: buyer } = await supabase
     .from("members")
@@ -255,6 +258,12 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     transfer_type: "offer",
     amount: o.amount,
   });
+
+  // If icon, update clause to sale price + 30% so new owner doesn't lose money
+  if ((playerData as any)?.is_icon) {
+    const newClause = Math.round(o.amount * 1.3);
+    await supabase.from("players").update({ clause: newClause }).eq("id", o.player_id);
+  }
 
   // Mark offer accepted
   await supabase

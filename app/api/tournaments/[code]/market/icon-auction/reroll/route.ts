@@ -54,9 +54,31 @@ export async function POST(request: NextRequest, { params }: Params) {
       return NextResponse.json({ error: "No hay íconos disponibles." }, { status: 422 });
     }
 
+    const allIconIds = (allIcons as any[]).map((p: any) => p.id);
+
+    // Get all session IDs for this tournament
+    const { data: tournamentSessions } = await supabase
+      .from("market_sessions")
+      .select("id")
+      .eq("tournament_id", auth.tournamentId);
+
+    const tournamentSessionIds = (tournamentSessions ?? []).map((s: any) => s.id);
+
+    let boughtIconIds = new Set<string>();
+    if (tournamentSessionIds.length > 0) {
+      const { data: boughtTransfers } = await supabase
+        .from("market_transfers")
+        .select("player_id")
+        .in("session_id", tournamentSessionIds)
+        .in("player_id", allIconIds);
+
+      boughtIconIds = new Set((boughtTransfers ?? []).map((t: any) => t.player_id));
+    }
+
     const oldIds: string[] = (auction as any).presented_icon_ids ?? [];
-    const available = (allIcons as any[]).map((p) => p.id).filter((id: string) => !oldIds.includes(id));
-    const pool = available.length >= 6 ? available : (allIcons as any[]).map((p) => p.id);
+    const allAvailable = allIconIds.filter((id: string) => !boughtIconIds.has(id));
+    const available = allAvailable.filter((id: string) => !oldIds.includes(id));
+    const pool = available.length >= 6 ? available : allAvailable;
     const newPresented = shuffle(pool).slice(0, Math.min(6, pool.length));
 
     await supabase

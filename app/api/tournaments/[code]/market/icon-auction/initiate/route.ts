@@ -43,7 +43,8 @@ export async function POST(request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "La ronda aún no ha terminado." }, { status: 400 });
   }
 
-  // Pick 6 random icon players to present
+  // Pick 6 random icon players, excluding any that already belong to a team
+  // (i.e. they appear in market_transfers for any session in this tournament)
   const { data: allIcons } = await supabase
     .from("players").select("id").eq("is_icon", true);
 
@@ -51,7 +52,35 @@ export async function POST(request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "No hay íconos disponibles." }, { status: 422 });
   }
 
-  const shuffled = shuffle((allIcons as any[]).map((p) => p.id));
+  const allIconIds = (allIcons as any[]).map((p) => p.id);
+
+  // Get all session IDs for this tournament
+  const { data: tournamentSessions } = await supabase
+    .from("market_sessions")
+    .select("id")
+    .eq("tournament_id", auth.tournamentId);
+
+  const tournamentSessionIds = (tournamentSessions ?? []).map((s: any) => s.id);
+
+  // Find icons that have been transferred in any session of this tournament
+  let boughtIconIds = new Set<string>();
+  if (tournamentSessionIds.length > 0) {
+    const { data: boughtTransfers } = await supabase
+      .from("market_transfers")
+      .select("player_id")
+      .in("session_id", tournamentSessionIds)
+      .in("player_id", allIconIds);
+
+    boughtIconIds = new Set((boughtTransfers ?? []).map((t: any) => t.player_id));
+  }
+
+  const availableIcons = allIconIds.filter((id: string) => !boughtIconIds.has(id));
+
+  if (availableIcons.length === 0) {
+    return NextResponse.json({ error: "Todos los íconos ya fueron subastados." }, { status: 422 });
+  }
+
+  const shuffled = shuffle(availableIcons);
   const presentedIds = shuffled.slice(0, Math.min(6, shuffled.length));
 
   const { data: auction, error } = await supabase

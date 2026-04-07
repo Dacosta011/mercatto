@@ -52,7 +52,8 @@ async function recalcAllBudgets(
 
 // ─── POST /api/tournaments/[code]/market/start ────────────────────────────────
 // Admin only. Opens an async market window (default 24h).
-// Body (optional): { resetBudgets: true, durationHours: 24 }
+// Body (optional): { resetBudgets, durationHours, marketType, budgetInjection,
+//                    winterMaxTransfers, winterClauseProtection }
 
 export async function POST(request: NextRequest, { params }: Params) {
   const { code } = await params;
@@ -68,6 +69,10 @@ export async function POST(request: NextRequest, { params }: Params) {
   }
   const resetBudgets = body?.resetBudgets === true;
   const durationHours = body?.durationHours ?? 24;
+  const marketType: "regular" | "winter" = body?.marketType === "winter" ? "winter" : "regular";
+  const budgetInjection: number = typeof body?.budgetInjection === "number" ? body.budgetInjection : 0;
+  const winterMaxTransfers: number | null = marketType === "winter" ? (body?.winterMaxTransfers ?? 3) : null;
+  const winterClauseProtection: number | null = marketType === "winter" ? (body?.winterClauseProtection ?? 1) : null;
 
   const supabase = createServerClient();
 
@@ -114,7 +119,12 @@ export async function POST(request: NextRequest, { params }: Params) {
     .update({ market_purchases: 0, icon_slot_used: false, budget_reserved: 0 })
     .in("id", memberIds);
 
-  if (resetBudgets) {
+  if (marketType === "winter" && budgetInjection > 0) {
+    for (const mid of memberIds) {
+      const { data: m } = await supabase.from("members").select("budget").eq("id", mid).single();
+      await supabase.from("members").update({ budget: ((m as any)?.budget ?? 0) + budgetInjection }).eq("id", mid);
+    }
+  } else if (resetBudgets) {
     const mapped = (assignments ?? []).map((a: any) => ({
       member_id: a.member_id as string,
       team_id: a.team_id as string,
@@ -161,6 +171,9 @@ export async function POST(request: NextRequest, { params }: Params) {
         finished_at: null,
         current_round: 1,
         total_rounds: 1,
+        market_type: marketType,
+        winter_max_transfers: winterMaxTransfers,
+        winter_clause_protection: winterClauseProtection,
       })
       .eq("id", sessionId);
   } else {
@@ -175,6 +188,9 @@ export async function POST(request: NextRequest, { params }: Params) {
         closes_at: closesAt,
         duration_hours: durationHours,
         started_at: opensAt,
+        market_type: marketType,
+        winter_max_transfers: winterMaxTransfers,
+        winter_clause_protection: winterClauseProtection,
       })
       .select("id")
       .single();
@@ -188,18 +204,21 @@ export async function POST(request: NextRequest, { params }: Params) {
     sessionId = (session as any).id;
   }
 
-  await supabase
-    .from("tournaments")
-    .update({ status: "market" })
-    .eq("id", auth.tournamentId);
+  if (marketType !== "winter") {
+    await supabase
+      .from("tournaments")
+      .update({ status: "market" })
+      .eq("id", auth.tournamentId);
+  }
 
+  const label = marketType === "winter" ? "Mercado de Invierno" : "Mercado";
   await createBulkNotifications(
     supabase,
     auth.tournamentId,
     memberIds,
     "market_closing",
-    "Mercado abierto",
-    `El mercado está abierto por ${durationHours}h. ¡A fichar!`
+    `${label} abierto`,
+    `El ${label.toLowerCase()} está abierto por ${durationHours}h. ¡A fichar!`
   );
 
   return NextResponse.json(
