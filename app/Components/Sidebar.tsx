@@ -13,6 +13,7 @@ import {
   getTournamentStatus,
   getMarketOpen,
   getNavBadge,
+  isGuest,
   type NavBadge as NavBadgeType,
 } from "@/lib/tokenStorage";
 
@@ -22,6 +23,7 @@ interface SidebarState {
   lobbyHref: string;
   has: boolean;
   hasTeam: boolean;
+  guest: boolean;
   displayName: string | null;
   role: string | null;
   teamName: string | null;
@@ -39,6 +41,7 @@ let _prev: SidebarState | null = null;
 function getSessionSnapshot(): SidebarState {
   const code = getLastTournamentCode();
   const hasTeamVal = code ? hasTeamAssignment(code) : false;
+  const guest = code ? isGuest(code) : false;
   const displayName = code ? getDisplayName(code) : null;
   const role = code ? getRole(code) : null;
   const teamName = code ? getTeamAssignment(code) : null;
@@ -57,6 +60,7 @@ function getSessionSnapshot(): SidebarState {
     lobbyHref: code ? `/lobby/${code}` : "/lobby",
     has: !!code,
     hasTeam: hasTeamVal,
+    guest,
     displayName,
     role,
     teamName,
@@ -74,6 +78,7 @@ function getSessionSnapshot(): SidebarState {
     _prev.lobbyHref === next.lobbyHref &&
     _prev.has === next.has &&
     _prev.hasTeam === next.hasTeam &&
+    _prev.guest === next.guest &&
     _prev.displayName === next.displayName &&
     _prev.role === next.role &&
     _prev.teamName === next.teamName &&
@@ -95,6 +100,7 @@ const SERVER_SESSION: SidebarState = {
   lobbyHref: "/lobby",
   has: false,
   hasTeam: false,
+  guest: false,
   displayName: null,
   role: null,
   teamName: null,
@@ -355,24 +361,33 @@ export default function Sidebar() {
 
   // ── Build section items ───────────────────────────────────────────────
 
-  const principalItems: NavItem[] = [
-    { href: "/lobby", label: "Lobby", icon: icons.lobby },
-    {
-      href: "/squad",
-      label: "Equipo",
-      icon: icons.equipo,
-      locked: !session.hasTeam,
-      lockReason: "Debes girar la ruleta primero",
-    },
-    {
-      href: "/feed",
-      label: "Feed",
-      icon: icons.feed,
-      badge: session.feedBadge,
-      locked: !session.hasTeam,
-      lockReason: "Disponible tras el draft",
-    },
-  ];
+  const principalItems: NavItem[] = session.guest
+    ? [
+        {
+          href: "/feed",
+          label: "Feed",
+          icon: icons.feed,
+          badge: session.feedBadge,
+        },
+      ]
+    : [
+        { href: "/lobby", label: "Lobby", icon: icons.lobby },
+        {
+          href: "/squad",
+          label: "Equipo",
+          icon: icons.equipo,
+          locked: !session.hasTeam,
+          lockReason: "Debes girar la ruleta primero",
+        },
+        {
+          href: "/feed",
+          label: "Feed",
+          icon: icons.feed,
+          badge: session.feedBadge,
+          locked: !session.hasTeam,
+          lockReason: "Disponible tras el draft",
+        },
+      ];
 
   const mercadoItems: NavItem[] = [
     { href: "/market", label: "Mercado", icon: icons.mercado, badge: session.marketBadge },
@@ -451,8 +466,8 @@ export default function Sidebar() {
               />
             ))}
 
-            {/* ── Mercado section (conditional) ── */}
-            {session.marketActive && (
+            {/* ── Mercado section (conditional, hidden for guests) ── */}
+            {session.marketActive && !session.guest && (
               <div className="section-animate-in">
                 <SectionHeader
                   label="Mercado"
@@ -471,7 +486,7 @@ export default function Sidebar() {
             )}
 
             {/* ── Torneo section (conditional) ── */}
-            {session.leagueActive && (
+            {(session.leagueActive || session.guest) && (
               <div className="section-animate-in">
                 <SectionHeader
                   label="Torneo"
@@ -489,16 +504,20 @@ export default function Sidebar() {
               </div>
             )}
 
-            {/* ── Herramientas ── */}
-            <SectionHeader label="Herramientas" collapsed={collapsed} />
-            {toolItems.map((item) => (
-              <NavLink
-                key={item.href}
-                item={item}
-                collapsed={collapsed}
-                pathname={pathname}
-              />
-            ))}
+            {/* ── Herramientas (hidden for guests) ── */}
+            {!session.guest && (
+              <>
+                <SectionHeader label="Herramientas" collapsed={collapsed} />
+                {toolItems.map((item) => (
+                  <NavLink
+                    key={item.href}
+                    item={item}
+                    collapsed={collapsed}
+                    pathname={pathname}
+                  />
+                ))}
+              </>
+            )}
           </>
         ) : (
           <>

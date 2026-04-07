@@ -10,6 +10,7 @@ import {
   getTournamentStatus,
   getMarketOpen,
   getNavBadge,
+  isGuest,
   type NavBadge as NavBadgeType,
 } from "@/lib/tokenStorage";
 import {
@@ -30,6 +31,7 @@ interface NavState {
   lobbyHref: string;
   has: boolean;
   hasTeam: boolean;
+  guest: boolean;
   status: string | null;
   marketActive: boolean;
   leagueActive: boolean;
@@ -43,6 +45,7 @@ let _prev: NavState | null = null;
 function getNavSnapshot(): NavState {
   const code = getLastTournamentCode();
   const hasTeam = code ? hasTeamAssignment(code) : false;
+  const guest = code ? isGuest(code) : false;
   const status = code ? getTournamentStatus(code) : null;
   const marketOpen = code ? getMarketOpen(code) : false;
 
@@ -57,6 +60,7 @@ function getNavSnapshot(): NavState {
     lobbyHref: code ? `/lobby/${code}` : "/lobby",
     has: !!code,
     hasTeam,
+    guest,
     status,
     marketActive,
     leagueActive,
@@ -70,6 +74,7 @@ function getNavSnapshot(): NavState {
     _prev.lobbyHref === next.lobbyHref &&
     _prev.has === next.has &&
     _prev.hasTeam === next.hasTeam &&
+    _prev.guest === next.guest &&
     _prev.status === next.status &&
     _prev.marketActive === next.marketActive &&
     _prev.leagueActive === next.leagueActive &&
@@ -87,6 +92,7 @@ const SERVER_NAV: NavState = {
   lobbyHref: "/lobby",
   has: false,
   hasTeam: false,
+  guest: false,
   status: null,
   marketActive: false,
   leagueActive: false,
@@ -512,36 +518,8 @@ export default function BottomNav() {
   // ── Build dynamic tab list ────────────────────────────────────────────
   const tabs: Tab[] = [];
 
-  if (nav.hasTeam) {
-    tabs.push({
-      id: "equipo",
-      href: "/squad",
-      label: "Equipo",
-      icon: IconEquipo,
-      matchPaths: ["/squad"],
-    });
-  } else if (nav.has) {
-    tabs.push({
-      id: "lobby",
-      href: nav.lobbyHref,
-      label: "Lobby",
-      icon: IconLobby,
-      matchPaths: ["/lobby"],
-    });
-  }
-
-  if (nav.marketActive) {
-    tabs.push({
-      id: "mercado",
-      href: "/market",
-      label: "Mercado",
-      icon: IconMercado,
-      badge: nav.marketBadge,
-      matchPaths: ["/market", "/subastas"],
-    });
-  }
-
-  if (nav.leagueActive) {
+  if (nav.guest) {
+    // Guest: only Torneo and Feed tabs
     tabs.push({
       id: "torneo",
       href: "/calendar",
@@ -550,9 +528,6 @@ export default function BottomNav() {
       badge: nav.torneoBadge,
       matchPaths: ["/calendar", "/table"],
     });
-  }
-
-  if (nav.hasTeam) {
     tabs.push({
       id: "feed",
       href: "/feed",
@@ -561,6 +536,57 @@ export default function BottomNav() {
       badge: nav.feedBadge,
       matchPaths: ["/feed"],
     });
+  } else {
+    if (nav.hasTeam) {
+      tabs.push({
+        id: "equipo",
+        href: "/squad",
+        label: "Equipo",
+        icon: IconEquipo,
+        matchPaths: ["/squad"],
+      });
+    } else if (nav.has) {
+      tabs.push({
+        id: "lobby",
+        href: nav.lobbyHref,
+        label: "Lobby",
+        icon: IconLobby,
+        matchPaths: ["/lobby"],
+      });
+    }
+
+    if (nav.marketActive) {
+      tabs.push({
+        id: "mercado",
+        href: "/market",
+        label: "Mercado",
+        icon: IconMercado,
+        badge: nav.marketBadge,
+        matchPaths: ["/market", "/subastas"],
+      });
+    }
+
+    if (nav.leagueActive) {
+      tabs.push({
+        id: "torneo",
+        href: "/calendar",
+        label: "Torneo",
+        icon: IconTorneo,
+        badge: nav.torneoBadge,
+        matchPaths: ["/calendar", "/table"],
+      });
+    }
+
+    if (nav.hasTeam) {
+      tabs.push({
+        id: "feed",
+        href: "/feed",
+        label: "Feed",
+        icon: IconFeed,
+        badge: nav.feedBadge,
+        matchPaths: ["/feed"],
+      });
+    }
   }
 
   const moreMatchPaths = ["/magic-link", "/rejoin"];
