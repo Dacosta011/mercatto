@@ -7,6 +7,7 @@ import {
   hasTeamAssignment,
   isMarketActive,
   isLeagueActive,
+  isGuest,
   subscribeToStore,
 } from "@/lib/tokenStorage";
 
@@ -25,14 +26,26 @@ export default function RouteGuard({ children }: { children: React.ReactNode }) 
     if (isPublic) { setAllowed(true); return; }
 
     if (pathname.startsWith("/lobby")) { setAllowed(true); return; }
+    if (pathname.startsWith("/guest")) { setAllowed(true); return; }
 
     const code = getLastTournamentCode();
     if (!code) { router.replace("/"); return; }
 
+    const guest = isGuest(code);
     const hasTeam = hasTeamAssignment(code);
     const fallback = FALLBACK(code);
     const mActive = isMarketActive(code);
     const lActive = isLeagueActive(code);
+
+    // Guests can only access feed, table, and calendar
+    if (guest) {
+      const guestAllowed =
+        pathname === "/feed" || pathname.startsWith("/feed/") ||
+        pathname === "/table" || pathname.startsWith("/table/") ||
+        pathname === "/calendar" || pathname.startsWith("/calendar/");
+      if (!guestAllowed) { router.replace("/calendar"); return; }
+      setAllowed(true); return;
+    }
 
     if ((pathname === "/squad" || pathname.startsWith("/squad/")) && !hasTeam) {
       router.replace(fallback); return;

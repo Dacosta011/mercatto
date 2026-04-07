@@ -79,7 +79,7 @@ const ROLE_KEY = (tournamentCode: string) =>
 export function saveUserProfile(
   tournamentCode: string,
   displayName: string,
-  role: "admin" | "member"
+  role: "admin" | "member" | "guest"
 ) {
   localStorage.setItem(DISPLAY_NAME_KEY(tournamentCode), displayName);
   localStorage.setItem(ROLE_KEY(tournamentCode), role);
@@ -89,9 +89,13 @@ export function getDisplayName(tournamentCode: string): string | null {
   return localStorage.getItem(DISPLAY_NAME_KEY(tournamentCode));
 }
 
-export function getRole(tournamentCode: string): "admin" | "member" | null {
+export function getRole(tournamentCode: string): "admin" | "member" | "guest" | null {
   const r = localStorage.getItem(ROLE_KEY(tournamentCode));
-  return r === "admin" || r === "member" ? r : null;
+  return r === "admin" || r === "member" || r === "guest" ? r : null;
+}
+
+export function isGuest(tournamentCode: string): boolean {
+  return getRole(tournamentCode) === "guest";
 }
 
 // ─── Member UUID (guardado al unirse, distinto al token hash) ────────────────

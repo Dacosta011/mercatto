@@ -134,9 +134,13 @@ export async function GET(request: NextRequest, { params }: Params) {
     gf: number; ga: number; gd: number; points: number;
   }
 
+  // Only include members with a team assignment in the standings (excludes guests)
+  const assignedMemberIds = new Set((assignmentsRaw ?? []).map((a: any) => a.member_id as string));
+
   const tableMap: Record<string, TableRow> = {};
   for (const m of membersRaw ?? []) {
     const mid = (m as any).id;
+    if (!assignedMemberIds.has(mid)) continue;
     tableMap[mid] = {
       memberId: mid,
       displayName: memberById[mid]?.displayName ?? "—",
