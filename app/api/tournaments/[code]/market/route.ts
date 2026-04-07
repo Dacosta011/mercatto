@@ -21,8 +21,8 @@ export async function GET(request: NextRequest, { params }: Params) {
     .eq("id", auth.tournamentId)
     .single();
 
-  const maxTransfers = (tournamentSettings as any)?.max_transfers ?? 3;
-  const clauseProtection: number = (tournamentSettings as any)?.clause_protection_limit ?? 1;
+  const tournamentMaxTransfers = (tournamentSettings as any)?.max_transfers ?? 3;
+  const tournamentClauseProtection: number = (tournamentSettings as any)?.clause_protection_limit ?? 1;
 
   // ── 1. Market session ─────────────────────────────────────────────────────
   const { data: session } = await supabase
@@ -36,6 +36,13 @@ export async function GET(request: NextRequest, { params }: Params) {
   }
 
   const s = session as any;
+  const isWinterSession = s.market_type === "winter";
+  const maxTransfers = isWinterSession && s.winter_max_transfers != null
+    ? s.winter_max_transfers
+    : tournamentMaxTransfers;
+  const clauseProtection: number = isWinterSession && s.winter_clause_protection != null
+    ? s.winter_clause_protection
+    : tournamentClauseProtection;
 
   // ── Lazy expiration (replaces frequent cron) ────────────────────────────
   // Expire overdue offers on read so we don't need a cron every 2 minutes.
@@ -97,6 +104,13 @@ export async function GET(request: NextRequest, { params }: Params) {
             amount: ax.highest_bid,
             transfer_type: "icon_auction",
           });
+
+          // Set icon clause to auction price + 30% markup
+          const newClause = Math.round(ax.highest_bid * 1.3);
+          await supabase
+            .from("players")
+            .update({ clause: newClause })
+            .eq("id", ax.selected_icon_id);
         } else {
           await supabase
             .from("icon_auctions")
@@ -172,15 +186,19 @@ export async function GET(request: NextRequest, { params }: Params) {
 
   const { data: allTransfers } = await supabase
     .from("market_transfers")
-    .select("buyer_id, player_id, transfer_type")
+    .select("buyer_id, player_id, transfer_type, amount")
     .eq("session_id", s.id)
     .in("transfer_type", ["clause", "offer", "icon_auction"])
     .order("created_at", { ascending: true });
+
+  // Track the last transfer amount for each player (used for icon clause computation)
+  const lastTransferAmount: Record<string, number> = {};
 
   for (const t of allTransfers ?? []) {
     effectiveOwner[t.player_id] = t.buyer_id;
     const buyerTeam = teamIdByMember[t.buyer_id];
     if (buyerTeam) effectiveTeam[t.player_id] = buyerTeam;
+    if (t.amount) lastTransferAmount[t.player_id] = t.amount;
   }
 
   // ── 4. Clause protection + sold players (current market iteration) ────────
@@ -216,12 +234,27 @@ export async function GET(request: NextRequest, { params }: Params) {
       .in("id", otherPlayerIds)
       .order("ovr", { ascending: false });
 
+    // Collect icon IDs that need clause fixes
+    const iconClauseFixes: { id: string; clause: number }[] = [];
+
     for (const p of players ?? []) {
-      if ((p as any).is_icon) continue;
       if (soldPlayerIds.has((p as any).id)) continue;
 
       const ownerId = effectiveOwner[(p as any).id];
       const ownerTeamId = effectiveTeam[(p as any).id];
+
+      let playerClause = (p as any).clause ?? 0;
+      let playerPrice = (p as any).price ?? 0;
+
+      // For icons with missing clause, compute from last transfer amount
+      if ((p as any).is_icon && playerClause === 0) {
+        const transferAmount = lastTransferAmount[(p as any).id];
+        if (transferAmount && transferAmount > 0) {
+          playerClause = Math.round(transferAmount * 1.3);
+          playerPrice = transferAmount;
+          iconClauseFixes.push({ id: (p as any).id, clause: playerClause });
+        }
+      }
 
       availablePlayers.push({
         playerId: (p as any).id,
@@ -229,8 +262,9 @@ export async function GET(request: NextRequest, { params }: Params) {
         headshotUrl: (p as any).headshot_url ?? null,
         ovr: (p as any).ovr,
         position: (p as any).position ?? "—",
-        price: (p as any).price ?? 0,
-        clause: (p as any).clause ?? 0,
+        price: playerPrice,
+        clause: playerClause,
+        isIcon: (p as any).is_icon ?? false,
         teamId: ownerTeamId,
         teamName: teamNameById[ownerTeamId] ?? "—",
         teamCrestUrl: teamCrestById[ownerTeamId] ?? null,
@@ -239,6 +273,11 @@ export async function GET(request: NextRequest, { params }: Params) {
         clauseProtected: clauseProtection > 0 && (clauseCountByTeam[ownerTeamId] ?? 0) >= clauseProtection,
         inNegotiation: false,
       });
+    }
+
+    // Self-heal: persist corrected clause values so future reads are accurate
+    for (const fix of iconClauseFixes) {
+      await supabase.from("players").update({ clause: fix.clause }).eq("id", fix.id);
     }
   }
 
@@ -426,6 +465,7 @@ export async function GET(request: NextRequest, { params }: Params) {
       durationHours: s.duration_hours,
       startedAt: s.started_at,
       finishedAt: s.finished_at,
+      marketType: s.market_type ?? "regular",
     },
     timer: {
       closesAt: s.closes_at,

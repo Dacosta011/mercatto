@@ -17,7 +17,7 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   const { data: session } = await supabase
     .from("market_sessions")
-    .select("id, status")
+    .select("id, status, market_type")
     .eq("tournament_id", auth.tournamentId)
     .maybeSingle();
 
@@ -29,6 +29,7 @@ export async function POST(request: NextRequest, { params }: Params) {
   }
 
   const sessionId = (session as any).id;
+  const isWinter = (session as any).market_type === "winter";
 
   await supabase
     .from("market_offers")
@@ -50,10 +51,12 @@ export async function POST(request: NextRequest, { params }: Params) {
     })
     .eq("id", sessionId);
 
-  await supabase
-    .from("tournaments")
-    .update({ status: "lobby" })
-    .eq("id", auth.tournamentId);
+  if (!isWinter) {
+    await supabase
+      .from("tournaments")
+      .update({ status: "lobby" })
+      .eq("id", auth.tournamentId);
+  }
 
   const { data: members } = await supabase
     .from("members")

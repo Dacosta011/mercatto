@@ -258,6 +258,10 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       transfer_type: "icon_auction",
     });
 
+    // Set icon clause to auction price + 30% markup
+    const newClause = Math.round(a.highest_bid * 1.3);
+    await supabase.from("players").update({ clause: newClause }).eq("id", a.selected_icon_id);
+
     const { data: iconData } = await supabase
       .from("players")
       .select("name")

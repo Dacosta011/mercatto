@@ -33,6 +33,7 @@ interface PlayerCard {
   position: string;
   price: number;
   clause: number;
+  isIcon?: boolean;
   teamId: string;
   teamName: string;
   teamCrestUrl: string | null;
@@ -93,6 +94,7 @@ interface MarketState {
     durationHours: number;
     startedAt: string;
     finishedAt: string | null;
+    marketType?: "regular" | "winter";
   } | null;
   timer: TimerInfo;
   myStatus: MyStatus;
@@ -925,7 +927,7 @@ export default function MarketPage() {
                       className={`px-3 lg:px-4 py-2 lg:py-2.5 rounded-xl bg-[#0D0F14] border ${timerBorder} text-center shrink-0`}
                     >
                       <p className="text-[8px] lg:text-[9px] text-[#9CA3AF] uppercase tracking-widest">
-                        Cierra en
+                        {data.session?.marketType === "winter" ? "Invierno" : "Cierra en"}
                       </p>
                       <p
                         className={`text-base lg:text-lg font-bold tabular-nums ${timerColor}`}
@@ -934,11 +936,20 @@ export default function MarketPage() {
                       </p>
                     </div>
                     <div className="hidden sm:block">
-                      <p className="text-[#F3F4F6] text-sm font-semibold">
-                        Mercado Abierto
-                      </p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-[#F3F4F6] text-sm font-semibold">
+                          {data.session?.marketType === "winter" ? "Mercado de Invierno" : "Mercado Abierto"}
+                        </p>
+                        {data.session?.marketType === "winter" && (
+                          <span className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-[#3B82F6]/15 text-[#3B82F6] border border-[#3B82F6]/25">
+                            Invierno
+                          </span>
+                        )}
+                      </div>
                       <p className="text-[#9CA3AF] text-xs">
-                        Oferta o paga cláusulas libremente
+                        {data.session?.marketType === "winter"
+                          ? "Mercado abierto durante la liga — iconos protegidos"
+                          : "Oferta o paga cláusulas libremente"}
                       </p>
                     </div>
                   </div>
@@ -2055,9 +2066,16 @@ function PlayerMarketCard({
               </span>
             )}
           </div>
-          <p className="mt-1 lg:mt-2 text-sm lg:text-base font-bold text-[#F3F4F6] truncate">
-            {player.playerName}
-          </p>
+          <div className="mt-1 lg:mt-2 flex items-center gap-1.5">
+            <p className="text-sm lg:text-base font-bold text-[#F3F4F6] truncate">
+              {player.playerName}
+            </p>
+            {player.isIcon && (
+              <span className="shrink-0 px-1.5 py-0.5 rounded-md text-[9px] font-bold uppercase bg-[#F59E0B]/15 text-[#F59E0B] border border-[#F59E0B]/25">
+                Ícono
+              </span>
+            )}
+          </div>
           <p className="text-xs lg:text-sm text-[#9CA3AF] truncate mt-0.5">
             {player.teamName} · {player.ownerName}
           </p>
@@ -2346,7 +2364,7 @@ function MarketFinished({
           </svg>
         </div>
         <h1 className="text-[#F3F4F6] text-2xl sm:text-3xl font-bold tracking-tight mb-2">
-          Mercado Completado
+          {data?.session?.marketType === "winter" ? "Mercado de Invierno Completado" : "Mercado Completado"}
         </h1>
         <p className="text-[#9CA3AF] text-sm">
           Resumen final del periodo de fichajes

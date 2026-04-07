@@ -86,6 +86,14 @@ export async function GET(_req: NextRequest, { params }: Params) {
     };
   });
 
+  // 5. Check for active market session (needed for winter market coexistence)
+  const { data: activeMarketSession } = await supabase
+    .from("market_sessions")
+    .select("id, status")
+    .eq("tournament_id", tournament.id)
+    .eq("status", "active")
+    .maybeSingle();
+
   return NextResponse.json({
     id: tournament.id,
     name: tournament.name,
@@ -95,6 +103,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
     maxTransfers: (tournament as any).max_transfers ?? 3,
     clauseProtection: (tournament as any).clause_protection_limit ?? 1,
     members: membersWithTeams,
+    marketOpen: !!activeMarketSession,
   });
 }
 

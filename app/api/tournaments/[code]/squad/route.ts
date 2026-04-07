@@ -57,9 +57,11 @@ export async function GET(request: NextRequest, { params }: Params) {
 
   const basePlayerIds = new Set((teamPlayers ?? []).map((r: any) => r.player_id as string));
 
-  // 4. Transferencias del mercado activo (si existe)
-  const soldPlayerIds   = new Set<string>(); // jugadores que salieron de mi equipo
-  const boughtPlayerIds = new Set<string>(); // jugadores que compré en el mercado
+  // 4. Transferencias del mercado activo — calcular pertenencia final
+  // Procesamos transfers en orden cronológico para obtener el dueño actual de
+  // cada jugador. Solo así se resuelve la cadena A→B→C correctamente.
+  const boughtPlayerIds = new Set<string>();
+  const soldPlayerIds   = new Set<string>();
 
   if (tournamentData) {
     const { data: session } = await supabase
@@ -69,25 +71,47 @@ export async function GET(request: NextRequest, { params }: Params) {
       .maybeSingle();
 
     if (session) {
+      // Fetch all members + assignments for the tournament so we can map buyer→team
+      const { data: allMembers } = await supabase
+        .from("members")
+        .select("id")
+        .eq("tournament_id", (tournamentData as any).id);
+      const allMemberIds = (allMembers ?? []).map((m: any) => m.id);
+
+      const { data: allAssignments } = allMemberIds.length > 0
+        ? await supabase.from("assignments").select("member_id, team_id").in("member_id", allMemberIds)
+        : { data: [] };
+
+      const teamByMember: Record<string, string> = {};
+      for (const a of allAssignments ?? []) {
+        teamByMember[(a as any).member_id] = (a as any).team_id;
+      }
+
       const { data: transfers } = await supabase
         .from("market_transfers")
-        .select("buyer_id, seller_team_id, player_id, transfer_type")
+        .select("buyer_id, player_id, transfer_type")
         .eq("session_id", (session as any).id)
-        .in("transfer_type", ["clause", "offer", "icon_auction"]);
+        .in("transfer_type", ["clause", "offer", "icon_auction"])
+        .order("created_at", { ascending: true });
 
+      // Track the effective team for each transferred player
+      const currentTeamOfPlayer: Record<string, string> = {};
       for (const t of transfers ?? []) {
-        if ((t as any).seller_team_id === myTeamId) {
-          soldPlayerIds.add((t as any).player_id);
-        }
-        if ((t as any).buyer_id === auth.memberId) {
-          boughtPlayerIds.add((t as any).player_id);
+        const buyerTeam = teamByMember[(t as any).buyer_id];
+        if (buyerTeam) currentTeamOfPlayer[(t as any).player_id] = buyerTeam;
+      }
+
+      for (const [playerId, effectiveTeam] of Object.entries(currentTeamOfPlayer)) {
+        if (effectiveTeam === myTeamId && !basePlayerIds.has(playerId)) {
+          boughtPlayerIds.add(playerId);
+        } else if (effectiveTeam !== myTeamId && basePlayerIds.has(playerId)) {
+          soldPlayerIds.add(playerId);
         }
       }
     }
   }
 
   // 5. Construir lista final de player ids
-  // Base - vendidos + comprados
   const finalPlayerIds = [
     ...[...basePlayerIds].filter((id) => !soldPlayerIds.has(id)),
     ...boughtPlayerIds,

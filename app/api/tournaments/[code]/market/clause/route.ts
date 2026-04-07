@@ -32,7 +32,7 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   const { data: session } = await supabase
     .from("market_sessions")
-    .select("id, status, started_at, closes_at")
+    .select("id, status, started_at, closes_at, market_type, winter_max_transfers, winter_clause_protection")
     .eq("tournament_id", auth.tournamentId)
     .maybeSingle();
 
@@ -52,15 +52,20 @@ export async function POST(request: NextRequest, { params }: Params) {
     );
   }
 
-  // Tournament settings
+  // Tournament settings — winter sessions override with their own limits
   const { data: tSettings } = await supabase
     .from("tournaments")
     .select("max_transfers, clause_protection_limit")
     .eq("id", auth.tournamentId)
     .single();
 
-  const maxTransfers = (tSettings as any)?.max_transfers ?? 3;
-  const clauseProtectionLimit: number = (tSettings as any)?.clause_protection_limit ?? 1;
+  const isWinterSession = s.market_type === "winter";
+  const maxTransfers = isWinterSession && s.winter_max_transfers != null
+    ? s.winter_max_transfers
+    : ((tSettings as any)?.max_transfers ?? 3);
+  const clauseProtectionLimit: number = isWinterSession && s.winter_clause_protection != null
+    ? s.winter_clause_protection
+    : ((tSettings as any)?.clause_protection_limit ?? 1);
 
   // Check purchase limit
   const { data: myMember } = await supabase
@@ -79,7 +84,7 @@ export async function POST(request: NextRequest, { params }: Params) {
   // Get player
   const { data: player } = await supabase
     .from("players")
-    .select("id, name, clause")
+    .select("id, name, clause, is_icon")
     .eq("id", body.playerId)
     .single();
 
@@ -100,21 +105,14 @@ export async function POST(request: NextRequest, { params }: Params) {
     );
   }
 
-  // Find original team
+  // Find original team (base roster — icons won't be here)
   const { data: tp } = await supabase
     .from("team_players")
     .select("team_id")
     .eq("player_id", body.playerId)
-    .single();
+    .maybeSingle();
 
-  if (!tp) {
-    return NextResponse.json(
-      { error: "El jugador no está en ningún equipo." },
-      { status: 422 }
-    );
-  }
-
-  // Effective seller
+  // Find effective seller from transfer history
   const { data: lastTransfer } = await supabase
     .from("market_transfers")
     .select("buyer_id")
@@ -124,6 +122,13 @@ export async function POST(request: NextRequest, { params }: Params) {
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
+
+  if (!tp && !lastTransfer) {
+    return NextResponse.json(
+      { error: "El jugador no está en ningún equipo." },
+      { status: 422 }
+    );
+  }
 
   const allMemberIds =
     (
@@ -150,7 +155,7 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   if (lastTransfer) {
     sellerId = (lastTransfer as any).buyer_id;
-    sellerTeamId = teamByMember[sellerId] ?? (tp as any).team_id;
+    sellerTeamId = teamByMember[sellerId] ?? ((tp as any)?.team_id ?? "");
   } else {
     sellerTeamId = (tp as any).team_id;
     sellerId = memberByTeam[sellerTeamId] ?? "";
@@ -215,6 +220,12 @@ export async function POST(request: NextRequest, { params }: Params) {
     transfer_type: "clause",
     amount: clauseAmount,
   });
+
+  // If icon, update clause to purchase price + 30% so new owner doesn't lose money
+  if ((player as any).is_icon) {
+    const newClause = Math.round(clauseAmount * 1.3);
+    await supabase.from("players").update({ clause: newClause }).eq("id", body.playerId);
+  }
 
   // Cancel any pending offers for this player
   await supabase

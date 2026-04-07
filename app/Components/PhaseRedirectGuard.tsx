@@ -97,6 +97,18 @@ export default function PhaseRedirectGuard() {
           }
         },
       )
+      .on(
+        "postgres_changes" as any,
+        { event: "UPDATE", schema: "public", table: "market_sessions" },
+        (payload: any) => {
+          const sessionStatus = payload?.new?.status;
+          if (sessionStatus === "active") {
+            saveMarketOpen(code!, true);
+          } else if (sessionStatus === "finished") {
+            saveMarketOpen(code!, false);
+          }
+        },
+      )
       .subscribe();
 
     // ── Self-deletion detection (realtime only) ─────────────────────────

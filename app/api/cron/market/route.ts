@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
   // ── 2. Auto-close expired markets ─────────────────────────────────────────
   const { data: expiredSessions } = await supabase
     .from("market_sessions")
-    .select("id, tournament_id, closes_at")
+    .select("id, tournament_id, closes_at, market_type")
     .eq("status", "active")
     .lt("closes_at", now);
 
@@ -99,10 +99,12 @@ export async function GET(request: NextRequest) {
       .update({ status: "finished", finished_at: now })
       .eq("id", sid);
 
-    await supabase
-      .from("tournaments")
-      .update({ status: "lobby" })
-      .eq("id", tid);
+    if ((es as any).market_type !== "winter") {
+      await supabase
+        .from("tournaments")
+        .update({ status: "lobby" })
+        .eq("id", tid);
+    }
 
     const { data: members } = await supabase
       .from("members")
@@ -237,6 +239,13 @@ export async function GET(request: NextRequest) {
         amount: ax.highest_bid,
         type: "auction",
       });
+
+      // Set icon clause to auction price + 30% markup
+      const newClause = Math.round(ax.highest_bid * 1.3);
+      await supabase
+        .from("players")
+        .update({ clause: newClause })
+        .eq("id", ax.selected_icon_id);
 
       if (tid) {
         // Notify winner
