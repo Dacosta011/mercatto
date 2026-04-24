@@ -112,16 +112,25 @@ export async function POST(request: NextRequest, { params }: Params) {
     .eq("player_id", body.playerId)
     .maybeSingle();
 
-  // Find effective seller from transfer history
-  const { data: lastTransfer } = await supabase
+  // Find effective seller from transfer history (auto_release wins as well)
+  const { data: lastAnyTransfer } = await supabase
     .from("market_transfers")
-    .select("buyer_id")
+    .select("buyer_id, transfer_type")
     .eq("session_id", s.id)
     .eq("player_id", body.playerId)
-    .in("transfer_type", ["clause", "offer", "icon_auction"])
+    .in("transfer_type", ["clause", "offer", "icon_auction", "auto_release"])
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
+
+  if (lastAnyTransfer && (lastAnyTransfer as any).transfer_type === "auto_release") {
+    return NextResponse.json(
+      { error: "Este jugador fue liberado por deuda y no está disponible en este mercado." },
+      { status: 422 }
+    );
+  }
+
+  const lastTransfer = lastAnyTransfer;
 
   if (!tp && !lastTransfer) {
     return NextResponse.json(
@@ -183,6 +192,82 @@ export async function POST(request: NextRequest, { params }: Params) {
         { status: 422 }
       );
     }
+  }
+
+  // ── Rejection check: if this buyer already attempted to clause this player
+  //    in this market session and got rejected, they cannot try again.
+  const { data: priorRejection } = await supabase
+    .from("market_transfers")
+    .select("id")
+    .eq("session_id", s.id)
+    .eq("buyer_id", auth.memberId)
+    .eq("player_id", body.playerId)
+    .eq("transfer_type", "clause_rejected")
+    .limit(1);
+
+  if ((priorRejection ?? []).length > 0) {
+    return NextResponse.json(
+      { error: "El jugador ya rechazó tu oferta en este mercado." },
+      { status: 422 }
+    );
+  }
+
+  // ── Player rejection roll: 25% chance the player turns the clause down.
+  //    On rejection nothing moves (no money, no purchase counted) but we
+  //    persist the event so the same buyer cannot retry the same player in
+  //    this session.
+  const REJECTION_CHANCE = 0.25;
+  const rejected = Math.random() < REJECTION_CHANCE;
+
+  if (rejected) {
+    await supabase.from("market_transfers").insert({
+      session_id: s.id,
+      turn_id: null,
+      buyer_id: auth.memberId,
+      seller_id: sellerId,
+      seller_team_id: sellerTeamId,
+      player_id: body.playerId,
+      transfer_type: "clause_rejected",
+      amount: clauseAmount,
+    });
+
+    const buyerNameRow = await supabase
+      .from("members")
+      .select("display_name")
+      .eq("id", auth.memberId)
+      .single();
+    const buyerName = (buyerNameRow.data as any)?.display_name ?? "—";
+
+    // Notify the buyer in their own feed too — useful when the rejection
+    // happens via push and they're not on the market screen.
+    await createNotification({
+      supabase,
+      memberId: auth.memberId,
+      tournamentId: auth.tournamentId,
+      type: "clause_rejected",
+      title: "Cláusula rechazada",
+      body: `${(player as any).name} rechazó tu oferta de cláusula.`,
+      metadata: { playerId: body.playerId, amount: clauseAmount },
+    });
+
+    if (sellerId) {
+      await createNotification({
+        supabase,
+        memberId: sellerId,
+        tournamentId: auth.tournamentId,
+        type: "clause_rejected",
+        title: "Cláusula rechazada",
+        body: `${(player as any).name} rechazó la cláusula que pagó ${buyerName}.`,
+        metadata: { playerId: body.playerId, buyerId: auth.memberId },
+      });
+    }
+
+    return NextResponse.json({
+      ok: true,
+      rejected: true,
+      amount: clauseAmount,
+      playerName: (player as any).name,
+    });
   }
 
   // Deduct buyer budget + increment purchases
@@ -261,5 +346,5 @@ export async function POST(request: NextRequest, { params }: Params) {
     });
   }
 
-  return NextResponse.json({ ok: true, amount: clauseAmount });
+  return NextResponse.json({ ok: true, rejected: false, amount: clauseAmount });
 }

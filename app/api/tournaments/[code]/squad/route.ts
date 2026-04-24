@@ -36,7 +36,7 @@ export async function GET(request: NextRequest, { params }: Params) {
   // 2. Equipo + presupuesto + torneo en paralelo
   const [{ data: team, error: teamErr }, { data: memberData }, { data: tournamentData }] = await Promise.all([
     supabase.from("teams").select("id, name, crest_url").eq("id", myTeamId).single(),
-    supabase.from("members").select("budget").eq("id", auth.memberId).single(),
+    supabase.from("members").select("budget, budget_reserved").eq("id", auth.memberId).single(),
     supabase.from("tournaments").select("id").eq("code", code).maybeSingle(),
   ]);
 
@@ -91,12 +91,17 @@ export async function GET(request: NextRequest, { params }: Params) {
         .from("market_transfers")
         .select("buyer_id, player_id, transfer_type")
         .eq("session_id", (session as any).id)
-        .in("transfer_type", ["clause", "offer", "icon_auction"])
+        .in("transfer_type", ["clause", "offer", "icon_auction", "auto_release"])
         .order("created_at", { ascending: true });
 
-      // Track the effective team for each transferred player
-      const currentTeamOfPlayer: Record<string, string> = {};
+      // Track the effective team for each transferred player.
+      // null = player is currently a free agent (after auto_release).
+      const currentTeamOfPlayer: Record<string, string | null> = {};
       for (const t of transfers ?? []) {
+        if ((t as any).transfer_type === "auto_release") {
+          currentTeamOfPlayer[(t as any).player_id] = null;
+          continue;
+        }
         const buyerTeam = teamByMember[(t as any).buyer_id];
         if (buyerTeam) currentTeamOfPlayer[(t as any).player_id] = buyerTeam;
       }
@@ -105,6 +110,7 @@ export async function GET(request: NextRequest, { params }: Params) {
         if (effectiveTeam === myTeamId && !basePlayerIds.has(playerId)) {
           boughtPlayerIds.add(playerId);
         } else if (effectiveTeam !== myTeamId && basePlayerIds.has(playerId)) {
+          // either sold to another team OR auto-released
           soldPlayerIds.add(playerId);
         }
       }
@@ -189,6 +195,7 @@ export async function GET(request: NextRequest, { params }: Params) {
       crestUrl: (team as any).crest_url ?? null,
       squadValue,
       budget: (memberData as any)?.budget ?? 0,
+      budgetReserved: (memberData as any)?.budget_reserved ?? 0,
     },
     players,
     avgOvr,

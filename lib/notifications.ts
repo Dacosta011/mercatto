@@ -13,11 +13,13 @@ export type NotificationType =
   | "offer_received"
   | "offer_accepted"
   | "offer_rejected"
+  | "offer_cancelled"
   | "offer_expired"
   | "offer_countered"
   | "offer_expiring"
   | "clause_paid"
   | "clause_protected"
+  | "clause_rejected"
   | "auction_started"
   | "auction_outbid"
   | "auction_ending"
@@ -25,7 +27,9 @@ export type NotificationType =
   | "auction_lost"
   | "market_closing"
   | "market_closed"
-  | "transfer_completed";
+  | "transfer_completed"
+  | "salary_paid"
+  | "auto_release";
 
 interface CreateNotificationParams {
   supabase: SupabaseClient;

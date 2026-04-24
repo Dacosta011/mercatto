@@ -19,6 +19,7 @@ import Button from "../../Components/Button";
 import FormationPitch from "./_components/FormationPitch";
 import type { LineupPlayer } from "./_components/FormationPitch";
 import BenchPanel from "./_components/BenchPanel";
+import FinancesPanel from "./_components/FinancesPanel";
 import formations, { FORMATION_IDS, type FormationId } from "./_lib/formations";
 
 /* ── Types & helpers ───────────────────────────────────────── */
@@ -30,6 +31,7 @@ interface SquadData {
     crestUrl: string | null;
     squadValue: number;
     budget: number;
+    budgetReserved?: number;
   };
   players: LineupPlayer[];
   avgOvr: number;
@@ -83,20 +85,28 @@ export default function SquadPage() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("lineup");
   const [squadSearch, setSquadSearch] = useState("");
   const [squadFilter, setSquadFilter] = useState<PosFilter>("Todos");
+  const [financesOpen, setFinancesOpen] = useState(false);
+  const [code, setCode] = useState<string | null>(null);
+  const [token, setToken] = useState<string | null>(null);
 
   const formation = formations[formationId];
 
   /* ── Data fetching ───────────────────────────────────────── */
   useEffect(() => {
-    const code = getLastTournamentCode();
-    const token = code ? getMemberToken(code) : null;
+    const codeLocal = getLastTournamentCode();
+    const tokenLocal = codeLocal ? getMemberToken(codeLocal) : null;
 
-    if (!code || !token) {
+    if (!codeLocal || !tokenLocal) {
       setError("No estás en ningún torneo activo.");
       setLoading(false);
       return;
     }
 
+    setCode(codeLocal);
+    setToken(tokenLocal);
+
+    const code = codeLocal;
+    const token = tokenLocal;
     const headers = { Authorization: `Bearer ${token}` };
 
     Promise.all([
@@ -439,7 +449,7 @@ export default function SquadPage() {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.3 }}
-        className="flex flex-col h-full"
+        className="flex flex-col h-full overflow-x-hidden"
       >
         {/* ── Compact header ──────────────────────────── */}
         <div className="px-4 lg:px-6 pt-3 lg:pt-5 pb-2 lg:pb-4 shrink-0">
@@ -486,40 +496,99 @@ export default function SquadPage() {
             </div>
           </div>
 
-          {/* Row 2: Stats pills + Formation */}
-          <div className="flex items-center gap-1.5 lg:gap-3">
-            <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#131722] border border-white/4 shrink-0">
-              <span className="text-[9px] text-[#9CA3AF]/60 uppercase tracking-wide">€</span>
-              <span className="text-[11px] font-semibold text-[#F3F4F6]">{fmtMoney(team.budget)}</span>
-            </div>
-            <div className="hidden sm:flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#131722] border border-white/4 shrink-0">
-              <span className="text-[9px] text-[#9CA3AF]/60 uppercase tracking-wide">Val</span>
-              <span className="text-[11px] font-semibold text-[#F3F4F6]">{fmtMoney(team.squadValue)}</span>
-            </div>
-            <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#131722] border border-white/4 shrink-0">
-              <span className="text-[9px] text-[#9CA3AF]/60 uppercase tracking-wide">OVR</span>
-              <span className="text-[11px] font-bold" style={{ color: ovrColor(avgOvr) }}>{avgOvr || "—"}</span>
-            </div>
-            <div className="flex-1" />
-            <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#131722] border border-white/4 shrink-0">
-              <span className="text-[9px] text-[#9CA3AF]/60 uppercase tracking-wide">Form.</span>
-              <select
-                value={formationId}
-                onChange={(e) => setFormationId(e.target.value as FormationId)}
-                disabled={locked}
-                className="bg-transparent text-[11px] font-bold text-[#8B5CF6] outline-none cursor-pointer appearance-none pr-4"
-                style={{
-                  backgroundImage: `url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%238B5CF6' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`,
-                  backgroundRepeat: "no-repeat",
-                  backgroundPosition: "right center",
-                }}
-              >
-                {FORMATION_IDS.map((fId) => (
-                  <option key={fId} value={fId} className="bg-[#131722] text-[#F3F4F6]">{fId}</option>
-                ))}
-              </select>
-            </div>
-          </div>
+          {/* Row 2: Hero Budget + Stats + Formation */}
+          {(() => {
+            const reserved = team.budgetReserved ?? 0;
+            const available = team.budget - reserved;
+            const inDebt = available < 0;
+            const accent = inDebt ? "#EF4444" : "#8B5CF6";
+            const softBg = inDebt ? "#EF4444" : "#8B5CF6";
+            return (
+              <div className="flex flex-wrap items-stretch gap-2 lg:gap-3">
+                {/* Hero budget card (market-style) */}
+                <div
+                  className="flex items-center gap-2.5 lg:gap-3 px-3 lg:px-4 py-2 lg:py-2.5 rounded-2xl border min-w-0 basis-full sm:basis-auto sm:flex-1 lg:flex-none"
+                  style={{
+                    background: `${softBg}1A`,
+                    borderColor: `${accent}40`,
+                  }}
+                >
+                  <div
+                    className="w-8 h-8 lg:w-9 lg:h-9 rounded-xl flex items-center justify-center shrink-0"
+                    style={{ background: `${accent}26` }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="12" y1="1" x2="12" y2="23" />
+                      <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                    </svg>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p
+                      className="text-[8px] lg:text-[9px] font-bold uppercase tracking-[0.18em] leading-none"
+                      style={{ color: accent }}
+                    >
+                      Presupuesto
+                    </p>
+                    <p
+                      className="text-base lg:text-xl font-black tabular-nums leading-tight mt-0.5 truncate"
+                      style={{ color: inDebt ? "#FCA5A5" : "#F3F4F6" }}
+                    >
+                      {fmtMoney(available)}
+                    </p>
+                    {reserved > 0 && (
+                      <p className="text-[9px] text-[#F59E0B] leading-none mt-0.5 truncate">
+                        Reservado {fmtMoney(reserved)}
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => setFinancesOpen(true)}
+                    className="self-stretch flex items-center gap-1 px-2 lg:px-2.5 ml-1 rounded-xl border transition-colors cursor-pointer shrink-0"
+                    style={{
+                      background: `${accent}1F`,
+                      borderColor: `${accent}33`,
+                      color: accent,
+                    }}
+                    title="Finanzas del club"
+                  >
+                    <span className="text-[10px] lg:text-[11px] font-bold">Finanzas</span>
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="9 18 15 12 9 6" />
+                    </svg>
+                  </button>
+                </div>
+
+                {/* Secondary stats */}
+                <div className="hidden sm:flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#131722] border border-white/4 shrink-0">
+                  <span className="text-[9px] text-[#9CA3AF]/60 uppercase tracking-wide">Val</span>
+                  <span className="text-[11px] font-semibold text-[#F3F4F6]">{fmtMoney(team.squadValue)}</span>
+                </div>
+                <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#131722] border border-white/4 shrink-0">
+                  <span className="text-[9px] text-[#9CA3AF]/60 uppercase tracking-wide">OVR</span>
+                  <span className="text-[11px] font-bold" style={{ color: ovrColor(avgOvr) }}>{avgOvr || "—"}</span>
+                </div>
+                <div className="flex-1" />
+                <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#131722] border border-white/4 shrink-0">
+                  <span className="text-[9px] text-[#9CA3AF]/60 uppercase tracking-wide">Form.</span>
+                  <select
+                    value={formationId}
+                    onChange={(e) => setFormationId(e.target.value as FormationId)}
+                    disabled={locked}
+                    className="bg-transparent text-[11px] font-bold text-[#8B5CF6] outline-none cursor-pointer appearance-none pr-4"
+                    style={{
+                      backgroundImage: `url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%238B5CF6' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`,
+                      backgroundRepeat: "no-repeat",
+                      backgroundPosition: "right center",
+                    }}
+                  >
+                    {FORMATION_IDS.map((fId) => (
+                      <option key={fId} value={fId} className="bg-[#131722] text-[#F3F4F6]">{fId}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            );
+          })()}
         </div>
 
         {/* ── Mobile tab bar ──────────────────────────── */}
@@ -850,6 +919,15 @@ export default function SquadPage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* ── Finances modal ────────────────────────────── */}
+      {financesOpen && code && token && (
+        <FinancesPanel
+          code={code}
+          token={token}
+          onClose={() => setFinancesOpen(false)}
+        />
+      )}
     </DndContext>
   );
 }

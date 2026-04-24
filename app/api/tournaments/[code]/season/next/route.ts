@@ -230,12 +230,18 @@ export async function POST(request: NextRequest, { params }: Params) {
       .from("market_transfers")
       .select("buyer_id, player_id, transfer_type")
       .eq("session_id", marketSessionId)
-      .in("transfer_type", ["clause", "offer", "icon_auction"])
+      .in("transfer_type", ["clause", "offer", "icon_auction", "auto_release"])
       .order("created_at", { ascending: true });
 
-    // Walk transfers in chronological order to compute the final team per player
-    const finalTeamByPlayer: Record<string, string> = {};
+    // Walk transfers in chronological order to compute the final team per
+    // player. `null` means the player ended the season as a free agent
+    // (auto-released by the system); they are detached from team_players.
+    const finalTeamByPlayer: Record<string, string | null> = {};
     for (const t of transfers ?? []) {
+      if ((t as any).transfer_type === "auto_release") {
+        finalTeamByPlayer[(t as any).player_id] = null;
+        continue;
+      }
       const buyerTeam = teamByMember[(t as any).buyer_id];
       if (buyerTeam) finalTeamByPlayer[(t as any).player_id] = buyerTeam;
     }
@@ -253,7 +259,9 @@ export async function POST(request: NextRequest, { params }: Params) {
         currentTeamByPlayer[(l as any).player_id] = (l as any).team_id;
       }
 
-      // Apply diff: delete old link if different, insert new link
+      // Apply diff: delete old link if different, insert new link.
+      // finalTeamId === null means the player was auto-released and should
+      // simply detach from any team_players row (no insert).
       for (const [playerId, finalTeamId] of Object.entries(finalTeamByPlayer)) {
         const oldTeamId = currentTeamByPlayer[playerId] ?? null;
         if (oldTeamId === finalTeamId) continue;
@@ -264,6 +272,7 @@ export async function POST(request: NextRequest, { params }: Params) {
             .eq("team_id", oldTeamId)
             .eq("player_id", playerId);
         }
+        if (finalTeamId === null) continue;
         await supabase
           .from("team_players")
           .insert({ team_id: finalTeamId, player_id: playerId });

@@ -318,3 +318,78 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
   return NextResponse.json({ ok: true, action: "accepted" });
 }
+
+// ─── DELETE /api/tournaments/[code]/market/offer/[offerId] ────────────────────
+// Buyer cancels a pending offer they sent. Counter-offers can also be cancelled
+// by whoever currently holds the buyer role of that node in the chain (i.e. the
+// member who would otherwise be waiting for a response).
+export async function DELETE(request: NextRequest, { params }: Params) {
+  const { code, offerId } = await params;
+  const auth = await verifyMemberToken(request, code);
+  if (!auth.ok)
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+
+  const supabase = createServerClient();
+
+  const { data: offer } = await supabase
+    .from("market_offers")
+    .select("id, buyer_id, seller_id, player_id, status, session_id")
+    .eq("id", offerId)
+    .eq("buyer_id", auth.memberId)
+    .eq("status", "pending")
+    .maybeSingle();
+
+  if (!offer) {
+    return NextResponse.json(
+      { error: "Oferta no encontrada o ya no está pendiente." },
+      { status: 404 }
+    );
+  }
+
+  const o = offer as any;
+
+  // Make sure the market is still active (we don't want to mutate offers from a
+  // closed session; the cron / close flow handles those).
+  const { data: session } = await supabase
+    .from("market_sessions")
+    .select("id, status")
+    .eq("id", o.session_id)
+    .maybeSingle();
+
+  if (!session || (session as any).status !== "active") {
+    return NextResponse.json(
+      { error: "El mercado no está activo." },
+      { status: 409 }
+    );
+  }
+
+  await supabase
+    .from("market_offers")
+    .update({ status: "cancelled", responded_at: new Date().toISOString() })
+    .eq("id", offerId);
+
+  // Notify the seller so the offer disappears from their inbox in real time.
+  const [{ data: playerData }, { data: buyerRow }] = await Promise.all([
+    supabase.from("players").select("name").eq("id", o.player_id).single(),
+    supabase
+      .from("members")
+      .select("display_name")
+      .eq("id", auth.memberId)
+      .single(),
+  ]);
+
+  const playerName = (playerData as any)?.name ?? "jugador";
+  const buyerName = (buyerRow as any)?.display_name ?? "Alguien";
+
+  await createNotification({
+    supabase,
+    memberId: o.seller_id,
+    tournamentId: auth.tournamentId,
+    type: "offer_cancelled",
+    title: "Oferta cancelada",
+    body: `${buyerName} canceló su oferta por ${playerName}`,
+    metadata: { offerId, playerId: o.player_id },
+  });
+
+  return NextResponse.json({ ok: true, action: "cancelled" });
+}
