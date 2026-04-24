@@ -25,6 +25,28 @@ interface LeagueTableState {
   discipline: DisciplineRow[];
 }
 
+interface ArchivedFixture {
+  matchday: number;
+  homeDisplayName: string | null;
+  awayDisplayName: string | null;
+  homeTeamName: string | null;
+  awayTeamName: string | null;
+  homeGoals: number | null;
+  awayGoals: number | null;
+  status: string | null;
+}
+
+interface ArchivedSeason {
+  id: string;
+  seasonNumber: number;
+  startedAt: string | null;
+  finishedAt: string | null;
+  totalMatchdays: number | null;
+  champion: { memberId: string; displayName: string; teamName: string } | null;
+  standings: TableRow[];
+  fixtures: ArchivedFixture[];
+}
+
 const MEDAL = ["🥇", "🥈", "🥉"];
 
 function GdCell({ gd }: { gd: number }) {
@@ -37,7 +59,10 @@ export default function TablePage() {
   const [token, setToken] = useState<string | null>(null);
   const [data, setData] = useState<LeagueTableState | null>(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<"table" | "discipline">("table");
+  const [tab, setTab] = useState<"table" | "discipline" | "history">("table");
+  const [seasons, setSeasons] = useState<ArchivedSeason[] | null>(null);
+  const [seasonsLoading, setSeasonsLoading] = useState(false);
+  const [expandedSeason, setExpandedSeason] = useState<string | null>(null);
 
   useEffect(() => {
     const c = getLastTournamentCode();
@@ -58,6 +83,24 @@ export default function TablePage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  const fetchSeasons = useCallback(async () => {
+    if (!code || !token) return;
+    setSeasonsLoading(true);
+    try {
+      const res = await fetch(`/api/tournaments/${code}/seasons`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setSeasons(json.seasons ?? []);
+      }
+    } finally { setSeasonsLoading(false); }
+  }, [code, token]);
+
+  useEffect(() => {
+    if (tab === "history" && seasons === null) fetchSeasons();
+  }, [tab, seasons, fetchSeasons]);
+
   if (!code || !token) return (
     <div className="min-h-screen flex items-center justify-center">
       <p className="text-[#9CA3AF] text-sm">Sin sesión activa.</p>
@@ -73,23 +116,11 @@ export default function TablePage() {
     </div>
   );
 
-  if (!data?.session) return (
-    <div className="min-h-screen flex items-center justify-center p-8">
-      <div className="bg-[#131722] rounded-2xl border border-white/5 p-10 max-w-sm text-center flex flex-col items-center gap-4">
-        <div className="w-14 h-14 rounded-2xl bg-[#8B5CF6]/10 border border-[#8B5CF6]/20 flex items-center justify-center">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8B5CF6" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
-          </svg>
-        </div>
-        <div>
-          <p className="text-[#F3F4F6] font-semibold mb-1">Liga no iniciada</p>
-          <p className="text-[#9CA3AF] text-sm">La clasificación estará disponible cuando empiece el torneo.</p>
-        </div>
-      </div>
-    </div>
-  );
-
-  const { session, myMemberId, table, discipline, status } = data;
+  const session = data?.session ?? null;
+  const myMemberId = data?.myMemberId ?? "";
+  const table = data?.table ?? [];
+  const discipline = data?.discipline ?? [];
+  const status = data?.status ?? "pending";
   const isFinished = status === "finished";
   const champion = isFinished ? table[0] : null;
 
@@ -100,9 +131,9 @@ export default function TablePage() {
       {/* Header */}
       <div className="mb-5 lg:mb-8">
         <p className="text-[#9CA3AF] text-[10px] lg:text-xs uppercase tracking-widest font-medium mb-0.5">Clasificación</p>
-        <h1 className="text-[#F3F4F6] text-lg lg:text-2xl font-bold tracking-tight">{data.tournamentName}</h1>
+        <h1 className="text-[#F3F4F6] text-lg lg:text-2xl font-bold tracking-tight">{data?.tournamentName ?? "Torneo"}</h1>
         <p className="text-[#9CA3AF] text-xs lg:text-sm mt-1">
-          Fecha {session.currentMatchday}/{session.totalMatchdays}
+          {session ? <>Fecha {session.currentMatchday}/{session.totalMatchdays}</> : "Liga aún no iniciada"}
           {isFinished && <span className="ml-2 text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#8B5CF6]/15 text-[#8B5CF6] uppercase">Finalizada</span>}
         </p>
       </div>
@@ -129,17 +160,31 @@ export default function TablePage() {
 
       {/* Tab switcher */}
       <div className="flex items-center gap-1 mb-6 bg-[#131722] rounded-xl p-1 w-fit">
-        {(["table", "discipline"] as const).map((t) => (
+        {(["table", "discipline", "history"] as const).map((t) => (
           <button key={t} onClick={() => setTab(t)}
             className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all duration-150 cursor-pointer
               ${tab === t ? "bg-[#8B5CF6]/15 text-[#8B5CF6]" : "text-[#9CA3AF] hover:text-[#F3F4F6]"}`}>
-            {t === "table" ? "Tabla" : "Disciplina"}
+            {t === "table" ? "Tabla" : t === "discipline" ? "Disciplina" : "Historial"}
           </button>
         ))}
       </div>
 
       {/* Table */}
-      {tab === "table" && (
+      {tab === "table" && !session && (
+        <div className="bg-[#131722] rounded-2xl border border-white/5 p-10 text-center flex flex-col items-center gap-4">
+          <div className="w-14 h-14 rounded-2xl bg-[#8B5CF6]/10 border border-[#8B5CF6]/20 flex items-center justify-center">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8B5CF6" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+            </svg>
+          </div>
+          <div>
+            <p className="text-[#F3F4F6] font-semibold mb-1">Liga no iniciada</p>
+            <p className="text-[#9CA3AF] text-sm">La clasificación estará disponible cuando empiece la temporada.</p>
+          </div>
+        </div>
+      )}
+
+      {tab === "table" && session && (
         <div className="bg-[#131722] rounded-2xl border border-white/4 overflow-hidden">
           {/* Mobile: compact ranking cards */}
           <div className="lg:hidden divide-y divide-white/3">
@@ -333,6 +378,152 @@ export default function TablePage() {
           </div>
         );
       })()}
+
+      {/* Historial de temporadas pasadas */}
+      {tab === "history" && (
+        <div className="flex flex-col gap-4">
+          {seasonsLoading && (
+            <div className="flex items-center justify-center py-10">
+              <div className="w-6 h-6 border-2 border-[#8B5CF6]/30 border-t-[#8B5CF6] rounded-full animate-spin" />
+            </div>
+          )}
+
+          {!seasonsLoading && seasons && seasons.length === 0 && (
+            <div className="bg-[#131722] rounded-2xl border border-white/4 p-10 text-center">
+              <div className="w-14 h-14 rounded-2xl bg-[#8B5CF6]/10 border border-[#8B5CF6]/20 flex items-center justify-center mx-auto mb-4">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8B5CF6" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                </svg>
+              </div>
+              <p className="text-[#F3F4F6] font-semibold mb-1">Sin temporadas archivadas</p>
+              <p className="text-[#9CA3AF] text-sm">El historial aparecerá cuando se complete y archive una temporada.</p>
+            </div>
+          )}
+
+          {!seasonsLoading && seasons && seasons.map((season) => {
+            const isOpen = expandedSeason === season.id;
+            return (
+              <motion.div key={season.id}
+                initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
+                className="bg-[#131722] rounded-2xl border border-white/5 overflow-hidden">
+
+                {/* Header (clickable to expand) */}
+                <button
+                  onClick={() => setExpandedSeason(isOpen ? null : season.id)}
+                  className="w-full px-4 lg:px-5 py-4 flex items-center gap-4 text-left hover:bg-[#1A1F2E]/40 transition-colors duration-150 cursor-pointer"
+                >
+                  <div className="w-10 h-10 lg:w-12 lg:h-12 rounded-xl flex items-center justify-center shrink-0 text-xl lg:text-2xl"
+                    style={{ background: "#8B5CF620", border: "1px solid #8B5CF640" }}>
+                    🏆
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[#A78BFA] text-[10px] uppercase tracking-widest font-bold mb-0.5">
+                      Temporada {season.seasonNumber}
+                    </p>
+                    {season.champion ? (
+                      <>
+                        <p className="text-[#F3F4F6] text-base lg:text-lg font-black truncate">
+                          {season.champion.displayName}
+                        </p>
+                        <p className="text-[#9CA3AF] text-xs truncate">
+                          {season.champion.teamName}
+                          {season.finishedAt && ` · ${new Date(season.finishedAt).toLocaleDateString()}`}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-[#9CA3AF] text-sm">Sin campeón registrado</p>
+                    )}
+                  </div>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                    style={{ transform: isOpen ? "rotate(180deg)" : "rotate(0)", transition: "transform 0.2s" }}>
+                    <polyline points="6 9 12 15 18 9"/>
+                  </svg>
+                </button>
+
+                {/* Expanded body */}
+                {isOpen && (
+                  <div className="border-t border-white/4 px-4 lg:px-5 py-4 flex flex-col gap-5">
+                    {/* Final standings */}
+                    {season.standings.length > 0 && (
+                      <div>
+                        <p className="text-[#9CA3AF] text-[10px] uppercase tracking-widest font-bold mb-2">Clasificación final</p>
+                        <div className="bg-[#0D0F14] rounded-xl border border-white/4 divide-y divide-white/3">
+                          {season.standings.map((row, idx) => {
+                            const isTop3 = idx < 3;
+                            const topColors = ["#F59E0B", "#9CA3AF", "#CD7C3F"];
+                            return (
+                              <div key={`${season.id}-${row.memberId}`} className="px-3 py-2 flex items-center gap-3"
+                                style={isTop3 ? { borderLeft: `2px solid ${topColors[idx]}` } : {}}>
+                                <span className="w-6 text-center text-xs font-bold tabular-nums" style={{ color: isTop3 ? topColors[idx] : "#9CA3AF" }}>
+                                  {isTop3 ? MEDAL[idx] : idx + 1}
+                                </span>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-[#F3F4F6] text-sm font-semibold truncate">{row.displayName}</p>
+                                  <p className="text-[#9CA3AF] text-[10px] truncate">{row.teamName}</p>
+                                </div>
+                                <div className="flex items-center gap-3 shrink-0">
+                                  <span className="text-[10px] text-[#22C55E] font-medium">{row.wins}V</span>
+                                  <span className="text-[10px] text-[#F59E0B] font-medium">{row.draws}E</span>
+                                  <span className="text-[10px] text-[#EF4444] font-medium">{row.losses}D</span>
+                                  <div className="text-[10px] tabular-nums"><GdCell gd={row.gd} /></div>
+                                  <span className="text-sm font-black text-[#F3F4F6] tabular-nums min-w-6 text-right">{row.points}</span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Fixtures grouped by matchday */}
+                    {season.fixtures.length > 0 && (() => {
+                      const byMatchday: Record<number, ArchivedFixture[]> = {};
+                      for (const f of season.fixtures) (byMatchday[f.matchday] ??= []).push(f);
+                      const matchdays = Object.keys(byMatchday).map(Number).sort((a, b) => a - b);
+                      return (
+                        <div>
+                          <p className="text-[#9CA3AF] text-[10px] uppercase tracking-widest font-bold mb-2">Resultados</p>
+                          <div className="flex flex-col gap-3">
+                            {matchdays.map((md) => (
+                              <div key={md} className="bg-[#0D0F14] rounded-xl border border-white/4 overflow-hidden">
+                                <div className="px-3 py-1.5 border-b border-white/4 bg-[#131722]">
+                                  <span className="text-[#9CA3AF] text-[10px] uppercase tracking-wider font-bold">Fecha {md}</span>
+                                </div>
+                                <div className="divide-y divide-white/3">
+                                  {byMatchday[md].map((f, i) => {
+                                    const finished = f.status === "finished" && f.homeGoals != null && f.awayGoals != null;
+                                    const homeWin = finished && (f.homeGoals as number) > (f.awayGoals as number);
+                                    const awayWin = finished && (f.awayGoals as number) > (f.homeGoals as number);
+                                    return (
+                                      <div key={`${md}-${i}`} className="px-3 py-2 grid grid-cols-[1fr_auto_1fr] gap-2 items-center">
+                                        <span className={`text-xs truncate text-right ${homeWin ? "text-[#F3F4F6] font-bold" : "text-[#9CA3AF]"}`}>
+                                          {f.homeDisplayName ?? "—"}
+                                          <span className="block text-[9px] text-[#9CA3AF]/60 truncate">{f.homeTeamName ?? ""}</span>
+                                        </span>
+                                        <span className="text-[#F3F4F6] text-sm font-black tabular-nums px-2">
+                                          {finished ? `${f.homeGoals} – ${f.awayGoals}` : "vs"}
+                                        </span>
+                                        <span className={`text-xs truncate ${awayWin ? "text-[#F3F4F6] font-bold" : "text-[#9CA3AF]"}`}>
+                                          {f.awayDisplayName ?? "—"}
+                                          <span className="block text-[9px] text-[#9CA3AF]/60 truncate">{f.awayTeamName ?? ""}</span>
+                                        </span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
+              </motion.div>
+            );
+          })}
+        </div>
+      )}
     </motion.div>
   );
 }

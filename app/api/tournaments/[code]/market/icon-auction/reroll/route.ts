@@ -56,27 +56,27 @@ export async function POST(request: NextRequest, { params }: Params) {
 
     const allIconIds = (allIcons as any[]).map((p: any) => p.id);
 
-    // Get all session IDs for this tournament
-    const { data: tournamentSessions } = await supabase
-      .from("market_sessions")
-      .select("id")
-      .eq("tournament_id", auth.tournamentId);
+    // Same filter logic as /icon-auction/initiate: exclude icons that already
+    // live in team_players (materialized claims) and icons just bought in the
+    // current market session.
+    const { data: ownedRows } = await supabase
+      .from("team_players")
+      .select("player_id")
+      .in("player_id", allIconIds);
+    const ownedIconIds = new Set((ownedRows ?? []).map((r: any) => r.player_id));
 
-    const tournamentSessionIds = (tournamentSessions ?? []).map((s: any) => s.id);
-
-    let boughtIconIds = new Set<string>();
-    if (tournamentSessionIds.length > 0) {
-      const { data: boughtTransfers } = await supabase
-        .from("market_transfers")
-        .select("player_id")
-        .in("session_id", tournamentSessionIds)
-        .in("player_id", allIconIds);
-
-      boughtIconIds = new Set((boughtTransfers ?? []).map((t: any) => t.player_id));
-    }
+    const { data: currentTransfers } = await supabase
+      .from("market_transfers")
+      .select("player_id")
+      .eq("session_id", sessionId)
+      .in("transfer_type", ["clause", "offer", "icon_auction"])
+      .in("player_id", allIconIds);
+    const currentSessionIconIds = new Set((currentTransfers ?? []).map((t: any) => t.player_id));
 
     const oldIds: string[] = (auction as any).presented_icon_ids ?? [];
-    const allAvailable = allIconIds.filter((id: string) => !boughtIconIds.has(id));
+    const allAvailable = allIconIds.filter(
+      (id: string) => !ownedIconIds.has(id) && !currentSessionIconIds.has(id)
+    );
     const available = allAvailable.filter((id: string) => !oldIds.includes(id));
     const pool = available.length >= 6 ? available : allAvailable;
     const newPresented = shuffle(pool).slice(0, Math.min(6, pool.length));
