@@ -24,6 +24,8 @@ interface Member {
     createdAt: string;
     currentSeason: number;
     lastLeagueFinished: boolean;
+    maxTransfers: number;
+    clauseProtection: number;
     members: Member[];
   }
 
