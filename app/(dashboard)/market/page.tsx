@@ -110,6 +110,7 @@ interface MarketState {
     teamName: string | null;
     teamCrestUrl: string | null;
     purchasesUsed: number;
+    clausesUsed: number;
   }[];
 }
 
@@ -1307,6 +1308,9 @@ export default function MarketPage() {
               <div className="space-y-2.5">
                 {data.allMembers.map((m) => {
                   const isMe = m.id === data.myStatus.memberId;
+                  const clauseCap = data.clauseProtectionEnabled;
+                  const clausesLeft = Math.max(0, clauseCap - m.clausesUsed);
+                  const clauseExhausted = clauseCap > 0 && clausesLeft === 0;
                   return (
                     <div
                       key={m.id}
@@ -1323,9 +1327,41 @@ export default function MarketPage() {
                           {m.teamName ?? "Sin equipo"}
                         </p>
                       </div>
-                      <span className="text-[#9CA3AF] text-[11px]">
-                        {m.purchasesUsed}/{data.myStatus.maxPurchases}
-                      </span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {clauseCap > 0 && (
+                          <div
+                            className="flex items-center gap-1 px-1.5 py-0.5 rounded-md border"
+                            title={
+                              clauseExhausted
+                                ? "Sin cláusulas disponibles este mercado"
+                                : `${clausesLeft} cláusula${clausesLeft === 1 ? "" : "s"} restante${clausesLeft === 1 ? "" : "s"} este mercado`
+                            }
+                            style={
+                              clauseExhausted
+                                ? { background: "#EF444415", borderColor: "#EF444440" }
+                                : { background: "#F59E0B12", borderColor: "#F59E0B30" }
+                            }
+                          >
+                            <svg
+                              width="9" height="9" viewBox="0 0 24 24" fill="none"
+                              stroke={clauseExhausted ? "#EF4444" : "#F59E0B"}
+                              strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                            >
+                              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                            </svg>
+                            <span
+                              className="text-[10px] font-bold tabular-nums"
+                              style={{ color: clauseExhausted ? "#EF4444" : "#F59E0B" }}
+                            >
+                              {m.clausesUsed}/{clauseCap}
+                            </span>
+                          </div>
+                        )}
+                        <span className="text-[#9CA3AF] text-[11px] tabular-nums">
+                          {m.purchasesUsed}/{data.myStatus.maxPurchases}
+                        </span>
+                      </div>
                     </div>
                   );
                 })}

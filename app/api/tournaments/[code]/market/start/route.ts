@@ -74,6 +74,14 @@ export async function POST(request: NextRequest, { params }: Params) {
   const winterMaxTransfers: number | null = marketType === "winter" ? (body?.winterMaxTransfers ?? 3) : null;
   const winterClauseProtection: number | null = marketType === "winter" ? (body?.winterClauseProtection ?? 1) : null;
 
+  // For regular (season) markets the admin can also reconfigure the
+  // tournament-wide transfer/clause limits. These mirror the winter market
+  // controls but persist on the tournament instead of the market session.
+  const tournamentMaxTransfers: number | null =
+    marketType !== "winter" && typeof body?.maxTransfers === "number" ? body.maxTransfers : null;
+  const tournamentClauseProtection: number | null =
+    marketType !== "winter" && typeof body?.clauseProtection === "number" ? body.clauseProtection : null;
+
   const supabase = createServerClient();
 
   const { data: existing } = await supabase
@@ -119,7 +127,10 @@ export async function POST(request: NextRequest, { params }: Params) {
     .update({ market_purchases: 0, icon_slot_used: false, budget_reserved: 0 })
     .in("id", memberIds);
 
-  if (marketType === "winter" && budgetInjection > 0) {
+  // budgetInjection can now be applied to either market type. Used for the
+  // "income" boost when a new season starts (members preserve their previous
+  // budget across seasons; this tops them up so they have cash to spend).
+  if (budgetInjection > 0) {
     for (const mid of memberIds) {
       const { data: m } = await supabase.from("members").select("budget").eq("id", mid).single();
       await supabase.from("members").update({ budget: ((m as any)?.budget ?? 0) + budgetInjection }).eq("id", mid);
@@ -205,9 +216,12 @@ export async function POST(request: NextRequest, { params }: Params) {
   }
 
   if (marketType !== "winter") {
+    const tournamentUpdate: Record<string, unknown> = { status: "market" };
+    if (tournamentMaxTransfers !== null) tournamentUpdate.max_transfers = tournamentMaxTransfers;
+    if (tournamentClauseProtection !== null) tournamentUpdate.clause_protection_limit = tournamentClauseProtection;
     await supabase
       .from("tournaments")
-      .update({ status: "market" })
+      .update(tournamentUpdate)
       .eq("id", auth.tournamentId);
   }
 

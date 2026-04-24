@@ -1,23 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerClient, verifyAdminToken } from "@/lib/supabase";
+import { createServerClient, verifyAdminToken, hashToken } from "@/lib/supabase";
 
 type Params = { params: Promise<{ code: string }> };
 
 // ─── GET /api/tournaments/[code] ──────────────────────────────────────────────
 
-export async function GET(_req: NextRequest, { params }: Params) {
+export async function GET(req: NextRequest, { params }: Params) {
   const { code } = await params;
   const supabase = createServerClient();
 
   // 1. Buscar el torneo
   const { data: tournament, error: tournamentError } = await supabase
     .from("tournaments")
-    .select("id, name, code, status, created_at, max_transfers, clause_protection_limit")
+    .select("id, name, code, status, created_at, max_transfers, clause_protection_limit, current_season")
     .eq("code", code.toUpperCase())
     .single();
 
   if (tournamentError || !tournament) {
-    console.error("[GET /api/tournaments/[code]] tournament:", tournamentError);
+    console.error(
+      "[GET /api/tournaments/[code]] tournament:",
+      tournamentError?.message,
+      tournamentError?.details,
+      tournamentError?.hint,
+      tournamentError?.code,
+    );
     return NextResponse.json(
       { error: "Torneo no encontrado." },
       { status: 404 }
@@ -94,6 +100,32 @@ export async function GET(_req: NextRequest, { params }: Params) {
     .eq("status", "active")
     .maybeSingle();
 
+  // 6. Has the league of the current season finished? Used by the lobby to
+  //    enable the "Nueva Temporada" admin action.
+  const { data: leagueSession } = await supabase
+    .from("league_sessions")
+    .select("status")
+    .eq("tournament_id", tournament.id)
+    .maybeSingle();
+
+  // 7. Identify the calling user from their member token (if present), so the
+  //    client doesn't have to rely on a memberId previously cached in
+  //    localStorage. Returns null if no Bearer token or it doesn't match a
+  //    member of this tournament.
+  let myMemberId: string | null = null;
+  const authHeader = req.headers.get("Authorization");
+  const bearer = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  if (bearer) {
+    const tokenHash = hashToken(bearer);
+    const { data: meRow } = await supabase
+      .from("members")
+      .select("id")
+      .eq("tournament_id", tournament.id)
+      .eq("member_token_hash", tokenHash)
+      .maybeSingle();
+    if (meRow) myMemberId = (meRow as any).id as string;
+  }
+
   return NextResponse.json({
     id: tournament.id,
     name: tournament.name,
@@ -102,8 +134,11 @@ export async function GET(_req: NextRequest, { params }: Params) {
     createdAt: tournament.created_at,
     maxTransfers: (tournament as any).max_transfers ?? 3,
     clauseProtection: (tournament as any).clause_protection_limit ?? 1,
+    currentSeason: (tournament as any).current_season ?? 1,
+    lastLeagueFinished: (leagueSession as any)?.status === "finished",
     members: membersWithTeams,
     marketOpen: !!activeMarketSession,
+    myMemberId,
   });
 }
 

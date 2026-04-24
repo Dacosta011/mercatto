@@ -43,8 +43,12 @@ export async function POST(request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "La ronda aún no ha terminado." }, { status: 400 });
   }
 
-  // Pick 6 random icon players, excluding any that already belong to a team
-  // (i.e. they appear in market_transfers for any session in this tournament)
+  // Pick 6 random icon players, excluding any that are already claimed.
+  // An icon is "claimed" if either:
+  //   • It already lives in team_players (claimed in a previous season and
+  //     materialized by /season/next, or assigned as part of a team's roster).
+  //   • It was bought during the CURRENT market session (not yet materialized
+  //     to team_players, but still off-limits).
   const { data: allIcons } = await supabase
     .from("players").select("id").eq("is_icon", true);
 
@@ -54,27 +58,26 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   const allIconIds = (allIcons as any[]).map((p) => p.id);
 
-  // Get all session IDs for this tournament
-  const { data: tournamentSessions } = await supabase
-    .from("market_sessions")
-    .select("id")
-    .eq("tournament_id", auth.tournamentId);
+  // 1) Icons currently sitting in some team's roster (materialized claims).
+  const { data: ownedRows } = await supabase
+    .from("team_players")
+    .select("player_id")
+    .in("player_id", allIconIds);
+  const ownedIconIds = new Set((ownedRows ?? []).map((r: any) => r.player_id));
 
-  const tournamentSessionIds = (tournamentSessions ?? []).map((s: any) => s.id);
+  // 2) Icons just bought in the active market session (still pending
+  //    materialization until the next /season/next).
+  const { data: currentTransfers } = await supabase
+    .from("market_transfers")
+    .select("player_id")
+    .eq("session_id", sessionId)
+    .in("transfer_type", ["clause", "offer", "icon_auction"])
+    .in("player_id", allIconIds);
+  const currentSessionIconIds = new Set((currentTransfers ?? []).map((t: any) => t.player_id));
 
-  // Find icons that have been transferred in any session of this tournament
-  let boughtIconIds = new Set<string>();
-  if (tournamentSessionIds.length > 0) {
-    const { data: boughtTransfers } = await supabase
-      .from("market_transfers")
-      .select("player_id")
-      .in("session_id", tournamentSessionIds)
-      .in("player_id", allIconIds);
-
-    boughtIconIds = new Set((boughtTransfers ?? []).map((t: any) => t.player_id));
-  }
-
-  const availableIcons = allIconIds.filter((id: string) => !boughtIconIds.has(id));
+  const availableIcons = allIconIds.filter(
+    (id: string) => !ownedIconIds.has(id) && !currentSessionIconIds.has(id)
+  );
 
   if (availableIcons.length === 0) {
     return NextResponse.json({ error: "Todos los íconos ya fueron subastados." }, { status: 422 });

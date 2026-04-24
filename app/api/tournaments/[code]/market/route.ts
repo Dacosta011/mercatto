@@ -500,6 +500,10 @@ export async function GET(request: NextRequest, { params }: Params) {
         teamName: tid ? (teamNameById[tid] ?? null) : null,
         teamCrestUrl: tid ? (teamCrestById[tid] ?? null) : null,
         purchasesUsed: m.market_purchases ?? 0,
+        // Clauses already paid AGAINST this member's team during the current
+        // market iteration. The cap is the same for everyone:
+        // `clauseProtectionEnabled` (returned at the top level).
+        clausesUsed: tid ? (clauseCountByTeam[tid] ?? 0) : 0,
       };
     }),
   });

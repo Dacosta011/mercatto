@@ -22,6 +22,10 @@ interface Member {
     code: string;
     status: "lobby" | "draft" | "market" | "league" | "complete";
     createdAt: string;
+    currentSeason: number;
+    lastLeagueFinished: boolean;
+    maxTransfers: number;
+    clauseProtection: number;
     members: Member[];
   }
 
@@ -138,6 +142,14 @@ export default function LobbyPage() {
   const [startingMarket, setStartingMarket] = useState(false);
   const [startingFreshMarket, setStartingFreshMarket] = useState(false);
   const [startingLeague, setStartingLeague] = useState(false);
+  const [startingNextSeason, setStartingNextSeason] = useState(false);
+  const [seasonMarketModal, setSeasonMarketModal] = useState(false);
+  const [seasonMarketForm, setSeasonMarketForm] = useState({
+    durationHours: 24,
+    budgetInjection: 100,
+    maxTransfers: 3,
+    clauseProtection: 1,
+  });
   const [resettingMarket, setResettingMarket] = useState(false);
   const [resettingLeague, setResettingLeague] = useState(false);
   const [confirmAction, setConfirmAction] = useState<string | null>(null);
@@ -154,7 +166,10 @@ export default function LobbyPage() {
       else setRefreshing(true);
 
       try {
-        const res = await fetch(`/api/tournaments/${code}`);
+        const memberToken = getMemberToken(code);
+        const res = await fetch(`/api/tournaments/${code}`, {
+          headers: memberToken ? { Authorization: `Bearer ${memberToken}` } : undefined,
+        });
         const data = await res.json();
 
         if (!res.ok) {
@@ -163,6 +178,7 @@ export default function LobbyPage() {
         }
 
         setTournament(data);
+        if (data.myMemberId) setMyMemberId(data.myMemberId as string);
         setError("");
 
         if (data.status) {
@@ -178,13 +194,11 @@ export default function LobbyPage() {
     [code]
   );
 
-  // Detectar si el usuario es admin o miembro de este torneo
+  // Detectar si el usuario es admin (myMemberId se hidrata desde fetchTournament).
   useEffect(() => {
     const token = getAdminToken(code);
     setIsAdmin(!!token);
     setAdminToken(token);
-    const memberToken = getMemberToken(code);
-    if (memberToken) setMyMemberId(memberToken);
   }, [code]);
 
   // Eliminar participante
@@ -227,9 +241,23 @@ export default function LobbyPage() {
     }
   };
 
-  // Iniciar mercado (continúa donde terminó el anterior)
+  // Iniciar mercado (continúa donde terminó el anterior).
+  // En temporada 1 abre directamente con los settings del torneo.
+  // En temporada > 1 abre un modal con todos los controles (igual que el
+  // mercado de invierno) para reconfigurar duración, inyección de dinero,
+  // máximo de fichajes y cláusulas por equipo.
   const handleStartMarket = async () => {
     if (!adminToken) return;
+    if (tournament && tournament.currentSeason > 1) {
+      setSeasonMarketForm({
+        durationHours: 24,
+        budgetInjection: 100,
+        maxTransfers: tournament.maxTransfers ?? 3,
+        clauseProtection: tournament.clauseProtection ?? 1,
+      });
+      setSeasonMarketModal(true);
+      return;
+    }
     setStartingMarket(true);
     try {
       const res = await fetch(`/api/tournaments/${code}/market/start`, {
@@ -238,6 +266,31 @@ export default function LobbyPage() {
         body: JSON.stringify({}),
       });
       if (res.ok) {
+        saveTournamentStatus(code, "market");
+        router.push("/market");
+      }
+    } finally {
+      setStartingMarket(false);
+    }
+  };
+
+  // Submit del modal de mercado de nueva temporada.
+  const submitSeasonMarket = async () => {
+    if (!adminToken) return;
+    setStartingMarket(true);
+    try {
+      const res = await fetch(`/api/tournaments/${code}/market/start`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
+        body: JSON.stringify({
+          durationHours: seasonMarketForm.durationHours,
+          budgetInjection: seasonMarketForm.budgetInjection * 1_000_000,
+          maxTransfers: seasonMarketForm.maxTransfers,
+          clauseProtection: seasonMarketForm.clauseProtection,
+        }),
+      });
+      if (res.ok) {
+        setSeasonMarketModal(false);
         saveTournamentStatus(code, "market");
         router.push("/market");
       }
@@ -295,6 +348,26 @@ export default function LobbyPage() {
         setTournament((t) => (t ? { ...t, status: "lobby" } : t));
       }
     } finally { setResettingLeague(false); setConfirmAction(null); }
+  };
+
+  // Iniciar nueva temporada (mismo lobby, todos vuelven a spinear,
+  // los fichajes se materializan en team_players)
+  const handleStartNextSeason = async () => {
+    if (!adminToken) return;
+    setStartingNextSeason(true);
+    try {
+      const res = await fetch(`/api/tournaments/${code}/season/next`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      if (res.ok) {
+        saveTournamentStatus(code, "lobby");
+        await fetchTournament(true);
+      }
+    } finally {
+      setStartingNextSeason(false);
+      setConfirmAction(null);
+    }
   };
 
   // Finalizar torneo
@@ -404,6 +477,11 @@ export default function LobbyPage() {
                 {tournament.name}
               </h1>
               <StatusBadge status={tournament.status} />
+              {tournament.currentSeason > 1 && (
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#22C55E]/10 text-[#22C55E] border border-[#22C55E]/20 uppercase tracking-wider">
+                  Temporada {tournament.currentSeason}
+                </span>
+              )}
               {isAdmin && (
                 <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium bg-[#8B5CF6]/10 text-[#8B5CF6] border border-[#8B5CF6]/20">
                   <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -485,6 +563,59 @@ export default function LobbyPage() {
           </div>
         </div>
       </div>
+
+      {/* Spin CTA — shown when the current user is a member without a team
+          assigned and the tournament is open for drafting (initial draft or
+          a fresh season after season/next). */}
+      {tournament.status === "lobby" && myMemberId && (() => {
+        const me = tournament.members.find((m) => m.id === myMemberId);
+        if (!me || me.team) return null;
+        return (
+          <div
+            className="mb-5 lg:mb-6 rounded-2xl p-4 lg:p-5 border relative overflow-hidden"
+            style={{
+              background: "linear-gradient(135deg, #22C55E18, #16A34A12)",
+              borderColor: "#22C55E50",
+              boxShadow: "0 0 20px #22C55E25",
+            }}
+          >
+            <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+              <div
+                className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0"
+                style={{ background: "linear-gradient(135deg,#16A34A,#22C55E)" }}
+              >
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M12 6v6l4 2" />
+                </svg>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[#F3F4F6] text-sm lg:text-base font-bold">
+                  {tournament.currentSeason > 1
+                    ? `Temporada ${tournament.currentSeason} · elige tu equipo`
+                    : "Es hora de elegir equipo"}
+                </p>
+                <p className="text-[#9CA3AF] text-xs lg:text-sm mt-0.5">
+                  Gira la ruleta para asignarte un club y arrancar el draft.
+                </p>
+              </div>
+              <button
+                onClick={() => router.push(`/roulette/${code}`)}
+                className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 cursor-pointer shrink-0 text-white"
+                style={{
+                  background: "linear-gradient(135deg,#16A34A,#22C55E)",
+                  boxShadow: "0 4px 14px #22C55E50",
+                }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polygon points="5 3 19 12 5 21 5 3" />
+                </svg>
+                Spinear ahora
+              </button>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Progress card */}
       <div className="mb-5 lg:mb-6 bg-[#131722] rounded-2xl p-4 lg:p-5 border border-white/[0.04]">
@@ -620,6 +751,33 @@ export default function LobbyPage() {
               confirmAction={confirmAction}
               setConfirmAction={setConfirmAction}
               onClick={handleResetLeague}
+            />
+
+            {/* Nueva Temporada */}
+            <AdminAction
+              icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v4"/><path d="M12 18v4"/><path d="M4.93 4.93l2.83 2.83"/><path d="M16.24 16.24l2.83 2.83"/><path d="M2 12h4"/><path d="M18 12h4"/><path d="M4.93 19.07l2.83-2.83"/><path d="M16.24 7.76l2.83-2.83"/></svg>}
+              label="Nueva Temporada"
+              description="Archiva la temporada, materializa los fichajes y abre el lobby para volver a spinear"
+              color="#22C55E"
+              glow
+              available={
+                tournament.lastLeagueFinished &&
+                (tournament.status === "lobby" || tournament.status === "league")
+              }
+              unavailableReason={
+                !tournament.lastLeagueFinished ? "Solo cuando la liga ha finalizado" :
+                tournament.status === "complete" ? "El torneo ya está cerrado" :
+                tournament.status === "market" ? "Cierra el mercado primero" :
+                tournament.status !== "lobby" && tournament.status !== "league"
+                  ? "El torneo debe estar en lobby"
+                  : undefined
+              }
+              loading={startingNextSeason}
+              danger
+              confirmKey="next-season"
+              confirmAction={confirmAction}
+              setConfirmAction={setConfirmAction}
+              onClick={handleStartNextSeason}
             />
 
             {/* Finalizar Torneo */}
@@ -824,6 +982,133 @@ export default function LobbyPage() {
           )}
         </div>
       </div>
+
+      {/* ── Modal: Iniciar Mercado de Nueva Temporada ──────────────────── */}
+      <AnimatePresence>
+        {seasonMarketModal && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+            onClick={() => setSeasonMarketModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }} transition={{ type: "spring", stiffness: 400, damping: 30 }}
+              className="bg-[#131722] rounded-2xl border border-white/8 p-6 w-full max-w-md shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex flex-col gap-5">
+                <div className="flex items-start gap-4">
+                  <div
+                    className="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0"
+                    style={{ background: "linear-gradient(135deg,#16A34A,#22C55E)", boxShadow: "0 0 16px #22C55E40" }}
+                  >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-[#F3F4F6] font-bold text-base leading-tight">
+                      Mercado · Temporada {tournament?.currentSeason ?? 2}
+                    </p>
+                    <p className="text-[#9CA3AF] text-xs mt-1">
+                      Configura la duración, la inyección de dinero y los límites de fichajes para esta temporada.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-4">
+                  <div>
+                    <label className="text-[#9CA3AF] text-[10px] uppercase tracking-wider font-medium mb-1.5 block">Duración</label>
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {[6, 12, 24, 48].map(h => (
+                        <button key={h} onClick={() => setSeasonMarketForm(f => ({ ...f, durationHours: h }))}
+                          className={`py-2 rounded-xl text-xs font-semibold border transition-colors cursor-pointer
+                            ${seasonMarketForm.durationHours === h ? "bg-[#22C55E]/15 border-[#22C55E]/40 text-[#22C55E]" : "bg-[#0D0F14] border-white/8 text-[#9CA3AF] hover:text-[#F3F4F6]"}`}>
+                          {h}h
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[#9CA3AF] text-[10px] uppercase tracking-wider font-medium mb-1.5 block">
+                      Inyección de presupuesto (millones €)
+                    </label>
+                    <input type="number" min={0} max={500} value={seasonMarketForm.budgetInjection}
+                      onChange={e => setSeasonMarketForm(f => ({ ...f, budgetInjection: Math.max(0, parseInt(e.target.value) || 0) }))}
+                      className="w-full bg-[#0D0F14] border border-white/8 rounded-xl px-3 py-2 text-[#F3F4F6] text-sm font-semibold text-center focus:outline-none focus:border-[#22C55E]/50" />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[#9CA3AF] text-[10px] uppercase tracking-wider font-medium mb-1.5 block">Max fichajes</label>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => setSeasonMarketForm(f => ({ ...f, maxTransfers: Math.max(1, f.maxTransfers - 1) }))}
+                          className="w-9 h-9 rounded-lg bg-[#0D0F14] border border-white/8 text-[#9CA3AF] hover:text-[#F3F4F6] text-base font-bold cursor-pointer flex items-center justify-center"
+                        >−</button>
+                        <input
+                          type="number" min={1} max={99}
+                          value={seasonMarketForm.maxTransfers}
+                          onChange={e => setSeasonMarketForm(f => ({
+                            ...f,
+                            maxTransfers: Math.max(1, Math.min(99, parseInt(e.target.value) || 1)),
+                          }))}
+                          className="flex-1 min-w-0 bg-[#0D0F14] border border-white/8 rounded-lg px-2 py-2 text-[#22C55E] text-sm font-bold text-center focus:outline-none focus:border-[#22C55E]/50"
+                        />
+                        <button
+                          onClick={() => setSeasonMarketForm(f => ({ ...f, maxTransfers: Math.min(99, f.maxTransfers + 1) }))}
+                          className="w-9 h-9 rounded-lg bg-[#0D0F14] border border-white/8 text-[#9CA3AF] hover:text-[#F3F4F6] text-base font-bold cursor-pointer flex items-center justify-center"
+                        >+</button>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-[#9CA3AF] text-[10px] uppercase tracking-wider font-medium mb-1.5 block">Max cláusulas/equipo</label>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => setSeasonMarketForm(f => ({ ...f, clauseProtection: Math.max(0, f.clauseProtection - 1) }))}
+                          className="w-9 h-9 rounded-lg bg-[#0D0F14] border border-white/8 text-[#9CA3AF] hover:text-[#F3F4F6] text-base font-bold cursor-pointer flex items-center justify-center"
+                        >−</button>
+                        <input
+                          type="number" min={0} max={99}
+                          value={seasonMarketForm.clauseProtection}
+                          onChange={e => setSeasonMarketForm(f => ({
+                            ...f,
+                            clauseProtection: Math.max(0, Math.min(99, parseInt(e.target.value) || 0)),
+                          }))}
+                          className="flex-1 min-w-0 bg-[#0D0F14] border border-white/8 rounded-lg px-2 py-2 text-[#22C55E] text-sm font-bold text-center focus:outline-none focus:border-[#22C55E]/50"
+                        />
+                        <button
+                          onClick={() => setSeasonMarketForm(f => ({ ...f, clauseProtection: Math.min(99, f.clauseProtection + 1) }))}
+                          className="w-9 h-9 rounded-lg bg-[#0D0F14] border border-white/8 text-[#9CA3AF] hover:text-[#F3F4F6] text-base font-bold cursor-pointer flex items-center justify-center"
+                        >+</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-[#0D0F14] rounded-xl px-3 py-2.5 text-[#9CA3AF] text-xs">
+                  Cada miembro mantendrá su presupuesto del final de la temporada anterior y se le sumarán{" "}
+                  <span className="text-[#F3F4F6] font-bold">{seasonMarketForm.budgetInjection}M€</span>.
+                </div>
+
+                <div className="flex gap-3">
+                  <button onClick={() => setSeasonMarketModal(false)}
+                    className="flex-1 px-4 py-2.5 rounded-xl border border-white/8 text-[#9CA3AF] text-sm font-medium cursor-pointer hover:bg-[#1A1F2E] transition-colors">
+                    Cancelar
+                  </button>
+                  <button onClick={submitSeasonMarket} disabled={startingMarket}
+                    className="flex-1 px-4 py-2.5 rounded-xl text-white text-sm font-semibold cursor-pointer transition-colors disabled:opacity-50"
+                    style={{ background: "linear-gradient(135deg,#16A34A,#22C55E)", boxShadow: "0 4px 14px #22C55E40" }}>
+                    {startingMarket ? "Abriendo…" : "Abrir Mercado"}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

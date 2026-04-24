@@ -116,9 +116,26 @@ export async function POST(request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Error al guardar la asignación." }, { status: 500 });
   }
 
-  // Persist rerolls_used and calculate budget
   await supabase.from("members").update({ rerolls_used: rerollsUsed }).eq("id", auth.memberId);
-  const budget = await calcAndSaveBudget(supabase, team.id, auth.memberId);
+
+  // Budget is owned by the TEAM, not the member. If the team has a saved
+  // budget for this tournament (snapshotted from the previous season's owner),
+  // the member inherits that balance. Otherwise (season 1, or a team that
+  // nobody had last season) it is calculated from the squad's average OVR.
+  const { data: teamBudgetRow } = await supabase
+    .from("team_budgets")
+    .select("budget")
+    .eq("tournament_id", auth.tournamentId)
+    .eq("team_id", team.id)
+    .maybeSingle();
+
+  let budget: number;
+  if (teamBudgetRow != null) {
+    budget = Number((teamBudgetRow as any).budget);
+    await supabase.from("members").update({ budget }).eq("id", auth.memberId);
+  } else {
+    budget = await calcAndSaveBudget(supabase, team.id, auth.memberId);
+  }
 
   return NextResponse.json({
     team: { id: team.id, name: team.name, crestUrl: team.crest_url ?? null, squadValue: 0, budget },
