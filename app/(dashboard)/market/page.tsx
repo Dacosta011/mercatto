@@ -40,6 +40,7 @@ interface PlayerCard {
   ownerId: string;
   ownerName: string;
   clauseProtected: boolean;
+  rejectedByMe: boolean;
   inNegotiation: boolean;
 }
 
@@ -104,6 +105,9 @@ interface MarketState {
   recentTransfers: any[];
   clauseProtectionEnabled: number;
   unreadNotifications: number;
+  league?: {
+    totalMatchdays: number;
+  };
   allMembers: {
     id: string;
     displayName: string;
@@ -121,6 +125,17 @@ function fmt(v: number) {
   if (v >= 1_000_000) return `€${(v / 1_000_000).toFixed(0)}M`;
   if (v >= 1_000) return `€${(v / 1_000).toFixed(0)}K`;
   return `€${v}`;
+}
+
+// Salario = 10% del precio del jugador, prorrateado por jornadas de la liga.
+const SEASON_SALARY_PCT = 0.10;
+function salaryPerSeason(price: number) {
+  if (!price || price <= 0) return 0;
+  return Math.floor(price * SEASON_SALARY_PCT);
+}
+function salaryPerMatch(price: number, totalMatchdays: number) {
+  if (!price || price <= 0 || !totalMatchdays || totalMatchdays <= 0) return 0;
+  return Math.floor((price * SEASON_SALARY_PCT) / totalMatchdays);
 }
 
 function ovrColor(ovr: number) {
@@ -197,6 +212,29 @@ function insiderCopy(transfer: any) {
           type: "🚨 CONFIRMED",
           headline: `${p} a ${b} por ${a}, cláusula activada. Done deal. 🤝`,
           context: `${st} recibe el dinero. Here we go confirmed! ✅`,
+        },
+      ],
+      id
+    );
+  }
+
+  if (transfer.transferType === "clause_rejected") {
+    return pickRandom(
+      [
+        {
+          type: "🛑 RECHAZO ROTUNDO",
+          headline: `${p} le dice NO a ${b}. Cláusula tirada a la basura. 🚫`,
+          context: `${b} pagó ${a}, pero el jugador no quiere saber nada. ${st} respira. 😮‍💨`,
+        },
+        {
+          type: "❌ NO HAY DEAL",
+          headline: `Sorpresa total. ${p} rechaza la cláusula que activó ${b}. 🛑`,
+          context: `Ni con ${a} encima de la mesa. El jugador eligió quedarse en ${st}. 🔒`,
+        },
+        {
+          type: "🤯 PLOT TWIST",
+          headline: `${p} dice NO a ${b}. La cláusula no significó nada. 😱`,
+          context: `${a} no fue suficiente para convencerlo. ${st} se queda con su jugador. 🏠`,
         },
       ],
       id
@@ -307,6 +345,7 @@ export default function MarketPage() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [counterMode, setCounterMode] = useState<string | null>(null);
   const [counterAmount, setCounterAmount] = useState("");
+  const [offersTab, setOffersTab] = useState<"incoming" | "outgoing">("incoming");
   const [notifications, setNotifications] = useState<any[]>([]);
   const [liveTimer, setLiveTimer] = useState<number | null>(null);
   const [soundsOn, setSoundsOn] = useState(true);
@@ -389,6 +428,13 @@ export default function MarketPage() {
                 "warning",
                 "Cláusula activada",
                 `${newest.playerName} por ${fmt(newest.amount)}`
+              );
+              playSound("warning");
+            } else if (newest.transferType === "clause_rejected") {
+              pushToast(
+                "warning",
+                "Cláusula rechazada",
+                `${newest.playerName} no aceptó la oferta de ${newest.buyerName}`
               );
               playSound("warning");
             } else if (
@@ -579,6 +625,16 @@ export default function MarketPage() {
       setActionLoading(false);
       return;
     }
+
+    if (d.rejected) {
+      // Player turned the clause down. Keep the modal open so the user reads
+      // the message; refresh data so the card flips to "rejected" state.
+      setActionMsg(`❌ ${d.playerName ?? selectedPlayer.playerName} rechazó tu oferta. No puedes intentarlo de nuevo en este mercado.`);
+      setActionLoading(false);
+      fetchData(true);
+      return;
+    }
+
     setModal(null);
     setSelectedPlayer(null);
     setActionLoading(false);
@@ -649,6 +705,20 @@ export default function MarketPage() {
       setModal(null);
       setCounterMode(null);
       setCounterAmount("");
+      fetchData(true);
+    } finally {
+      setRespondingOfferId(null);
+    }
+  };
+
+  const cancelOutgoingOffer = async (offerId: string) => {
+    if (!code || !token || respondingOfferId) return;
+    setRespondingOfferId(offerId);
+    try {
+      await fetch(`/api/tournaments/${code}/market/offer/${offerId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
       fetchData(true);
     } finally {
       setRespondingOfferId(null);
@@ -869,9 +939,11 @@ export default function MarketPage() {
                               ? "border-[#F59E0B]/20"
                               : t.transferType === "clause"
                                 ? "border-[#EF4444]/15"
-                                : t.transferType === "rejected"
-                                  ? "border-white/6"
-                                  : "border-[#22C55E]/15"
+                                : t.transferType === "clause_rejected"
+                                  ? "border-[#EF4444]/25"
+                                  : t.transferType === "rejected"
+                                    ? "border-white/6"
+                                    : "border-[#22C55E]/15"
                         }`}
                       >
                         <div className="flex items-start gap-3">
@@ -1153,7 +1225,14 @@ export default function MarketPage() {
                   </div>
                   {hasActions && (
                     <button
-                      onClick={() => setModal("offers")}
+                      onClick={() => {
+                        setOffersTab(
+                          data.myStatus.pendingIncoming > 0
+                            ? "incoming"
+                            : "outgoing"
+                        );
+                        setModal("offers");
+                      }}
                       className="px-3 py-1.5 rounded-xl bg-[#F59E0B]/15 border border-[#F59E0B]/25 text-[#F59E0B] text-xs font-bold"
                     >
                       {data.myStatus.pendingIncoming + data.myStatus.pendingOutgoing} pendientes
@@ -1205,7 +1284,10 @@ export default function MarketPage() {
                 </p>
                 {data.myStatus.pendingIncoming > 0 && (
                   <button
-                    onClick={() => setModal("offers")}
+                    onClick={() => {
+                      setOffersTab("incoming");
+                      setModal("offers");
+                    }}
                     className="w-full flex items-center justify-between py-2.5 px-3 rounded-xl bg-[#0D0F14] border border-white/8 hover:border-[#F59E0B]/30 transition-colors cursor-pointer mb-2"
                   >
                     <span className="text-[#F3F4F6] text-sm font-medium">
@@ -1228,14 +1310,34 @@ export default function MarketPage() {
                   </button>
                 )}
                 {data.myStatus.pendingOutgoing > 0 && (
-                  <div className="flex items-center gap-2 py-2 px-3 rounded-xl bg-[#0D0F14] border border-white/8">
-                    <div className="w-2 h-2 rounded-full bg-[#8B5CF6] animate-pulse" />
-                    <span className="text-[#9CA3AF] text-sm">
-                      {data.myStatus.pendingOutgoing} oferta
-                      {data.myStatus.pendingOutgoing > 1 ? "s" : ""} enviada
-                      {data.myStatus.pendingOutgoing > 1 ? "s" : ""}
+                  <button
+                    onClick={() => {
+                      setOffersTab("outgoing");
+                      setModal("offers");
+                    }}
+                    className="w-full flex items-center justify-between py-2.5 px-3 rounded-xl bg-[#0D0F14] border border-white/8 hover:border-[#8B5CF6]/30 transition-colors cursor-pointer"
+                  >
+                    <span className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-[#8B5CF6] animate-pulse" />
+                      <span className="text-[#9CA3AF] text-sm">
+                        {data.myStatus.pendingOutgoing} oferta
+                        {data.myStatus.pendingOutgoing > 1 ? "s" : ""} enviada
+                        {data.myStatus.pendingOutgoing > 1 ? "s" : ""}
+                      </span>
                     </span>
-                  </div>
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="#8B5CF6"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <polyline points="9 18 15 12 9 6" />
+                    </svg>
+                  </button>
                 )}
               </div>
             )}
@@ -1535,6 +1637,10 @@ export default function MarketPage() {
                   value={fmt(data.myStatus.budget - data.myStatus.budgetReserved - selectedPlayer.clause)}
                 />
               </div>
+              <SalaryStrip
+                price={selectedPlayer.price}
+                totalMatchdays={data.league?.totalMatchdays ?? 0}
+              />
               {data.clauseProtectionEnabled > 0 && selectedPlayer.clauseProtected && (
                 <div className="flex items-center gap-2 bg-[#EF4444]/10 border border-[#EF4444]/20 rounded-xl px-3 py-2.5">
                   <ShieldIcon />
@@ -1543,6 +1649,27 @@ export default function MarketPage() {
                   </span>
                 </div>
               )}
+              {selectedPlayer.rejectedByMe && (
+                <div className="flex items-center gap-2 bg-[#EF4444]/10 border border-[#EF4444]/20 rounded-xl px-3 py-2.5">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                  <span className="text-[#EF4444] text-xs font-medium">
+                    Este jugador ya rechazó tu oferta en este mercado.
+                  </span>
+                </div>
+              )}
+              <div className="flex items-center gap-2 bg-[#F59E0B]/10 border border-[#F59E0B]/20 rounded-xl px-3 py-2.5">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="8" x2="12" y2="12" />
+                  <line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+                <span className="text-[#F59E0B] text-xs font-medium">
+                  Hay un 25% de probabilidad de que el jugador rechace la cláusula.
+                </span>
+              </div>
               {(data.myStatus.budget - data.myStatus.budgetReserved) < selectedPlayer.clause && (
                 <div className="bg-[#EF4444]/10 border border-[#EF4444]/20 rounded-xl px-3 py-2.5">
                   <span className="text-[#EF4444] text-xs font-medium">
@@ -1565,6 +1692,7 @@ export default function MarketPage() {
                   disabled={
                     actionLoading ||
                     (data.clauseProtectionEnabled > 0 && selectedPlayer.clauseProtected) ||
+                    selectedPlayer.rejectedByMe ||
                     (data.myStatus.budget - data.myStatus.budgetReserved) < selectedPlayer.clause
                   }
                   className="flex-1 py-3 rounded-xl bg-[#EF4444] hover:bg-[#DC2626] text-white text-sm font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
@@ -1655,6 +1783,10 @@ export default function MarketPage() {
                       value={fmt(data.myStatus.budget - data.myStatus.budgetReserved)}
                     />
                   </div>
+                  <SalaryStrip
+                    price={selectedPlayer.price}
+                    totalMatchdays={data.league?.totalMatchdays ?? 0}
+                  />
                   <div>
                     <label className="text-[#9CA3AF] text-sm font-medium block mb-2">
                       Monto de la oferta (en millones €)
@@ -1750,7 +1882,7 @@ export default function MarketPage() {
             );
           })()}
 
-        {/* Incoming offers */}
+        {/* Offers (incoming + outgoing) */}
         {modal === "offers" && (
           <Modal onClose={() => setModal(null)}>
             <div className="flex flex-col gap-5">
@@ -1774,14 +1906,168 @@ export default function MarketPage() {
                 </div>
                 <div>
                   <h2 className="text-[#F3F4F6] font-bold text-xl">
-                    Ofertas recibidas
+                    Ofertas
                   </h2>
                   <p className="text-[#9CA3AF] text-sm mt-0.5">
-                    Acepta, rechaza o contra-oferta
+                    {offersTab === "incoming"
+                      ? "Acepta, rechaza o contra-oferta"
+                      : "Cancela las que aún no han respondido"}
                   </p>
                 </div>
               </div>
-              {data.myIncomingOffers.length === 0 ? (
+
+              {/* Tabs */}
+              <div className="flex gap-1 p-1 bg-[#0D0F14] rounded-xl border border-white/6">
+                <button
+                  onClick={() => setOffersTab("incoming")}
+                  className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold transition-colors cursor-pointer flex items-center justify-center gap-2 ${
+                    offersTab === "incoming"
+                      ? "bg-[#F59E0B]/15 text-[#F59E0B] border border-[#F59E0B]/30"
+                      : "text-[#9CA3AF] hover:text-[#F3F4F6]"
+                  }`}
+                >
+                  Recibidas
+                  {data.myIncomingOffers.length > 0 && (
+                    <span className="px-1.5 py-0.5 rounded-md bg-[#F59E0B]/20 text-[#F59E0B] text-[10px] font-black">
+                      {data.myIncomingOffers.length}
+                    </span>
+                  )}
+                </button>
+                <button
+                  onClick={() => setOffersTab("outgoing")}
+                  className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold transition-colors cursor-pointer flex items-center justify-center gap-2 ${
+                    offersTab === "outgoing"
+                      ? "bg-[#8B5CF6]/15 text-[#8B5CF6] border border-[#8B5CF6]/30"
+                      : "text-[#9CA3AF] hover:text-[#F3F4F6]"
+                  }`}
+                >
+                  Enviadas
+                  {data.myOutgoingOffers.length > 0 && (
+                    <span className="px-1.5 py-0.5 rounded-md bg-[#8B5CF6]/20 text-[#8B5CF6] text-[10px] font-black">
+                      {data.myOutgoingOffers.length}
+                    </span>
+                  )}
+                </button>
+              </div>
+
+              {/* Outgoing offers list */}
+              {offersTab === "outgoing" && (
+                data.myOutgoingOffers.length === 0 ? (
+                  <div className="bg-[#0D0F14] rounded-2xl p-8 text-center">
+                    <p className="text-[#9CA3AF] text-base">
+                      No tienes ofertas pendientes enviadas.
+                    </p>
+                  </div>
+                ) : (
+                  data.myOutgoingOffers.map((o) => {
+                    const ovrCol = o.playerOvr
+                      ? ovrColor(o.playerOvr)
+                      : { bg: "#9CA3AF", text: "#fff" };
+                    const timeLeft = formatTimeLeft(o.expiresAt);
+                    const isCancelling = respondingOfferId === o.id;
+                    return (
+                      <div
+                        key={o.id}
+                        className="bg-[#0D0F14] rounded-2xl p-4 sm:p-5 border border-white/6"
+                      >
+                        <div className="flex items-center gap-3 sm:gap-4">
+                          <div className="w-14 h-14 sm:w-18 sm:h-18 rounded-xl sm:rounded-2xl overflow-hidden shrink-0 bg-[#131722] border border-white/8 flex items-center justify-center">
+                            {o.playerHeadshot ? (
+                              <img
+                                src={o.playerHeadshot}
+                                alt={o.playerName}
+                                className="w-full h-full object-contain object-bottom"
+                              />
+                            ) : o.playerOvr ? (
+                              <span
+                                className="font-black text-2xl"
+                                style={{ color: ovrCol.bg }}
+                              >
+                                {o.playerOvr}
+                              </span>
+                            ) : null}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              {o.playerOvr && (
+                                <span
+                                  className="px-2 py-0.5 rounded-lg text-xs font-black"
+                                  style={{
+                                    background: ovrCol.bg,
+                                    color: ovrCol.text,
+                                  }}
+                                >
+                                  {o.playerOvr}
+                                </span>
+                              )}
+                              <span className="px-2 py-0.5 rounded-lg text-xs font-bold bg-white/8 text-[#F3F4F6]">
+                                {o.playerPosition}
+                              </span>
+                            </div>
+                            <p className="text-[#F3F4F6] text-base sm:text-lg font-bold leading-tight truncate">
+                              {o.playerName}
+                            </p>
+                            <p className="text-[#9CA3AF] text-xs sm:text-sm mt-0.5">
+                              Esperando a{" "}
+                              <span className="text-[#F3F4F6] font-semibold">
+                                {o.sellerName}
+                              </span>
+                            </p>
+                            {timeLeft && (
+                              <p className="text-[#F59E0B] text-xs mt-1 font-medium">
+                                {timeLeft}
+                              </p>
+                            )}
+                          </div>
+                          <div className="text-right shrink-0">
+                            <p className="text-[10px] text-[#9CA3AF] uppercase tracking-wider mb-1">
+                              Tu oferta
+                            </p>
+                            <p className="text-[#8B5CF6] text-xl sm:text-2xl font-black">
+                              {fmt(o.amount)}
+                            </p>
+                            <div className="mt-1.5 space-y-0.5">
+                              <p className="text-[10px] text-[#9CA3AF]">
+                                Valor:{" "}
+                                <span className="text-[#F3F4F6] font-semibold">
+                                  {fmt(o.playerPrice)}
+                                </span>
+                              </p>
+                              <p className="text-[10px] text-[#9CA3AF]">
+                                Cláusula:{" "}
+                                <span className="text-[#F3F4F6] font-semibold">
+                                  {fmt(o.playerClause)}
+                                </span>
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={() => cancelOutgoingOffer(o.id)}
+                          disabled={!!respondingOfferId}
+                          className="w-full mt-4 py-3 rounded-xl border border-[#EF4444]/30 text-[#EF4444] text-sm font-semibold hover:bg-[#EF4444]/10 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        >
+                          {isCancelling ? (
+                            <div className="w-4 h-4 border-2 border-[#EF4444]/30 border-t-[#EF4444] rounded-full animate-spin" />
+                          ) : (
+                            <>
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <line x1="18" y1="6" x2="6" y2="18" />
+                                <line x1="6" y1="6" x2="18" y2="18" />
+                              </svg>
+                              Cancelar oferta
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    );
+                  })
+                )
+              )}
+
+              {offersTab === "incoming" && (
+                data.myIncomingOffers.length === 0 ? (
                 <div className="bg-[#0D0F14] rounded-2xl p-8 text-center">
                   <p className="text-[#9CA3AF] text-base">
                     No tienes ofertas pendientes.
@@ -1962,7 +2248,7 @@ export default function MarketPage() {
                     </div>
                   );
                 })
-              )}
+              ))}
             </div>
           </Modal>
         )}
@@ -2049,6 +2335,7 @@ function PlayerMarketCard({
   const col = ovrColor(player.ovr);
   const [imgError, setImgError] = useState(false);
   const isProtected = clauseProtectionEnabled > 0 && player.clauseProtected;
+  const wasRejected = player.rejectedByMe;
 
   return (
     <div
@@ -2095,7 +2382,16 @@ function PlayerMarketCard({
                 <span className="hidden sm:inline">Protegido</span>
               </span>
             )}
-            {player.inNegotiation && !isProtected && (
+            {wasRejected && !isProtected && (
+              <span className="ml-auto flex items-center gap-1 text-[11px] lg:text-xs text-[#EF4444] font-medium" title="Este jugador rechazó tu oferta de cláusula">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+                <span className="hidden sm:inline">Te rechazó</span>
+              </span>
+            )}
+            {player.inNegotiation && !isProtected && !wasRejected && (
               <span className="ml-auto text-[11px] lg:text-xs text-[#F59E0B] font-medium">
                 <span className="hidden sm:inline">En negociación</span>
                 <span className="sm:hidden">Negoc.</span>
@@ -2145,8 +2441,9 @@ function PlayerMarketCard({
         </button>
         <button
           onClick={onClause}
-          disabled={!canAct || isProtected}
+          disabled={!canAct || isProtected || wasRejected}
           className="flex-1 h-9 lg:h-10 rounded-xl border border-[#EF4444]/35 text-[#EF4444] text-xs lg:text-sm font-semibold hover:bg-[#EF4444]/12 transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+          title={wasRejected ? "Este jugador rechazó tu oferta en este mercado" : undefined}
         >
           Cláusula
         </button>
@@ -2700,6 +2997,49 @@ function StatBox({
       >
         {value}
       </p>
+    </div>
+  );
+}
+
+function SalaryStrip({
+  price,
+  totalMatchdays,
+}: {
+  price: number;
+  totalMatchdays: number;
+}) {
+  const perSeason = salaryPerSeason(price);
+  const perMatch = salaryPerMatch(price, totalMatchdays);
+  const hasMatchdays = totalMatchdays > 0;
+  return (
+    <div className="rounded-xl border border-[#8B5CF6]/20 bg-[#8B5CF6]/5 px-3 py-2.5">
+      <div className="flex items-center gap-2 mb-2">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8B5CF6" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="12" y1="1" x2="12" y2="23" />
+          <path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />
+        </svg>
+        <p className="text-[#8B5CF6] text-[10px] uppercase tracking-wider font-bold">
+          Salario del jugador
+        </p>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <p className="text-[#9CA3AF] text-[10px] uppercase tracking-wider mb-0.5">
+            Por temporada
+          </p>
+          <p className="text-[#F3F4F6] text-sm font-bold tabular-nums">
+            {fmt(perSeason)}
+          </p>
+        </div>
+        <div>
+          <p className="text-[#9CA3AF] text-[10px] uppercase tracking-wider mb-0.5">
+            Por partido
+          </p>
+          <p className="text-[#F3F4F6] text-sm font-bold tabular-nums">
+            {hasMatchdays ? fmt(perMatch) : "—"}
+          </p>
+        </div>
+      </div>
     </div>
   );
 }

@@ -113,15 +113,26 @@ export async function POST(request: NextRequest, { params }: Params) {
     .eq("player_id", body.playerId)
     .maybeSingle();
 
-  const { data: lastTransfer } = await supabase
+  const { data: lastAnyTransfer } = await supabase
     .from("market_transfers")
-    .select("buyer_id")
+    .select("buyer_id, transfer_type")
     .eq("session_id", s.id)
     .eq("player_id", body.playerId)
-    .in("transfer_type", ["clause", "offer", "icon_auction"])
+    .in("transfer_type", ["clause", "offer", "icon_auction", "auto_release"])
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
+
+  // Player was force-released by the system: they are unavailable until the
+  // next market opens.
+  if (lastAnyTransfer && (lastAnyTransfer as any).transfer_type === "auto_release") {
+    return NextResponse.json(
+      { error: "Este jugador fue liberado por deuda y no está disponible en este mercado." },
+      { status: 422 }
+    );
+  }
+
+  const lastTransfer = lastAnyTransfer; // last meaningful transfer (clause/offer/icon)
 
   if (!tp && !lastTransfer) {
     return NextResponse.json(

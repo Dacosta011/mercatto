@@ -43,6 +43,7 @@ export async function GET(_request: NextRequest, { params }: Params) {
   let query = supabase
     .from("teams")
     .select("id, name, crest_url")
+    .eq("active", true)
     .order("name");
 
   if (takenIds.length > 0) {

@@ -188,13 +188,20 @@ export async function GET(request: NextRequest, { params }: Params) {
     .from("market_transfers")
     .select("buyer_id, player_id, transfer_type, amount")
     .eq("session_id", s.id)
-    .in("transfer_type", ["clause", "offer", "icon_auction"])
+    .in("transfer_type", ["clause", "offer", "icon_auction", "auto_release"])
     .order("created_at", { ascending: true });
 
   // Track the last transfer amount for each player (used for icon clause computation)
   const lastTransferAmount: Record<string, number> = {};
 
   for (const t of allTransfers ?? []) {
+    if (t.transfer_type === "auto_release") {
+      // Player was force-released by the system; ownership is dropped so this
+      // player won't be listed under any squad until someone signs them again.
+      delete effectiveOwner[t.player_id];
+      delete effectiveTeam[t.player_id];
+      continue;
+    }
     effectiveOwner[t.player_id] = t.buyer_id;
     const buyerTeam = teamIdByMember[t.buyer_id];
     if (buyerTeam) effectiveTeam[t.player_id] = buyerTeam;
@@ -220,6 +227,17 @@ export async function GET(request: NextRequest, { params }: Params) {
     const tid = (t as any).seller_team_id;
     clauseCountByTeam[tid] = (clauseCountByTeam[tid] ?? 0) + 1;
   }
+
+  // Players that rejected the calling member's clause attempt this session
+  const { data: myRejections } = await supabase
+    .from("market_transfers")
+    .select("player_id")
+    .eq("session_id", s.id)
+    .eq("buyer_id", auth.memberId)
+    .eq("transfer_type", "clause_rejected");
+  const rejectedPlayerIdsForMe = new Set(
+    (myRejections ?? []).map((r: any) => r.player_id)
+  );
 
   // ── 5. Available players ──────────────────────────────────────────────────
   const otherPlayerIds = Object.keys(effectiveOwner).filter(
@@ -271,6 +289,7 @@ export async function GET(request: NextRequest, { params }: Params) {
         ownerId,
         ownerName: memberById[ownerId]?.display_name ?? "—",
         clauseProtected: clauseProtection > 0 && (clauseCountByTeam[ownerTeamId] ?? 0) >= clauseProtection,
+        rejectedByMe: rejectedPlayerIdsForMe.has((p as any).id),
         inNegotiation: false,
       });
     }
@@ -455,6 +474,14 @@ export async function GET(request: NextRequest, { params }: Params) {
     ? Math.max(0, closesAt.getTime() - nowDate.getTime())
     : null;
 
+  // ── 11. League meta (used to estimate per-match salaries client-side) ────
+  const { data: leagueMeta } = await supabase
+    .from("league_sessions")
+    .select("total_matchdays")
+    .eq("tournament_id", auth.tournamentId)
+    .maybeSingle();
+  const totalMatchdays = ((leagueMeta as any)?.total_matchdays ?? 0) as number;
+
   return NextResponse.json({
     status: s.status,
     session: {
@@ -492,6 +519,9 @@ export async function GET(request: NextRequest, { params }: Params) {
     recentTransfers,
     clauseProtectionEnabled: clauseProtection,
     unreadNotifications: unreadNotifications ?? 0,
+    league: {
+      totalMatchdays,
+    },
     allMembers: (allMembersRaw ?? []).map((m: any) => {
       const tid = teamIdByMember[m.id];
       return {

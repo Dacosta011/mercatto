@@ -808,13 +808,22 @@ function FixtureCard({
               </button>
             )}
 
-            {/* Submit result */}
-            {fixture.status === "in_progress" && isParticipant && !hasPending && !fixture.postponeRequestedBy && (
+            {/* Submit result — only the home (local) member can send it.
+                Previously both teams could click at the same time and the
+                second submission would race / get blocked. */}
+            {fixture.status === "in_progress" && isHome && !hasPending && !fixture.postponeRequestedBy && (
               <button onClick={onOpenResult}
                 className="flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-semibold bg-[#8B5CF6]/10 border border-[#8B5CF6]/25 text-[#8B5CF6] hover:bg-[#8B5CF6]/20 transition-colors cursor-pointer">
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                 Registrar resultado
               </button>
+            )}
+            {/* Visitor sees a hint that the home member is responsible. */}
+            {fixture.status === "in_progress" && isAway && !hasPending && !fixture.postponeRequestedBy && (
+              <span className="text-[#9CA3AF] text-[11px] sm:text-xs font-medium flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-white/5 border border-white/10">
+                <svg className="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                El local registra el resultado
+              </span>
             )}
 
             {/* Pending result */}

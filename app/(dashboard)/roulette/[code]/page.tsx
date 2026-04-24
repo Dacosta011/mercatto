@@ -38,22 +38,19 @@ export default function RoulettePage() {
   const [errorMsg,    setErrorMsg]    = useState("");
   const [isSpinning,  setIsSpinning]  = useState(false);
 
-  // Reroll state
+  // Reroll state — `rerollsUsedInDB` is the single source of truth. Each reroll
+  // is PATCHed to the server before the animation starts, so reload no longer
+  // resets the counter and the limit cannot be bypassed.
   const [rerollsAllowed,  setRerollsAllowed]  = useState(0);
   const [rerollsUsedInDB, setRerollsUsedInDB] = useState(0);
   const [wasAssigned,     setWasAssigned]      = useState(false);
-  const [localSpins,      setLocalSpins]       = useState(0);
 
   // IDs of teams taken by OTHER members (live via Realtime)
   const [takenIds, setTakenIds] = useState<Set<string>>(new Set());
   const tournamentIdRef = useRef<string | null>(null);
   const myMemberIdRef   = useRef<string | null>(null);
 
-  const localRerolls = wasAssigned
-    ? localSpins
-    : Math.max(0, localSpins - 1);
-
-  const rerollsRemaining = Math.max(0, rerollsAllowed - rerollsUsedInDB - localRerolls);
+  const rerollsRemaining = Math.max(0, rerollsAllowed - rerollsUsedInDB);
 
   // Available teams = allTeams minus taken ones (but keep pending team eligible)
   const availableTeams = useMemo(() => {
@@ -169,7 +166,6 @@ export default function RoulettePage() {
   // ── SlotStrip callback ────────────────────────────────────────────────────
   const handleTeamSelected = useCallback((winner: Team) => {
     setPendingTeam(winner as Team & { budget?: number });
-    setLocalSpins((s) => s + 1);
     spinning.current = false;
     setIsSpinning(false);
     setPhase("result");
@@ -184,12 +180,41 @@ export default function RoulettePage() {
 
   const handleFirstSpin = () => startSpin(availableTeams);
 
-  const handleReroll = () => {
-    if (rerollsRemaining <= 0) return;
+  const handleReroll = async () => {
+    if (rerollsRemaining <= 0 || spinning.current) return;
+    const token = getToken();
+    if (!token) return;
+
+    // Persist the reroll BEFORE animating, so a page reload mid-flow cannot
+    // bypass the limit. The server enforces the cap and returns the updated
+    // counter; we trust that value over the local one.
+    try {
+      const res = await fetch(`/api/tournaments/${code}/spin`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        if (typeof data.rerollsUsed === "number") {
+          setRerollsUsedInDB(data.rerollsUsed);
+        }
+        return;
+      }
+
+      if (typeof data.rerollsUsed === "number") {
+        setRerollsUsedInDB(data.rerollsUsed);
+      }
+    } catch {
+      return;
+    }
+
     startSpin(availableTeams);
   };
 
   const handleRespin = () => {
+    // Triggered when the team the user picked got taken by someone else. This
+    // is NOT a voluntary reroll, so don't charge it server-side.
     setPendingTeam(null);
     startSpin(availableTeams);
   };
@@ -198,22 +223,15 @@ export default function RoulettePage() {
   const handleConfirm = async () => {
     if (!pendingTeam?.id) return;
 
-    if (wasAssigned && localSpins === 0) {
-      router.push(`/lobby/${code}`);
-      return;
-    }
-
     const token = getToken();
     if (!token) return;
     setPhase("confirming");
-
-    const totalRerollsUsed = rerollsUsedInDB + localRerolls;
 
     try {
       const r = await fetch(`/api/tournaments/${code}/spin`, {
         method:  "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body:    JSON.stringify({ teamId: pendingTeam.id, rerollsUsed: totalRerollsUsed }),
+        body:    JSON.stringify({ teamId: pendingTeam.id, rerollsUsed: rerollsUsedInDB }),
       });
       const data = await r.json();
 

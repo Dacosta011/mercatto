@@ -62,6 +62,7 @@ export async function GET(request: NextRequest, { params }: Params) {
 
   // Get market session (if any) to apply transfers
   let marketTransfers: Array<{ buyerMemberId: string; playerIds: string[]; sellerTeamId: string }> = [];
+  const releasedPlayerIds = new Set<string>();
   if (tournamentId) {
     const { data: marketSession } = await supabase
       .from("market_sessions")
@@ -94,6 +95,15 @@ export async function GET(request: NextRequest, { params }: Params) {
         ) ?? "";
         marketTransfers.push({ buyerMemberId, playerIds, sellerTeamId });
       }
+
+      // Players that were auto-released by the system (negative budget). They
+      // must disappear from every squad regardless of who originally owned them.
+      const { data: releases } = await supabase
+        .from("market_transfers")
+        .select("player_id")
+        .eq("session_id", (marketSession as any).id)
+        .eq("transfer_type", "auto_release");
+      for (const r of releases ?? []) releasedPlayerIds.add((r as any).player_id);
     }
   }
 
@@ -144,7 +154,10 @@ export async function GET(request: NextRequest, { params }: Params) {
       if (t.buyerMemberId === memberId) t.playerIds.forEach(id => boughtIds.add(id));
     }
 
-    const finalIds = [...[...baseIds].filter(id => !soldIds.has(id)), ...boughtIds];
+    const finalIds = [
+      ...[...baseIds].filter(id => !soldIds.has(id) && !releasedPlayerIds.has(id)),
+      ...[...boughtIds].filter(id => !releasedPlayerIds.has(id)),
+    ];
 
     let players: any[] = [];
     if (finalIds.length > 0) {

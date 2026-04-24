@@ -42,6 +42,73 @@ export async function GET(request: NextRequest, { params }: Params) {
   });
 }
 
+// ─── PATCH /api/tournaments/[code]/spin ───────────────────────────────────────
+// Called by the client BEFORE each reroll animation, so the reroll count is
+// persisted server-side immediately. This prevents bypassing the limit by
+// reloading the page after exhausting the local rerolls.
+//
+// Returns 403 when the limit is reached. The response includes the updated
+// counters so the client can sync without a full GET.
+
+export async function PATCH(request: NextRequest, { params }: Params) {
+  const { code } = await params;
+
+  const auth = await verifyMemberToken(request, code);
+  if (!auth.ok)
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+
+  const supabase = createServerClient();
+
+  const [{ data: tournament }, { data: member }] = await Promise.all([
+    supabase
+      .from("tournaments")
+      .select("rerolls_allowed")
+      .eq("id", auth.tournamentId)
+      .single(),
+    supabase
+      .from("members")
+      .select("rerolls_used")
+      .eq("id", auth.memberId)
+      .single(),
+  ]);
+
+  const rerollsAllowed: number = (tournament as any)?.rerolls_allowed ?? 1;
+  const currentUsed: number = (member as any)?.rerolls_used ?? 0;
+
+  if (currentUsed >= rerollsAllowed) {
+    return NextResponse.json(
+      {
+        error: "Ya no quedan rerolls disponibles.",
+        rerollsAllowed,
+        rerollsUsed: currentUsed,
+        rerollsRemaining: 0,
+      },
+      { status: 403 }
+    );
+  }
+
+  const newUsed = currentUsed + 1;
+
+  const { error: updateErr } = await supabase
+    .from("members")
+    .update({ rerolls_used: newUsed })
+    .eq("id", auth.memberId);
+
+  if (updateErr) {
+    console.error("[spin/PATCH] update", updateErr);
+    return NextResponse.json(
+      { error: "Error al registrar el reroll." },
+      { status: 500 }
+    );
+  }
+
+  return NextResponse.json({
+    rerollsAllowed,
+    rerollsUsed: newUsed,
+    rerollsRemaining: Math.max(0, rerollsAllowed - newUsed),
+  });
+}
+
 // ─── POST /api/tournaments/[code]/spin ────────────────────────────────────────
 // Called ONCE when the user confirms their chosen team (after all local spins).
 // Body: { teamId: string, rerollsUsed: number }
@@ -65,12 +132,20 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   const supabase = createServerClient();
 
-  const { data: tournament } = await supabase
-    .from("tournaments").select("rerolls_allowed").eq("id", auth.tournamentId).single();
+  const [{ data: tournament }, { data: memberRow }] = await Promise.all([
+    supabase.from("tournaments").select("rerolls_allowed").eq("id", auth.tournamentId).single(),
+    supabase.from("members").select("rerolls_used").eq("id", auth.memberId).single(),
+  ]);
 
   const rerollsAllowed: number = (tournament as any)?.rerolls_allowed ?? 1;
+  const dbRerollsUsed: number = (memberRow as any)?.rerolls_used ?? 0;
 
-  if (rerollsUsed > rerollsAllowed) {
+  // The authoritative count is whatever was already persisted via PATCH /spin.
+  // The client may send a higher number (initial-spin-only commits) but never
+  // a lower one — that would let a tampered request "give back" rerolls.
+  const finalRerollsUsed = Math.max(dbRerollsUsed, rerollsUsed);
+
+  if (finalRerollsUsed > rerollsAllowed) {
     return NextResponse.json({ error: "Se excedió el límite de rerolls permitidos." }, { status: 403 });
   }
 
@@ -116,7 +191,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Error al guardar la asignación." }, { status: 500 });
   }
 
-  await supabase.from("members").update({ rerolls_used: rerollsUsed }).eq("id", auth.memberId);
+  await supabase.from("members").update({ rerolls_used: finalRerollsUsed }).eq("id", auth.memberId);
 
   // Budget is owned by the TEAM, not the member. If the team has a saved
   // budget for this tournament (snapshotted from the previous season's owner),
@@ -140,8 +215,8 @@ export async function POST(request: NextRequest, { params }: Params) {
   return NextResponse.json({
     team: { id: team.id, name: team.name, crestUrl: team.crest_url ?? null, squadValue: 0, budget },
     rerollsAllowed,
-    rerollsUsed,
-    rerollsRemaining: Math.max(0, rerollsAllowed - rerollsUsed),
+    rerollsUsed: finalRerollsUsed,
+    rerollsRemaining: Math.max(0, rerollsAllowed - finalRerollsUsed),
   });
 }
 

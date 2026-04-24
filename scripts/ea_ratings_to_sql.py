@@ -20,6 +20,8 @@ URLS = [
     "https://www.ea.com/es/games/ea-sports-fc/ratings/teams-ratings/leverkusen/32",
     "https://www.ea.com/es/games/ea-sports-fc/ratings/teams-ratings/borussia-dortmund/22",
     "https://www.ea.com/es/games/ea-sports-fc/ratings/teams-ratings/atletico-de-madrid/240",
+    "https://www.ea.com/es/games/ea-sports-fc/ratings/teams-ratings/paris-sg/73",
+    "https://www.ea.com/es/games/ea-sports-fc/ratings/teams-ratings/chelsea/5"
 ]
 
 HEADERS = {

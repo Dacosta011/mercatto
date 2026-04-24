@@ -112,15 +112,24 @@ export async function POST(request: NextRequest, { params }: Params) {
     if (!tp) return NextResponse.json({ error: "El jugador no está en ningún equipo." }, { status: 422 });
 
     // Check if this player was transferred previously → effective owner is the latest buyer
-    const { data: lastTransfer } = await supabase
+    const { data: lastAnyTransfer } = await supabase
       .from("market_transfers")
-      .select("buyer_id")
+      .select("buyer_id, transfer_type")
       .eq("session_id", (session as any).id)
       .eq("player_id", body.playerId)
-      .in("transfer_type", ["clause", "offer", "icon_auction"])
+      .in("transfer_type", ["clause", "offer", "icon_auction", "auto_release"])
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
+
+    if (lastAnyTransfer && (lastAnyTransfer as any).transfer_type === "auto_release") {
+      return NextResponse.json(
+        { error: "Este jugador fue liberado por deuda y no está disponible en este mercado." },
+        { status: 422 }
+      );
+    }
+
+    const lastTransfer = lastAnyTransfer;
 
     // Get all assignments to resolve member → team
     const { data: tournamentAssignments } = await supabase

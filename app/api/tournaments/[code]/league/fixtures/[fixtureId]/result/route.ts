@@ -1,5 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient, verifyMemberToken } from "@/lib/supabase";
+import {
+  getMemberSquad,
+  recordExpenses,
+  runAutoRelease,
+  salaryPerMatch,
+  YELLOW_CARD_FINE,
+  RED_CARD_FINE,
+  type ExpenseRow,
+  type AutoReleaseEvent,
+} from "@/lib/expenses";
+import { createNotification } from "@/lib/notifications";
 
 type Params = { params: Promise<{ code: string; fixtureId: string }> };
 
@@ -125,6 +136,166 @@ async function finalizeFixture(supabase: any, fixtureId: string, fixture: any, h
   }).eq("id", fixtureId);
 
   await processDiscipline(supabase, (fixture as any).session_id, fixture, currentMatchday, cards);
+
+  // ── Finance: pay salaries + card fines, then auto-release if budget < 0 ──
+  await processFinances(supabase, fixture, fixtureId, currentMatchday, [
+    { memberId: (fixture as any).home_member_id, cards: homeCards },
+    { memberId: (fixture as any).away_member_id, cards: awayCards },
+  ]);
+}
+
+/**
+ * Charge per-match salaries to every player in each member's squad and apply
+ * fines for yellow/red cards. If a member's budget drops below zero, force-sell
+ * their most expensive signing(s) until the deficit is covered.
+ *
+ * Failures here are logged but do NOT roll back the match result — finance
+ * processing is a derived effect of the match.
+ */
+async function processFinances(
+  supabase: any,
+  fixture: any,
+  fixtureId: string,
+  matchday: number,
+  parties: Array<{ memberId: string | null; cards: PlayerCard[] }>
+) {
+  try {
+    const sessionId = (fixture as any).session_id as string;
+
+    const { data: leagueSession } = await supabase
+      .from("league_sessions")
+      .select("id, tournament_id, total_matchdays")
+      .eq("id", sessionId)
+      .single();
+
+    const tournamentId = (leagueSession as any)?.tournament_id as string | undefined;
+    const totalMatchdays = ((leagueSession as any)?.total_matchdays ?? 0) as number;
+    if (!tournamentId) return;
+
+    // Pull the active market session id (may be null after the market closed)
+    const { data: marketSession } = await supabase
+      .from("market_sessions")
+      .select("id")
+      .eq("tournament_id", tournamentId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const marketSessionId = (marketSession as any)?.id ?? null;
+
+    for (const party of parties) {
+      if (!party.memberId) continue;
+
+      // 1) Squad and salaries
+      const squad = await getMemberSquad(supabase, tournamentId, party.memberId);
+      const ledgerRows: ExpenseRow[] = [];
+      let totalCharge = 0;
+
+      for (const p of squad) {
+        const salary = salaryPerMatch(p.price, totalMatchdays);
+        if (salary <= 0) continue;
+        totalCharge += salary;
+        ledgerRows.push({
+          tournament_id: tournamentId,
+          member_id: party.memberId,
+          fixture_id: fixtureId,
+          matchday,
+          expense_type: "salary",
+          player_id: p.playerId,
+          player_name: p.name,
+          amount: salary,
+          is_credit: false,
+        });
+      }
+
+      // 2) Card fines
+      for (const c of party.cards) {
+        const fine = c.cardType === "yellow" ? YELLOW_CARD_FINE : RED_CARD_FINE;
+        totalCharge += fine;
+        ledgerRows.push({
+          tournament_id: tournamentId,
+          member_id: party.memberId,
+          fixture_id: fixtureId,
+          matchday,
+          expense_type: c.cardType === "yellow" ? "yellow_card" : "red_card",
+          player_id: c.playerId,
+          player_name: c.playerName,
+          amount: fine,
+          is_credit: false,
+        });
+      }
+
+      if (totalCharge <= 0 && ledgerRows.length === 0) continue;
+
+      // 3) Apply charge to the member's budget
+      const { data: m } = await supabase
+        .from("members")
+        .select("budget")
+        .eq("id", party.memberId)
+        .single();
+      const currentBudget = ((m as any)?.budget ?? 0) as number;
+      const newBudget = currentBudget - totalCharge;
+      await supabase
+        .from("members")
+        .update({ budget: newBudget })
+        .eq("id", party.memberId);
+
+      await recordExpenses(supabase, ledgerRows);
+
+      // Surface a notification with the breakdown
+      const salaryTotal = ledgerRows
+        .filter((r) => r.expense_type === "salary")
+        .reduce((s, r) => s + r.amount, 0);
+      const yellowTotal = ledgerRows
+        .filter((r) => r.expense_type === "yellow_card")
+        .reduce((s, r) => s + r.amount, 0);
+      const redTotal = ledgerRows
+        .filter((r) => r.expense_type === "red_card")
+        .reduce((s, r) => s + r.amount, 0);
+
+      const fineSegments: string[] = [];
+      if (yellowTotal > 0) fineSegments.push(`amarillas $${(yellowTotal / 1_000_000).toFixed(1)}M`);
+      if (redTotal > 0) fineSegments.push(`rojas $${(redTotal / 1_000_000).toFixed(1)}M`);
+      const fineSummary = fineSegments.length > 0 ? ` + ${fineSegments.join(" + ")}` : "";
+
+      await createNotification({
+        supabase,
+        memberId: party.memberId,
+        tournamentId,
+        type: "salary_paid",
+        title: "Gastos del partido",
+        body: `Salarios $${(salaryTotal / 1_000_000).toFixed(1)}M${fineSummary}. Total $${(totalCharge / 1_000_000).toFixed(1)}M.`,
+        metadata: { fixtureId, matchday, salaryTotal, yellowTotal, redTotal, totalCharge },
+      });
+
+      // 4) Auto-release if we ended in the red
+      if (newBudget < 0) {
+        const released: AutoReleaseEvent[] = await runAutoRelease(supabase, {
+          tournamentId,
+          memberId: party.memberId,
+          fixtureId,
+          matchday,
+          sessionId: marketSessionId,
+        });
+
+        if (released.length > 0) {
+          const lines = released
+            .map((r) => `${r.playerName} (recuperaste $${(r.refund / 1_000_000).toFixed(1)}M)`)
+            .join(", ");
+          await createNotification({
+            supabase,
+            memberId: party.memberId,
+            tournamentId,
+            type: "auto_release",
+            title: released.length === 1 ? "Jugador liberado" : "Jugadores liberados",
+            body: `Sin presupuesto: ${lines}.`,
+            metadata: { fixtureId, matchday, released },
+          });
+        }
+      }
+    }
+  } catch (e) {
+    console.error("[finalizeFixture/processFinances]", e);
+  }
 }
 
 // POST — first player submits; second player confirms or disputes
