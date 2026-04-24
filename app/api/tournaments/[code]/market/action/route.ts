@@ -89,7 +89,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     // Get player
     const { data: player } = await supabase
       .from("players")
-      .select("id, name, clause")
+      .select("id, name, clause, is_icon")
       .eq("id", body.playerId)
       .single();
 
@@ -205,6 +205,20 @@ export async function POST(request: NextRequest, { params }: Params) {
       transfer_type: "clause",
       amount: clauseAmount,
     });
+
+    // Keep player price aligned with paid clause amount so downstream salary
+    // calculations per matchday use the correct acquisition value.
+    if ((player as any).is_icon) {
+      await supabase
+        .from("players")
+        .update({ price: clauseAmount, clause: Math.round(clauseAmount * 1.3) })
+        .eq("id", body.playerId);
+    } else {
+      await supabase
+        .from("players")
+        .update({ price: clauseAmount })
+        .eq("id", body.playerId);
+    }
 
   }
 

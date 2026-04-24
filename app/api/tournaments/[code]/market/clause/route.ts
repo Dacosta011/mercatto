@@ -306,10 +306,19 @@ export async function POST(request: NextRequest, { params }: Params) {
     amount: clauseAmount,
   });
 
-  // If icon, update clause to purchase price + 30% so new owner doesn't lose money
+  // Persist transfer amount as player price so salary-per-match reflects the
+  // latest acquisition cost. Icons also refresh clause with +30% markup.
   if ((player as any).is_icon) {
     const newClause = Math.round(clauseAmount * 1.3);
-    await supabase.from("players").update({ clause: newClause }).eq("id", body.playerId);
+    await supabase
+      .from("players")
+      .update({ price: clauseAmount, clause: newClause })
+      .eq("id", body.playerId);
+  } else {
+    await supabase
+      .from("players")
+      .update({ price: clauseAmount })
+      .eq("id", body.playerId);
   }
 
   // Cancel any pending offers for this player

@@ -25,7 +25,7 @@ export async function GET(request: NextRequest, { params }: Params) {
 
   const supabase = createServerClient();
 
-  const [{ data: member }, { data: leagueSession }] = await Promise.all([
+  const [{ data: member }, { data: leagueSession }, { data: lastArchive }, { count: assignmentCount }] = await Promise.all([
     supabase
       .from("members")
       .select("budget, budget_reserved")
@@ -36,9 +36,30 @@ export async function GET(request: NextRequest, { params }: Params) {
       .select("total_matchdays, current_matchday, status")
       .eq("tournament_id", auth.tournamentId)
       .maybeSingle(),
+    supabase
+      .from("season_archives")
+      .select("total_matchdays")
+      .eq("tournament_id", auth.tournamentId)
+      .order("season_number", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("assignments")
+      .select("member_id", { count: "exact", head: true })
+      .eq("tournament_id", auth.tournamentId),
   ]);
 
-  const totalMatchdays: number = ((leagueSession as any)?.total_matchdays ?? 0) as number;
+  const inferredMatchdays =
+    assignmentCount && assignmentCount >= 2
+      ? (((assignmentCount % 2 === 0 ? assignmentCount : assignmentCount + 1) - 1) * 2)
+      : 0;
+
+  const totalMatchdays: number = (
+    (leagueSession as any)?.total_matchdays ??
+    (lastArchive as any)?.total_matchdays ??
+    inferredMatchdays ??
+    0
+  ) as number;
 
   // Squad with salaries
   const squad = await getMemberSquad(supabase, auth.tournamentId, auth.memberId);
