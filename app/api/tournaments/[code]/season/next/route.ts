@@ -159,21 +159,23 @@ export async function POST(request: NextRequest, { params }: Params) {
   }));
 
   // ── 2. Insert season_archives row ──────────────────────────────────────────
+  const archivePayload = {
+    tournament_id: auth.tournamentId,
+    season_number: currentSeason,
+    started_at: (leagueSession as any).started_at,
+    finished_at: (leagueSession as any).finished_at ?? new Date().toISOString(),
+    total_matchdays: (leagueSession as any).total_matchdays,
+    champion_member_id: champion?.memberId ?? null,
+    champion_display_name: champion?.displayName ?? null,
+    champion_team_id: champion ? (memberById[champion.memberId]?.teamId ?? null) : null,
+    champion_team_name: champion?.teamName ?? null,
+    standings,
+    discipline: disciplineSnapshot,
+  };
+
   const { data: archive, error: archiveErr } = await supabase
     .from("season_archives")
-    .insert({
-      tournament_id: auth.tournamentId,
-      season_number: currentSeason,
-      started_at: (leagueSession as any).started_at,
-      finished_at: (leagueSession as any).finished_at ?? new Date().toISOString(),
-      total_matchdays: (leagueSession as any).total_matchdays,
-      champion_member_id: champion?.memberId ?? null,
-      champion_display_name: champion?.displayName ?? null,
-      champion_team_id: champion ? (memberById[champion.memberId]?.teamId ?? null) : null,
-      champion_team_name: champion?.teamName ?? null,
-      standings,
-      discipline: disciplineSnapshot,
-    })
+    .upsert(archivePayload, { onConflict: "tournament_id,season_number" })
     .select("id")
     .single();
 
@@ -182,6 +184,10 @@ export async function POST(request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Error al archivar la temporada." }, { status: 500 });
   }
   const archiveId = (archive as any).id as string;
+
+  // If this endpoint is retried for the same season, refresh child snapshots.
+  await supabase.from("season_archive_fixtures").delete().eq("archive_id", archiveId);
+  await supabase.from("season_archive_assignments").delete().eq("archive_id", archiveId);
 
   // Archive fixtures (one row per match, names denormalised)
   const fixtureRows = (fixturesRaw ?? []).map((f: any) => ({
