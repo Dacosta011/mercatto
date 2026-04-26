@@ -62,8 +62,8 @@ export default function SlotReel({ prizes, active, winner, slowDown, onDone, spi
 
   // Reset on new game
   useEffect(() => {
-    animRef.current?.cancel();
-    animRef.current = null;
+    // Safe to cancel here (not inside onfinish — avoids iOS Safari snap)
+    if (animRef.current) { animRef.current.onfinish = null; animRef.current.cancel(); animRef.current = null; }
     hasSpun.current    = false;
     isFinished.current = false;
     // Reposition strip to same last winner but at a safe initY-equivalent position (no visible jump)
@@ -105,10 +105,10 @@ export default function SlotReel({ prizes, active, winner, slowDown, onDone, spi
       frameEl.current.style.animation   = "reelNear .6s ease-in-out infinite alternate";
     }
 
-    const duration = fast ? 350 : sd ? 7000 : 3200;
+    const duration = fast ? 250 : sd ? 5500 : 2800;   // mobile-friendly timing
     const easing   = fast ? "linear" : sd
-      ? "cubic-bezier(0.0, 0.97, 0.06, 1.0)"
-      : "cubic-bezier(0.0, 0.95, 0.15, 1.0)";
+      ? "cubic-bezier(0.05, 0.9, 0.15, 1.0)"    // near-win: long dramatic crawl
+      : "cubic-bezier(0.12, 0.8, 0.25, 1.0)";   // normal: smooth slot-machine decel
 
     // Start from last known y (keep continuity) or initY if first spin
     const startY = lastYRef.current ?? initY;
@@ -132,7 +132,12 @@ export default function SlotReel({ prizes, active, winner, slowDown, onDone, spi
     );
 
     animRef.current.onfinish = () => {
-      if (stripEl.current) { stripEl.current.style.transform = `translateY(${adjustedFinal}px)`; animRef.current?.cancel(); }
+      // Set inline style FIRST - takes priority over animation fill
+      if (stripEl.current) {
+        stripEl.current.style.transform = `translateY(${adjustedFinal}px)`;
+        // Do NOT cancel here - on iOS Safari, cancel() can cause a visual snap
+        // The fill:forwards keeps the element in place, cleaned up on next spinKey
+      }
       lastYRef.current = adjustedFinal;   // remember where we stopped
       lastWinIdxRef.current = winIdx;    // remember which card index won
       isFinished.current = true;
@@ -159,7 +164,7 @@ export default function SlotReel({ prizes, active, winner, slowDown, onDone, spi
   if (!order.length) return <div style={{ width: CARD_W, height: VIEW_H, borderRadius: 12, background: "#131722" }} />;
 
   return (
-    <div style={{ width: CARD_W, height: VIEW_H, position: "relative", overflow: "hidden", borderRadius: 12 }}>
+    <div style={{ width: CARD_W, height: VIEW_H, position: "relative", overflow: "hidden", borderRadius: 12, background: "#131722" }}>
       <div ref={stripEl} style={{ position: "absolute", top: 0, left: 0, right: 0, display: "flex", flexDirection: "column", gap: GAP, willChange: "transform" }}>
         {strip.map((p, i) => <ReelCard key={i} prize={p} cardH={CARD_H} cardW={CARD_W} small={small} />)}
       </div>
