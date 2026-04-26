@@ -151,6 +151,8 @@ export default function LobbyPage() {
     clauseProtection: 1,
   });
   const [resettingMarket, setResettingMarket] = useState(false);
+  const [slotPrice, setSlotPrice] = useState<number>(10_000);
+  const [savingSlotPrice, setSavingSlotPrice] = useState(false);
   const [resettingLeague, setResettingLeague] = useState(false);
   const [confirmAction, setConfirmAction] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -794,6 +796,49 @@ export default function LobbyPage() {
               setConfirmAction={setConfirmAction}
               onClick={handleEndTournament}
             />
+          </div>
+        </div>
+      )}
+
+      {/* Slots Config — admin only */}
+      {isAdmin && (
+        <div className="bg-[#131722] rounded-2xl border border-white/[0.04] p-4 lg:p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-base">🎰</span>
+            <p className="text-[#F3F4F6] text-sm font-bold">Slots — Precio por tirada</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="flex-1">
+              <input
+                type="number"
+                value={slotPrice}
+                min={1000}
+                step={1000}
+                onChange={(e) => setSlotPrice(Number(e.target.value))}
+                style={{ width: "100%", background: "#0D0F14", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, padding: "8px 12px", color: "#F3F4F6", fontSize: 14, fontWeight: 700 }}
+              />
+              <p className="text-[#9CA3AF] text-[10px] mt-1">
+                = {slotPrice >= 1_000_000 ? `€${(slotPrice/1_000_000).toFixed(1)}M` : `€${(slotPrice/1_000).toFixed(0)}K`} por tirada
+              </p>
+            </div>
+            <button
+              onClick={async () => {
+                if (!tournament) return;
+                setSavingSlotPrice(true);
+                try {
+                  const { createClient } = await import("@supabase/supabase-js");
+                  const sb = createClient(
+                    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+                    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+                  );
+                  await sb.from("tournaments").update({ slot_machine_price: slotPrice }).eq("id", tournament.id);
+                } finally { setSavingSlotPrice(false); }
+              }}
+              disabled={savingSlotPrice}
+              style={{ padding: "10px 20px", borderRadius: 12, background: "linear-gradient(135deg,#8B5CF6,#6D28D9)", color: "#fff", fontWeight: 900, fontSize: 13, border: "none", cursor: savingSlotPrice ? "not-allowed" : "pointer", opacity: savingSlotPrice ? 0.5 : 1, whiteSpace: "nowrap" }}
+            >
+              {savingSlotPrice ? "..." : "Guardar"}
+            </button>
           </div>
         </div>
       )}

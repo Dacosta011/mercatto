@@ -59,7 +59,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ code
     .eq("pool_date", today)
     .order("ovr", { ascending: false });
 
-  return NextResponse.json({ pool: pool ?? [], poolDate: today });
+  // Also return spin price for frontend display
+  const { data: tData } = await supabase.from("tournaments").select("slot_machine_price").eq("id", tournamentId).single();
+  const spinPrice = (tData as any)?.slot_machine_price ?? 10_000;
+
+  return NextResponse.json({ pool: pool ?? [], poolDate: today, spinPrice });
 }
 
 async function generatePool(supabase: any, tournamentId: string, date: string) {

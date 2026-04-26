@@ -3,7 +3,7 @@ import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import SlotReel from "./SlotReel";
 import type { SlotPrize } from "@/app/api/slot-machine/prizes/route";
 
-const SPIN_PRICE       = 1_000;
+const DEFAULT_SPIN_PRICE = 10_000;  // fallback, overridden by tournament config
 const FREE_SPINS_GRANT = 10;
 const FREE_SPINS_ID    = "__free_spins__";
 const WIN_CHANCE       = 0.40;
@@ -80,9 +80,9 @@ interface PoolSlotItem {
   status: string; claimed_by_name: string | null; claimed_at: string | null;
   players: { id: string; name: string; ovr: number; position: string; headshot_url: string | null; price: number | null; clause: number | null; is_icon: boolean } | null;
 }
-interface Props { prizes: SlotPrize[]; budget?: number; tournamentCode?: string; memberToken?: string; poolDate?: string; pool?: PoolSlotItem[]; }
+interface Props { prizes: SlotPrize[]; budget?: number; tournamentCode?: string; memberToken?: string; poolDate?: string; pool?: PoolSlotItem[]; spinPrice?: number; }
 
-export default function SlotMachine({ prizes, budget = 0, tournamentCode = "", memberToken = "", poolDate, pool: poolData = [] }: Props) {
+export default function SlotMachine({ prizes, budget = 0, tournamentCode = "", memberToken = "", poolDate, pool: poolData = [], spinPrice: propSpinPrice }: Props) {
   const storageKey = `mercatto:slots:free-spins:${tournamentCode}`;
 
   // Stable pool — memoized so SlotReel useMemo doesn't re-run on parent renders
@@ -131,6 +131,7 @@ export default function SlotMachine({ prizes, budget = 0, tournamentCode = "", m
   const isSpinning = activeReel >= 0 && activeReel < 3;
   const allDone    = activeReel === 3;
   const isFree     = freeSpins > 0;
+  const SPIN_PRICE  = propSpinPrice ?? DEFAULT_SPIN_PRICE;
   const canSpin    = pool.length >= 4 && (isFree || budget >= SPIN_PRICE);  // allow mid-spin interrupt
 
   const doSpin = useCallback(async () => {

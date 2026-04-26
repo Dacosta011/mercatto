@@ -67,6 +67,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cod
   const today = todayUTC();
 
   // Check pool availability BEFORE deducting budget
+  // Get tournament's slot_machine_price
+  const { data: tConf } = await supabase.from("tournaments").select("slot_machine_price").eq("id", tournamentId).single();
+  const spinPrice = (tConf as any)?.slot_machine_price ?? 10_000;
+
   const freeSpinsHeader = req.headers.get("X-Free-Spins");
   const hasFreeSpins = freeSpinsHeader && parseInt(freeSpinsHeader) > 0;
 
@@ -91,12 +95,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cod
       .eq("id", memberId)
       .single();
     const currentBudget = (memberData as any)?.budget ?? 0;
-    if (currentBudget < 1000) {
+    if (currentBudget < spinPrice) {
       return NextResponse.json({ error: "Presupuesto insuficiente para girar." }, { status: 402 });
     }
     await supabase
       .from("members")
-      .update({ budget: currentBudget - 1000 })
+      .update({ budget: currentBudget - spinPrice })
       .eq("id", memberId);
   }
 
@@ -162,6 +166,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cod
   // Return result to client (client animates to these players)
   return NextResponse.json({
     spinId: spin.id,
+    spinPrice,
     reels: result.slots.map((s: any) => ({
       id: s.players.id,
       name: s.players.name,
