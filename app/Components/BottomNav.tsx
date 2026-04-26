@@ -195,6 +195,16 @@ function IconMas({ active }: { active: boolean }) {
     </svg>
   );
 }
+function IconSlots({ active }: { active: boolean }) {
+  const c = active ? "#8B5CF6" : "#6B7280";
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/>
+      <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>
+      <line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/>
+    </svg>
+  );
+}
 
 // ── Tab interface ───────────────────────────────────────────────────────────────
 
@@ -369,20 +379,7 @@ function MoreDrawer({
           <line x1="15" y1="12" x2="3" y2="12" />
         </svg>
       ),
-    },
-    {
-      href: "/tragaperras",
-      label: "Tragaperras",
-      locked: false,
-      icon: (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-          <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/>
-          <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>
-          <line x1="12" y1="12" x2="12" y2="16"/>
-          <line x1="10" y1="14" x2="14" y2="14"/>
-        </svg>
-      ),
-    },
+    }
   ];
 
   if (!open) return null;
@@ -598,6 +595,16 @@ export default function BottomNav() {
         icon: IconFeed,
         badge: nav.feedBadge,
         matchPaths: ["/feed"],
+      });
+    }
+    // Slots always visible when user has a team
+    if (nav.hasTeam && !nav.guest) {
+      tabs.push({
+        id: "slots",
+        href: "/tragaperras",
+        label: "Slots",
+        icon: IconSlots,
+        matchPaths: ["/tragaperras"],
       });
     }
   }

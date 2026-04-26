@@ -19,7 +19,7 @@ export interface PoolSlot {
   } | null;
 }
 
-export default function TragaperrasPage() {
+export default function SlotsPage() {
   const [pool, setPool] = useState<PoolSlot[]>([]);
   const [poolDate, setPoolDate] = useState("");
   const [loading, setLoading] = useState(true);
@@ -72,7 +72,7 @@ export default function TragaperrasPage() {
         fetchPool(tournamentCode, token);
       })
       .subscribe((status) => {
-        if (status === "SUBSCRIBED") console.log("[Tragaperras] Realtime connected");
+        if (status === "SUBSCRIBED") console.log("[Slots] Realtime connected");
       });
 
     return () => { getBrowserClient().removeChannel(getBrowserClient().channel(`slot-pool-${tournamentCode}`)); };
@@ -94,7 +94,7 @@ export default function TragaperrasPage() {
     <main className="flex-1 overflow-y-auto p-4 md:p-6" style={{ background: "#0D0F14", minHeight: "100vh" }}>
       <div className="max-w-5xl mx-auto">
         <div className="mb-6 text-center">
-          <h1 className="text-3xl font-black text-[#F3F4F6] tracking-tight mb-1">Tragaperras 🎰</h1>
+          <h1 className="text-3xl font-black text-[#F3F4F6] tracking-tight mb-1">Slots 🎰</h1>
           <p className="text-[#9CA3AF] text-sm">Consigue 3 iguales para ganar • Pool diaria decidida por el servidor</p>
         </div>
 

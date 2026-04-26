@@ -411,7 +411,7 @@ export default function Sidebar() {
 
   const toolItems: NavItem[] = [
     { href: "/magic-link", label: "Mi Enlace", icon: icons.enlace },
-    { href: "/tragaperras", label: "Tragaperras", icon: icons.tragaperras },
+    { href: "/tragaperras", label: "Slots", icon: icons.tragaperras },
   ];
 
   const quickItems: NavItem[] = [
