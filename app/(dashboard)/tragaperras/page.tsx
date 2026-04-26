@@ -1,70 +1,101 @@
 "use client";
-import { useEffect, useState } from "react";
-import { getLastTournamentCode, getMemberId } from "@/lib/tokenStorage";
+import { useEffect, useState, useCallback } from "react";
+import { getLastTournamentCode, getMemberToken, getMemberId, getDisplayName } from "@/lib/tokenStorage";
 import { getBrowserClient } from "@/lib/supabase-browser";
 import SlotMachine from "@/app/Components/SlotMachine";
-import type { SlotPrize } from "@/app/api/slot-machine/prizes/route";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 
-interface PoolRange { label: string; count: number; players: SlotPrize[]; }
+export interface PoolSlot {
+  id: string;
+  player_id: string;
+  ovr: number;
+  is_premium: boolean;
+  status: "available" | "claimed" | "empty";
+  claimed_by_name: string | null;
+  claimed_at: string | null;
+  players: {
+    id: string; name: string; ovr: number; position: string;
+    headshot_url: string | null; price: number | null; clause: number | null; is_icon: boolean;
+  } | null;
+}
 
 export default function TragaperrasPage() {
-  const [prizes, setPrizes] = useState<SlotPrize[]>([]);
+  const [pool, setPool] = useState<PoolSlot[]>([]);
   const [poolDate, setPoolDate] = useState("");
-  const [poolByRange, setPoolByRange] = useState<PoolRange[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [budget, setBudget] = useState(0);
   const [code, setCode] = useState("");
+  const [memberToken, setMemberToken] = useState("");
+  const [freeSpins, setFreeSpins] = useState(0);
+
+  const fetchPool = useCallback(async (tournamentCode: string, token: string) => {
+    const res = await fetch(`/api/tournaments/${tournamentCode}/slot-machine/pool`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = await res.json();
+    if (data.pool) { setPool(data.pool); setPoolDate(data.poolDate ?? ""); }
+    setLoading(false);
+  }, []);
 
   useEffect(() => {
     const tournamentCode = getLastTournamentCode();
     if (!tournamentCode) { setError("No hay torneo activo."); setLoading(false); return; }
     setCode(tournamentCode);
 
-    // Check localStorage cache for today's pool
-    const today = new Date().toISOString().slice(0, 10);
-    const cacheKey = `mercatto:pool:${tournamentCode}:${today}`;
-    const cached = localStorage.getItem(cacheKey);
+    const token = getMemberToken(tournamentCode) ?? "";
+    setMemberToken(token);
 
-    if (cached) {
-      try {
-        const data = JSON.parse(cached);
-        setPrizes(data.prizes); setPoolDate(data.poolDate); setPoolByRange(data.poolByRange ?? []);
-        setLoading(false);
-      } catch { localStorage.removeItem(cacheKey); }
-    }
+    fetchPool(tournamentCode, token);
 
-    if (!cached) {
-      fetch(`/api/slot-machine/prizes?tournamentCode=${tournamentCode}`)
-        .then(r => r.json())
-        .then(data => {
-          if (data.prizes) {
-            setPrizes(data.prizes);
-            setPoolDate(data.poolDate ?? today);
-            setPoolByRange(data.poolByRange ?? []);
-            localStorage.setItem(cacheKey, JSON.stringify(data));
-          } else {
-            setError(data.error ?? "Error cargando premios");
-          }
-        })
-        .catch(() => setError("Error de red"))
-        .finally(() => setLoading(false));
-    }
-
-    // Fetch budget
+    // Budget
     const memberId = getMemberId(tournamentCode);
     if (memberId) {
       getBrowserClient().from("members").select("budget").eq("id", memberId).single()
         .then(({ data }) => { if (data?.budget) setBudget(data.budget as number); });
     }
-  }, []);
+
+    // Free spins from localStorage
+    const stored = localStorage.getItem(`mercatto:slots:free-spins:${tournamentCode}`);
+    if (stored) setFreeSpins(parseInt(stored, 10));
+
+    // Realtime pool updates
+    let channel: RealtimeChannel;
+    getBrowserClient()
+      .channel(`slot-pool-${tournamentCode}`)
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "slot_machine_pool",
+        filter: `pool_date=eq.${new Date().toISOString().slice(0, 10)}`,
+      }, () => {
+        fetchPool(tournamentCode, token);
+      })
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") console.log("[Tragaperras] Realtime connected");
+      });
+
+    return () => { getBrowserClient().removeChannel(getBrowserClient().channel(`slot-pool-${tournamentCode}`)); };
+  }, [fetchPool]);
+
+  const availablePrizes = pool
+    .filter(s => s.status === "available" && s.players)
+    .map(s => ({
+      id: s.players!.id,
+      name: s.players!.name,
+      ovr: s.players!.ovr,
+      position: s.players!.position,
+      headshotUrl: s.players!.headshot_url,
+      salary: s.players!.price ?? s.players!.clause ?? 0,
+      type: (s.players!.is_icon ? "icon" : "player") as "icon" | "player",
+    }));
 
   return (
     <main className="flex-1 overflow-y-auto p-4 md:p-6" style={{ background: "#0D0F14", minHeight: "100vh" }}>
       <div className="max-w-5xl mx-auto">
         <div className="mb-6 text-center">
           <h1 className="text-3xl font-black text-[#F3F4F6] tracking-tight mb-1">Tragaperras 🎰</h1>
-          <p className="text-[#9CA3AF] text-sm">Consigue 3 iguales para ganar • Pool de 100 jugadores diaria</p>
+          <p className="text-[#9CA3AF] text-sm">Consigue 3 iguales para ganar • Pool diaria decidida por el servidor</p>
         </div>
 
         {loading && (
@@ -75,7 +106,14 @@ export default function TragaperrasPage() {
         )}
         {error && <div className="text-center py-24"><p className="text-[#EF4444] font-semibold">{error}</p></div>}
         {!loading && !error && (
-          <SlotMachine prizes={prizes} budget={budget} tournamentCode={code} poolDate={poolDate} poolByRange={poolByRange} />
+          <SlotMachine
+            prizes={availablePrizes}
+            budget={budget}
+            tournamentCode={code}
+            memberToken={memberToken}
+            poolDate={poolDate}
+            pool={pool}
+          />
         )}
       </div>
     </main>

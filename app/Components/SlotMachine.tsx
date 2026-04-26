@@ -75,13 +75,28 @@ function fmt(v: number) {
 const AUTO_OPT = [5, 10, 25, 50];
 
 interface PoolRange { label: string; count: number; players: SlotPrize[]; }
-interface Props { prizes: SlotPrize[]; budget?: number; tournamentCode?: string; poolDate?: string; poolByRange?: PoolRange[]; }
+interface PoolSlotItem {
+  id: string; player_id: string; ovr: number; is_premium: boolean;
+  status: string; claimed_by_name: string | null; claimed_at: string | null;
+  players: { id: string; name: string; ovr: number; position: string; headshot_url: string | null; salary: number; is_icon: boolean } | null;
+}
+interface Props { prizes: SlotPrize[]; budget?: number; tournamentCode?: string; memberToken?: string; poolDate?: string; pool?: PoolSlotItem[]; }
 
-export default function SlotMachine({ prizes, budget = 0, tournamentCode = "", poolDate, poolByRange = [] }: Props) {
+export default function SlotMachine({ prizes, budget = 0, tournamentCode = "", memberToken = "", poolDate, pool: poolData = [] }: Props) {
   const storageKey = `mercatto:slots:free-spins:${tournamentCode}`;
 
   // Stable pool — memoized so SlotReel useMemo doesn't re-run on parent renders
-  const pool = useMemo(() => [FREE_SPINS_PRIZE, ...prizes], [prizes]);
+  const pool = useMemo(() => [FREE_SPINS_PRIZE, ...prizes], [prizes]);  // internal spin pool
+
+  // Detect mobile for smaller reels
+  const [isMobile, setIsMobile] = useState(false);
+  const [showPool, setShowPool] = useState(false);
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 640);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
 
   const [freeSpins, setFreeSpins] = useState(() => {
     if (typeof window === "undefined") return 0;
@@ -94,9 +109,12 @@ export default function SlotMachine({ prizes, budget = 0, tournamentCode = "", p
   const [activeReel, setActiveReel] = useState(-1);
   const [spinKey,    setSpinKey]    = useState(0);
   const [reel2Fast,  setReel2Fast]  = useState(false);
+  const [reel2Slow,  setReel2Slow]  = useState(false);
+  const [waitingDecision, setWaitingDecision] = useState(false);  // pauses auto-spin during win modal
   const [outcome,    setOutcome]    = useState<Outcome | null>(null);
   const [leverPulled,setLeverPulled]= useState(false);
   const [winPrize,   setWinPrize]   = useState<SlotPrize | null>(null);
+  const [spinId,     setSpinId]     = useState<string | null>(null);
   const [decision,   setDecision]   = useState<"accepted" | "returned" | null>(null);
   const [celebrating,setCelebrating]= useState(false);
   const [autoCount,  setAutoCount]  = useState(10);
@@ -113,29 +131,43 @@ export default function SlotMachine({ prizes, budget = 0, tournamentCode = "", p
   const isSpinning = activeReel >= 0 && activeReel < 3;
   const allDone    = activeReel === 3;
   const isFree     = freeSpins > 0;
-  const canSpin    = pool.length >= 4 && !isSpinning && (isFree || budget >= SPIN_PRICE);
+  const canSpin    = pool.length >= 4 && (isFree || budget >= SPIN_PRICE);  // allow mid-spin interrupt
 
-  const doSpin = useCallback(() => {
-    if (!canSpin) return;
-    const o = decide(pool);
-    setOutcome(o);
-    setWinPrize(null);
-    setDecision(null);
-    setCelebrating(false);
-    setSpinKey(k => k + 1);
-    setReel2Fast(false);   // new game — resets all reels
-    setActiveReel(0);
+  const doSpin = useCallback(async () => {
+    if (!prizes.length) return;
+    if (!isFree && budget < SPIN_PRICE) return;
+    if (isSpinning) setActiveReel(-1);
     setLeverPulled(true);
     setTimeout(() => setLeverPulled(false), 400);
-    if (isFree) setFreeSpins(p => Math.max(0, p - 1));
-  }, [canSpin, pool, isFree]);
+    try {
+      const res = await fetch(`/api/tournaments/${tournamentCode}/slot-machine/spin`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${memberToken}`, "Content-Type": "application/json", "X-Free-Spins": String(freeSpins) },
+      });
+      const data = await res.json();
+      if (!res.ok) { console.error("Spin error:", data.error); return; }
+      const serverReels: [SlotPrize, SlotPrize, SlotPrize] = data.reels.map((r: any) => ({
+        id: r.id, name: r.name, ovr: r.ovr, position: r.position,
+        headshotUrl: r.headshotUrl, salary: r.salary, type: r.type as "player" | "icon" | "free_spins",
+      })) as [SlotPrize, SlotPrize, SlotPrize];
+      const o: Outcome = { winners: serverReels, isWin: data.isWin, isNearWin: data.isNearWin };
+      setSpinId(data.spinId);
+      setOutcome(o); setWinPrize(null); setDecision(null); setCelebrating(false);
+      setReel2Fast(false); setReel2Slow(false); setWaitingDecision(false);
+      setSpinKey(k => k + 1);
+      setActiveReel(0);
+      if (isFree) setFreeSpins(p => Math.max(0, p - 1));
+    } catch (e) { console.error("Spin error:", e); }
+  }, [prizes.length, isFree, budget, isSpinning, tournamentCode, memberToken]);
 
   // ── Sequential reel completion ────────────────────────────────────────────
   const handleReelDone = useCallback((reelIdx: number) => {
     if (reelIdx < 2) {
       // reel 1 done + no match -> reel 2 fast
       if (reelIdx === 1 && outcome) {
-        setReel2Fast(outcome.winners[0].id !== outcome.winners[1].id);
+        const mismatch = outcome.winners[0].id !== outcome.winners[1].id;
+        setReel2Fast(mismatch);
+        setReel2Slow(!mismatch);  // slow down reel 2 if first two match (win or near-win)
       }
       setActiveReel(reelIdx + 1);   // start next reel
     } else {
@@ -149,6 +181,8 @@ export default function SlotMachine({ prizes, budget = 0, tournamentCode = "", p
         if (prize.type === "free_spins") {
           setFreeSpins(p => p + FREE_SPINS_GRANT);
           setHistory(h => [{ prize, free: isFree }, ...h].slice(0, 20));
+          // Pause auto-spin: let user accept or reject before continuing
+          if (isAutoSpinning) setWaitingDecision(true);
           setTimeout(() => {
             autoRef.current = true; isFreeAutoRef.current = true;
             setIsAutoSpinning(true); setAutoRemaining(FREE_SPINS_GRANT - 1);
@@ -162,7 +196,7 @@ export default function SlotMachine({ prizes, budget = 0, tournamentCode = "", p
 
   // Auto-spin
   useEffect(() => {
-    if (!isAutoSpinning || isSpinning || autoRemaining <= 0) return;
+    if (!isAutoSpinning || isSpinning || autoRemaining <= 0 || waitingDecision) return;
     const t = setTimeout(() => {
       if (!autoRef.current) return;
       setAutoRemaining(p => {
@@ -187,16 +221,16 @@ export default function SlotMachine({ prizes, budget = 0, tournamentCode = "", p
 
   const isWin         = outcome?.isWin && allDone;
   const isFreeAuto    = isAutoSpinning && isFreeAutoRef.current;
-  const showWinPanel  = isWin && winPrize && !decision && !isAutoSpinning && winPrize.type !== "free_spins";
+  const showWinPanel  = isWin && winPrize && !decision && winPrize.type !== "free_spins";
 
   return (
-    <div className="flex gap-6 w-full items-start justify-center">
+    <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 w-full items-start justify-center">
 
       {/* ── Main machine column ── */}
-      <div className="flex flex-col items-center gap-4 flex-shrink-0" style={{ maxWidth: 580 }}>
+      <div className="flex flex-col items-center gap-3 w-full flex-shrink-0" style={{ maxWidth: 600 }}>
 
         {/* Stats */}
-        <div className="w-full grid grid-cols-3 gap-2">
+        <div className="w-full grid grid-cols-2 sm:grid-cols-3 gap-2">
           {[
             { label: "PRESUPUESTO",            value: fmt(budget),                          color: "#F3F4F6", bg: "#131722", border: "#ffffff08" },
             { label: isFree ? "🎁 GRATIS" : "💰 PRECIO / TIRADA", value: isFree ? `${freeSpins} restantes` : fmt(SPIN_PRICE), color: isFree ? "#22C55E" : "#F59E0B", bg: isFree ? "#22C55E10" : "#F59E0B10", border: isFree ? "#22C55E30" : "#F59E0B30" },
@@ -245,7 +279,8 @@ export default function SlotMachine({ prizes, budget = 0, tournamentCode = "", p
                     prizes={pool}
                     active={activeReel === i}
                     winner={outcome ? outcome.winners[i] : null}
-                    slowDown={i === 2 && !!outcome?.isNearWin}
+                    slowDown={i === 2 && reel2Slow}
+                    small={isMobile}
                     fast={i === 2 && reel2Fast}
                     onDone={() => handleReelDone(i)}
                     spinKey={spinKey}
@@ -270,7 +305,7 @@ export default function SlotMachine({ prizes, budget = 0, tournamentCode = "", p
 
               {/* Message */}
               <div className="h-6 flex items-center justify-center mt-1.5">
-                {activeReel === 2 && outcome?.isNearWin && <p className="text-[#F59E0B] font-black text-xs tracking-widest animate-pulse">⚡ ¡CASI...!</p>}
+                {activeReel === 2 && (outcome?.isNearWin || outcome?.isWin) && <p className="text-[#F59E0B] font-black text-xs tracking-widest animate-pulse">⚡ ¡CASI...!</p>}
                 {allDone && isWin && winPrize?.type === "free_spins" && <p className="text-[#22C55E] font-black text-xs tracking-widest animate-bounce">🎁 ¡10 TIROS GRATIS!</p>}
                 {allDone && isWin && winPrize?.type !== "free_spins" && !decision && <p className="text-[#22C55E] font-black text-xs tracking-widest animate-bounce">🎉 ¡3 EN RAYA!</p>}
                 {allDone && decision === "accepted" && <p className="text-[#22C55E] text-[10px] tracking-widest">✅ Premio aceptado</p>}
@@ -289,12 +324,12 @@ export default function SlotMachine({ prizes, budget = 0, tournamentCode = "", p
           </div>
 
           {/* Lever */}
-          <Lever onPull={!isAutoSpinning ? doSpin : () => {}} disabled={!canSpin || isAutoSpinning} pulled={leverPulled} />
+          <Lever onPull={!isAutoSpinning ? doSpin : () => {}} disabled={isAutoSpinning} pulled={leverPulled} />
         </div>
 
         {/* Mobile button */}
         <div className="sm:hidden w-full">
-          <button onClick={!isAutoSpinning ? doSpin : () => {}} disabled={!canSpin || isAutoSpinning}
+          <button onClick={!isAutoSpinning ? doSpin : () => {}} disabled={isAutoSpinning}
             className="w-full py-4 rounded-2xl font-black text-base text-white transition-all active:scale-95 disabled:opacity-40"
             style={{ background: isSpinning ? "linear-gradient(135deg,#6D28D9,#4C1D95)" : "linear-gradient(135deg,#8B5CF6,#6D28D9)", boxShadow: isSpinning ? "none" : "0 0 24px #8B5CF640" }}>
             {isSpinning ? "⏳ Girando..." : isFree ? `🎁 Girar (GRATIS)` : `🎰 Girar (${fmt(SPIN_PRICE)})`}
@@ -322,8 +357,29 @@ export default function SlotMachine({ prizes, budget = 0, tournamentCode = "", p
           </div>
         )}
 
-        {/* Win panel */}
-        {showWinPanel && <WinPanel prize={winPrize!} onAccept={() => setDecision("accepted")} onReturn={() => { setDecision("returned"); setWinPrize(null); }} />}
+        {/* Win modal overlay */}
+        {showWinPanel && <WinModal prize={winPrize!} onAccept={async () => {
+              setDecision("accepted");
+              setWaitingDecision(false);
+              if (spinId) {
+                await fetch(`/api/tournaments/${tournamentCode}/slot-machine/accept`, {
+                  method: "POST",
+                  headers: { Authorization: `Bearer ${memberToken}`, "Content-Type": "application/json" },
+                  body: JSON.stringify({ spinId }),
+                });
+              }
+            }} onReturn={async () => {
+              setDecision("returned");
+              setWinPrize(null);
+              setWaitingDecision(false);
+              if (spinId) {
+                await fetch(`/api/tournaments/${tournamentCode}/slot-machine/reject`, {
+                  method: "POST",
+                  headers: { Authorization: `Bearer ${memberToken}`, "Content-Type": "application/json" },
+                  body: JSON.stringify({ spinId }),
+                });
+              }
+            }} />}
 
         {decision === "accepted" && winPrize && (
           <div className="w-full rounded-2xl p-4 text-center" style={{ border: "1px solid #22C55E40", background: "linear-gradient(135deg,#05280f,#131722)" }}>
@@ -360,8 +416,18 @@ export default function SlotMachine({ prizes, budget = 0, tournamentCode = "", p
         )}
       </div>
 
-      {/* ── Pool panel ── */}
-      <div className="hidden lg:flex flex-col gap-3 flex-shrink-0" style={{ width: 240 }}>
+      {/* ── Pool panel — collapsible on mobile, sidebar on desktop ── */}
+      <div className="w-full lg:w-auto lg:flex-shrink-0" style={{ maxWidth: '100%' }}>
+        {/* Mobile toggle */}
+        <button
+          onClick={() => setShowPool(p => !p)}
+          className="lg:hidden w-full flex items-center justify-between px-4 py-3 rounded-xl mb-2"
+          style={{ background: "#131722", border: "1px solid #ffffff08" }}
+        >
+          <span className="text-[#F3F4F6] text-sm font-bold">📋 Pool del día</span>
+          <span className="text-[#9CA3AF] text-xs">{showPool ? '▲ cerrar' : '▼ ver jugadores'}</span>
+        </button>
+        <div className={`flex-col gap-3 ${showPool ? 'flex' : 'hidden'} lg:flex`} style={{ width: 240, maxWidth: '100%' }}>
         <div className="flex items-center justify-between">
           <div>
             <p className="text-[#F3F4F6] text-sm font-black">Pool del día</p>
@@ -369,31 +435,35 @@ export default function SlotMachine({ prizes, budget = 0, tournamentCode = "", p
           </div>
           <div className="w-2 h-2 rounded-full bg-[#22C55E]" style={{ boxShadow: "0 0 6px #22C55E" }} />
         </div>
-        {[...poolByRange].reverse().map(range => !range.players.length ? null : (
-          <div key={range.label} className="rounded-xl overflow-hidden" style={{ border: "1px solid #ffffff08", background: "#131722" }}>
-            <div className="flex items-center justify-between px-3 py-2 border-b border-white/5">
-              <span className="text-[#9CA3AF] text-[10px] font-bold tracking-widest">{range.label} OVR</span>
-              <span className="text-[#9CA3AF]/50 text-[9px]">{range.players.length} jugadores</span>
+        {poolData.length === 0 && !loading && <div className="text-[#9CA3AF] text-xs text-center py-4">Generando pool...</div>}
+        {poolData.map(slot => {
+          if (!slot.players) return null;
+          const p = slot.players;
+          const isClaimed = slot.status === "claimed";
+          const color = p.is_icon ? "#F59E0B" : ovrColor(p.ovr);
+          const initials = p.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2);
+          return (
+            <div key={slot.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg transition-all"
+              style={{ background: isClaimed ? "#0a0f0a" : "#0D0F14", opacity: isClaimed ? 0.65 : 1 }}>
+              {p.headshot_url
+                ? <img src={p.headshot_url} alt="" className="w-6 h-6 rounded-full object-contain flex-shrink-0" style={{ filter: isClaimed ? "grayscale(1)" : "none" }} />
+                : <div className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-black flex-shrink-0" style={{ background: `${color}20`, color }}>{initials}</div>
+              }
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] truncate" style={{ color: isClaimed ? "#4B5563" : "#F3F4F6", textDecoration: isClaimed ? "line-through" : "none" }}>{p.name}</p>
+                {isClaimed && slot.claimed_by_name && (
+                  <p className="text-[8px] truncate" style={{ color: "#22C55E", opacity: 0.6 }}>✓ {slot.claimed_by_name}</p>
+                )}
+              </div>
+              <div className="flex items-center gap-1 flex-shrink-0">
+                {slot.is_premium && <span className="text-[8px]" style={{ color: "#F59E0B" }}>★</span>}
+                <span className="text-[9px] font-black" style={{ color: isClaimed ? "#374151" : color }}>{p.ovr}</span>
+              </div>
             </div>
-            <div className="p-2 flex flex-col gap-1 max-h-48 overflow-y-auto">
-              {range.players.map(p => {
-                const color = p.type === "icon" ? "#F59E0B" : ovrColor(p.ovr);
-                return (
-                  <div key={p.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg" style={{ background: "#0D0F14" }}>
-                    {p.headshotUrl
-                      ? <img src={p.headshotUrl} alt="" className="w-6 h-6 rounded-full object-contain flex-shrink-0" />
-                      : <div className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-black flex-shrink-0" style={{ background: `${color}20`, color }}>{p.name.split(" ").map(w => w[0]).join("").slice(0, 2)}</div>
-                    }
-                    <p className="text-[#F3F4F6] text-[10px] truncate flex-1">{p.name}</p>
-                    <span className="text-[9px] font-black flex-shrink-0" style={{ color }}>{p.ovr}</span>
-                    {p.type === "icon" && <span className="text-[8px]" style={{ color: "#F59E0B" }}>✨</span>}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        ))}
+          );
+        })}
         <p className="text-[#9CA3AF]/40 text-[9px] text-center">Jugadores elegibles como premios hoy</p>
+        </div>
       </div>
     </div>
   );
@@ -420,11 +490,12 @@ function Lever({ onPull, disabled, pulled }: { onPull: () => void; disabled: boo
   );
 }
 
-function WinPanel({ prize, onAccept, onReturn }: { prize: SlotPrize; onAccept: () => void; onReturn: () => void }) {
+function WinModal({ prize, onAccept, onReturn }: { prize: SlotPrize; onAccept: () => void; onReturn: () => void }) {
   const initials = prize.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
   const color    = prize.type === "icon" ? "#F59E0B" : ovrColor(prize.ovr);
   return (
-    <div className="w-full rounded-2xl overflow-hidden" style={{ border: `1px solid ${color}40`, background: `linear-gradient(135deg,${color}08,#131722)` }}>
+    <div style={{ position: "fixed", inset: 0, zIndex: 100, background: "rgba(0,0,0,0.8)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+    <div className="w-full max-w-sm rounded-2xl overflow-hidden" style={{ border: `1px solid ${color}40`, background: `linear-gradient(135deg,${color}08,#0D0F14)`, boxShadow: `0 0 80px ${color}30` }}>
       <div className="flex items-center gap-2 px-4 py-3 border-b border-white/6"><span>🏆</span><h3 className="font-black text-sm" style={{ color }}>¡PREMIO GANADO!</h3></div>
       <div className="p-4 flex items-center gap-4">
         {prize.headshotUrl
@@ -437,6 +508,7 @@ function WinPanel({ prize, onAccept, onReturn }: { prize: SlotPrize; onAccept: (
           <div className="flex items-center gap-2 mt-1.5">
             <span className="px-2 py-0.5 rounded-lg text-sm font-black" style={{ background: `${color}22`, color }}>{prize.ovr} OVR</span>
             <span className="text-[#9CA3AF] text-sm">{prize.position}</span>
+            {((prize as any).salary ?? 0) > 0 && <span className="ml-2 text-[#22C55E] text-sm font-black">💰 {((prize as any).salary ?? 0) >= 1e6 ? `€${(((prize as any).salary)/1e6).toFixed(1)}M/sem` : `€${(((prize as any).salary)/1000).toFixed(0)}K/sem`}</span>}
           </div>
         </div>
       </div>
@@ -444,6 +516,7 @@ function WinPanel({ prize, onAccept, onReturn }: { prize: SlotPrize; onAccept: (
         <button onClick={onAccept} className="flex-1 py-3 rounded-xl font-black text-sm text-white active:scale-95" style={{ background: "linear-gradient(135deg,#22C55E,#16A34A)", boxShadow: "0 0 16px #22C55E40" }}>✅ Aceptar</button>
         <button onClick={onReturn} className="flex-1 py-3 rounded-xl font-black text-sm active:scale-95" style={{ background: "#0D0F14", border: "1px solid #EF444450", color: "#EF4444" }}>↩ Devolver</button>
       </div>
+    </div>
     </div>
   );
 }
