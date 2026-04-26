@@ -81,17 +81,18 @@ export default function SlotReel({ prizes, active, winner, slowDown, onDone, spi
     }
   }, [spinKey]);
 
-  // Set initial position only on very first mount (no previous spin)
+  // Set/update initial position when prizes load or change
   useEffect(() => {
-    if (lastYRef.current === null && stripEl.current) {
+    if (lastYRef.current === null && stripEl.current && order.length > 0) {
       stripEl.current.style.transform = `translateY(${initY}px)`;
     }
-  }, []);   // eslint-disable-line
+  }, [initY, order.length]);   // reset when prizes load
 
   // Spin
   useEffect(() => {
     if (!active || !winner || !stripEl.current || order.length === 0) return;
     if (hasSpun.current) return;
+    if (spinKey === 0) return;   // never spin unless lever was pulled
     hasSpun.current = true;
 
     const winIdx = Math.max(0, order.findIndex(p => p.id === winner.id));
