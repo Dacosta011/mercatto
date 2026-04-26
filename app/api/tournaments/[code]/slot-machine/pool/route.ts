@@ -59,11 +59,25 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ code
     .eq("pool_date", today)
     .order("ovr", { ascending: false });
 
-  // Also return spin price for frontend display
-  const { data: tData } = await supabase.from("tournaments").select("slot_machine_price").eq("id", tournamentId).single();
-  const spinPrice = (tData as any)?.slot_machine_price ?? 10_000;
+  // Filter pool at display time — exclude players from CURRENTLY assigned teams
+  // (pool may have been generated before some teams were assigned)
+  const { data: currentAssignments } = await supabase.from("assignments").select("team_id").eq("tournament_id", tournamentId);
+  const currentTeamIds = (currentAssignments ?? []).map((a: any) => a.team_id as string);
+  let excludedPlayerIds = new Set<string>();
+  if (currentTeamIds.length > 0) {
+    const { data: currentTeamPlayers } = await supabase.from("team_players").select("player_id").in("team_id", currentTeamIds);
+    excludedPlayerIds = new Set((currentTeamPlayers ?? []).map((tp: any) => tp.player_id as string));
+  }
+  const filteredPool = (pool ?? []).filter((slot: any) =>
+    slot.status === "claimed" || !excludedPlayerIds.has(slot.player_id)
+  );
 
-  return NextResponse.json({ pool: pool ?? [], poolDate: today, spinPrice });
+  // Also return spin price for frontend display
+  const { data: tData } = await supabase.from("tournaments").select("slot_machine_price, slots_enabled").eq("id", tournamentId).single();
+  const spinPrice = (tData as any)?.slot_machine_price ?? 10_000;
+  const slotsEnabled = (tData as any)?.slots_enabled !== false;  // default true
+
+  return NextResponse.json({ pool: filteredPool, poolDate: today, spinPrice, slotsEnabled });
 }
 
 async function generatePool(supabase: any, tournamentId: string, date: string) {

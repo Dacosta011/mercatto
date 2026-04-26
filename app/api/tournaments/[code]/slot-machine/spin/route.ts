@@ -67,8 +67,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cod
   const today = todayUTC();
 
   // Check pool availability BEFORE deducting budget
-  // Get tournament's slot_machine_price
-  const { data: tConf } = await supabase.from("tournaments").select("slot_machine_price").eq("id", tournamentId).single();
+  // Get tournament's slot config
+  const { data: tConf } = await supabase.from("tournaments").select("slot_machine_price, slots_enabled").eq("id", tournamentId).single();
+
+  // Check if slots are enabled for this tournament
+  if ((tConf as any)?.slots_enabled === false) {
+    return NextResponse.json({ error: "Los slots están desactivados para este torneo." }, { status: 403 });
+  }
   const spinPrice = (tConf as any)?.slot_machine_price ?? 10_000;
 
   const freeSpinsHeader = req.headers.get("X-Free-Spins");

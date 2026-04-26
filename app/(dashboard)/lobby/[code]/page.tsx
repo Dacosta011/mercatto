@@ -153,6 +153,8 @@ export default function LobbyPage() {
   const [resettingMarket, setResettingMarket] = useState(false);
   const [slotPrice, setSlotPrice] = useState<number>(10_000);
   const [savingSlotPrice, setSavingSlotPrice] = useState(false);
+  const [slotsEnabled, setSlotsEnabled] = useState(true);
+  const [togglingSlots, setTogglingSlots] = useState(false);
   const [resettingLeague, setResettingLeague] = useState(false);
   const [confirmAction, setConfirmAction] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -839,6 +841,29 @@ export default function LobbyPage() {
             >
               {savingSlotPrice ? "..." : "Guardar"}
             </button>
+              <div className="mt-3 flex items-center justify-between">
+                <p className="text-[#9CA3AF] text-xs">Estado de los Slots</p>
+                <button
+                  onClick={async () => {
+                    if (!tournament) return;
+                    setTogglingSlots(true);
+                    try {
+                      const sb = (await import("@/lib/supabase-browser")).getBrowserClient();
+                      const newVal = !slotsEnabled;
+                      await sb.from("tournaments").update({ slots_enabled: newVal }).eq("id", tournament.id);
+                      setSlotsEnabled(newVal);
+                    } finally { setTogglingSlots(false); }
+                  }}
+                  disabled={togglingSlots}
+                  style={{
+                    padding: "6px 16px", borderRadius: 10, border: "none", cursor: "pointer",
+                    background: slotsEnabled ? "linear-gradient(135deg,#22C55E,#16A34A)" : "linear-gradient(135deg,#374151,#1F2937)",
+                    color: "#fff", fontWeight: 900, fontSize: 12, opacity: togglingSlots ? 0.5 : 1
+                  }}
+                >
+                  {togglingSlots ? "..." : slotsEnabled ? "🟢 Encendidos" : "🔴 Apagados"}
+                </button>
+              </div>
           </div>
         </div>
       )}
