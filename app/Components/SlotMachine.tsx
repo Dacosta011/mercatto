@@ -78,7 +78,7 @@ interface PoolRange { label: string; count: number; players: SlotPrize[]; }
 interface PoolSlotItem {
   id: string; player_id: string; ovr: number; is_premium: boolean;
   status: string; claimed_by_name: string | null; claimed_at: string | null;
-  players: { id: string; name: string; ovr: number; position: string; headshot_url: string | null; salary: number; is_icon: boolean } | null;
+  players: { id: string; name: string; ovr: number; position: string; headshot_url: string | null; price: number | null; clause: number | null; is_icon: boolean } | null;
 }
 interface Props { prizes: SlotPrize[]; budget?: number; tournamentCode?: string; memberToken?: string; poolDate?: string; pool?: PoolSlotItem[]; }
 
@@ -435,7 +435,7 @@ export default function SlotMachine({ prizes, budget = 0, tournamentCode = "", m
           </div>
           <div className="w-2 h-2 rounded-full bg-[#22C55E]" style={{ boxShadow: "0 0 6px #22C55E" }} />
         </div>
-        {poolData.length === 0 && !loading && <div className="text-[#9CA3AF] text-xs text-center py-4">Generando pool...</div>}
+        {poolData.length === 0 && <div className="text-[#9CA3AF] text-xs text-center py-4">Generando pool...</div>}
         {poolData.map(slot => {
           if (!slot.players) return null;
           const p = slot.players;
