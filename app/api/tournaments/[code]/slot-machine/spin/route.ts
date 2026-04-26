@@ -5,19 +5,52 @@ import { salaryPerMatch } from "@/lib/expenses";
 const WIN_CHANCE = 0.40;
 const NEAR_WIN_CHANCE = 0.30;
 
+// Fixed range weights — probability per OVR range stays CONSTANT
+// regardless of how many players are available in each range.
+// This means claiming a 84-86 player doesn't increase other 84-86 players' prob.
+const RANGE_WEIGHTS = [
+  { min: 0,  max: 74,  weight: 55, isIcon: false },  // 70-74 (icons excluded)
+  { min: 75, max: 79,  weight: 25, isIcon: false },
+  { min: 80, max: 83,  weight: 10, isIcon: false },
+  { min: 84, max: 86,  weight: 5,  isIcon: false },
+  { min: 87, max: 89,  weight: 3,  isIcon: false },
+  { min: 90, max: 999, weight: 1.5, isIcon: false },
+  { min: 0,  max: 999, weight: 0.5, isIcon: true  },
+] as const;
+
+function pickByRange(available: any[]): any {
+  // Build range → available players mapping
+  const rangeGroups = RANGE_WEIGHTS.map(r => ({
+    ...r,
+    players: available.filter(p =>
+      r.isIcon
+        ? (p.players?.is_icon ?? false)
+        : !(p.players?.is_icon ?? false) && p.ovr >= r.min && p.ovr <= r.max
+    ),
+  }));
+
+  // Weight only ranges that have available players
+  const activeRanges = rangeGroups.filter(r => r.players.length > 0);
+  if (activeRanges.length === 0) return available[Math.floor(Math.random() * available.length)];
+
+  const totalWeight = activeRanges.reduce((s, r) => s + r.weight, 0);
+  let rand = Math.random() * totalWeight;
+  for (const r of activeRanges) {
+    rand -= r.weight;
+    if (rand <= 0) {
+      // Pick a random player within this range
+      return r.players[Math.floor(Math.random() * r.players.length)];
+    }
+  }
+  return activeRanges[activeRanges.length - 1].players[0];
+}
+
+// Keep individual weight for backward compat (used in non-range fallback)
 function getWeight(ovr: number, isIcon: boolean): number {
   if (isIcon) return 2;
   if (ovr >= 90) return 3; if (ovr >= 87) return 5;
   if (ovr >= 84) return 10; if (ovr >= 80) return 20;
   if (ovr >= 75) return 30; return 60;
-}
-
-function weightedPickIdx(items: any[]): number {
-  const weights = items.map(p => getWeight(p.ovr, p.is_premium && p.ovr >= 87));
-  const total = weights.reduce((a, b) => a + b, 0);
-  let r = Math.random() * total;
-  for (let i = 0; i < items.length; i++) { r -= weights[i]; if (r <= 0) return i; }
-  return items.length - 1;
 }
 
 function todayUTC() { return new Date().toISOString().slice(0, 10); }
@@ -72,28 +105,26 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cod
   let result: { slots: any[]; isWin: boolean; isNearWin: boolean };
 
   if (rand < WIN_CHANCE) {
-    // WIN: pick one slot, use for all 3 reels
-    const idx = weightedPickIdx(available);
-    const winSlot = available[idx];
+    // WIN: range-based pick — range probability stays constant even if slots are claimed
+    const winSlot = pickByRange(available);
     result = { slots: [winSlot, winSlot, winSlot], isWin: true, isNearWin: false };
   } else if (rand < WIN_CHANCE + NEAR_WIN_CHANCE) {
-    // NEAR WIN: first 2 same, 3rd different
-    const idx1 = weightedPickIdx(available);
-    const matchSlot = available[idx1];
-    let idx3 = weightedPickIdx(available);
+    // NEAR WIN: first 2 same, 3rd different — both use range-based pick
+    const matchSlot = pickByRange(available);
+    let thirdSlot = pickByRange(available);
     let attempts = 0;
-    while (available[idx3].player_id === matchSlot.player_id && attempts++ < 50) idx3 = weightedPickIdx(available);
-    result = { slots: [matchSlot, matchSlot, available[idx3]], isWin: false, isNearWin: true };
+    while (thirdSlot.player_id === matchSlot.player_id && attempts++ < 50) thirdSlot = pickByRange(available);
+    result = { slots: [matchSlot, matchSlot, thirdSlot], isWin: false, isNearWin: true };
   } else {
-    // LOSS: all different
-    const idx1 = weightedPickIdx(available);
-    let idx2 = weightedPickIdx(available); let idx3 = weightedPickIdx(available); let t = 0;
-    while ((available[idx2].player_id === available[idx1].player_id ||
-            available[idx3].player_id === available[idx1].player_id ||
-            available[idx3].player_id === available[idx2].player_id) && t++ < 50) {
-      idx2 = weightedPickIdx(available); idx3 = weightedPickIdx(available);
+    // LOSS: all different, range-based
+    const s1 = pickByRange(available);
+    let s2 = pickByRange(available); let s3 = pickByRange(available); let t = 0;
+    while ((s2.player_id === s1.player_id ||
+            s3.player_id === s1.player_id ||
+            s3.player_id === s2.player_id) && t++ < 50) {
+      s2 = pickByRange(available); s3 = pickByRange(available);
     }
-    result = { slots: [available[idx1], available[idx2], available[idx3]], isWin: false, isNearWin: false };
+    result = { slots: [s1, s2, s3], isWin: false, isNearWin: false };
   }
 
   // Store spin in DB
