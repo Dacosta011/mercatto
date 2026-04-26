@@ -8,7 +8,7 @@ function makeRng(seed: string) {
   let s = (h >>> 0);
   return () => { s ^= s << 13; s ^= s >> 17; s ^= s << 5; return (s >>> 0) / 0xFFFFFFFF; };
 }
-function seededShuffle<T>(arr: T[], rng: () => number) {
+function seededShuffle(arr: any[], rng: () => number): any[] {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
   return a;
