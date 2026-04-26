@@ -8,14 +8,17 @@ const NEAR_WIN_CHANCE = 0.30;
 // Fixed range weights — probability per OVR range stays CONSTANT
 // regardless of how many players are available in each range.
 // This means claiming a 84-86 player doesn't increase other 84-86 players' prob.
+// Range weights — probability per OVR range stays constant.
+// Intentionally hard for 80+ players:
+// ~70-79: 87% combined, 80+: ~11%, icons: ~2%
 const RANGE_WEIGHTS = [
-  { min: 0,  max: 74,  weight: 55, isIcon: false },  // 70-74 (icons excluded)
-  { min: 75, max: 79,  weight: 25, isIcon: false },
-  { min: 80, max: 83,  weight: 10, isIcon: false },
-  { min: 84, max: 86,  weight: 5,  isIcon: false },
-  { min: 87, max: 89,  weight: 3,  isIcon: false },
-  { min: 90, max: 999, weight: 1.5, isIcon: false },
-  { min: 0,  max: 999, weight: 0.5, isIcon: true  },
+  { min: 0,  max: 74,  weight: 58, isIcon: false },  // most common
+  { min: 75, max: 79,  weight: 29, isIcon: false },
+  { min: 80, max: 83,  weight: 7,  isIcon: false },   // harder
+  { min: 84, max: 86,  weight: 2.5, isIcon: false },  // rare
+  { min: 87, max: 89,  weight: 1.5, isIcon: false },  // very rare
+  { min: 90, max: 999, weight: 0.5, isIcon: false },  // extremely rare
+  { min: 0,  max: 999, weight: 1.5, isIcon: true  },  // legends: rare but possible
 ] as const;
 
 function pickByRange(available: any[]): any {

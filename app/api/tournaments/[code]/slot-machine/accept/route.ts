@@ -32,6 +32,40 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cod
   const memberName = (spin.members as any)?.display_name ?? "Alguien";
   const today = todayUTC();
 
+  // ── Daily limits check ─────────────────────────────────────────────────────
+  // Get the winning player's OVR to determine which limit applies
+  const { data: winningPlayer } = await supabase
+    .from("players")
+    .select("ovr")
+    .eq("id", spin.win_player_id)
+    .single();
+  const winOvr = (winningPlayer as any)?.ovr ?? 0;
+  const isPremium = winOvr > 80;
+
+  // Count today's claims by this member
+  const { data: todayClaims } = await supabase
+    .from("slot_machine_pool")
+    .select("ovr, player_id")
+    .eq("claimed_by_member_id", memberId)
+    .gte("claimed_at", today + "T00:00:00Z");
+
+  const premiumClaimed = (todayClaims ?? []).filter((c: any) => c.ovr > 80).length;
+  const regularClaimed = (todayClaims ?? []).filter((c: any) => c.ovr <= 80).length;
+
+  const MAX_PREMIUM_PER_DAY = 3;
+  const MAX_REGULAR_PER_DAY = 2;
+
+  if (isPremium && premiumClaimed >= MAX_PREMIUM_PER_DAY) {
+    return NextResponse.json({
+      error: `Límite alcanzado: máximo ${MAX_PREMIUM_PER_DAY} jugadores de más de 80 OVR por día.`
+    }, { status: 429 });
+  }
+  if (!isPremium && regularClaimed >= MAX_REGULAR_PER_DAY) {
+    return NextResponse.json({
+      error: `Límite alcanzado: máximo ${MAX_REGULAR_PER_DAY} jugadores de menos de 80 OVR por día.`
+    }, { status: 429 });
+  }
+
   // Get the pool slot
   const { data: slot } = await supabase
     .from("slot_machine_pool")

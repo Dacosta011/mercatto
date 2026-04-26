@@ -49,6 +49,24 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ code
   if (!existingPool || existingPool.length === 0) {
     // Generate today's pool
     await generatePool(supabase, tournamentId, today);
+  } else {
+    // Pool exists: clean up any entries that are now from assigned teams
+    // (teams may have been assigned after the pool was generated today)
+    const { data: currentAssign } = await supabase.from("assignments").select("team_id").eq("tournament_id", tournamentId);
+    const assignedIds = (currentAssign ?? []).map((a: any) => a.team_id as string);
+    if (assignedIds.length > 0) {
+      const { data: assignedPlayers } = await supabase.from("team_players").select("player_id").in("team_id", assignedIds);
+      const assignedPlayerIds = (assignedPlayers ?? []).map((tp: any) => tp.player_id as string);
+      if (assignedPlayerIds.length > 0) {
+        // Remove unclaimed pool slots for players now on assigned teams
+        await supabase.from("slot_machine_pool")
+          .delete()
+          .eq("tournament_id", tournamentId)
+          .eq("pool_date", today)
+          .eq("status", "available")
+          .in("player_id", assignedPlayerIds);
+      }
+    }
   }
 
   // Return pool with status
