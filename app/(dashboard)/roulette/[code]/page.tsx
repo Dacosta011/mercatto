@@ -99,7 +99,8 @@ export default function RoulettePage() {
 
     try {
       const r     = await fetch(`/api/tournaments/${code}/teams`);
-      let teams: Team[] = await r.json();
+      const teamsData = await r.json();
+      let teams: Team[] = Array.isArray(teamsData) ? teamsData : [];
 
       if (data.assigned && data.team && !teams.find((t: Team) => t.id === data.team.id)) {
         teams = [...teams, data.team];

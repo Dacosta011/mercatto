@@ -42,8 +42,7 @@ export async function GET(_request: NextRequest, { params }: Params) {
   // 4) Equipos disponibles
   let query = supabase
     .from("teams")
-    .select("id, name, crest_url")
-    .eq("active", true)
+    .select("id, name, crest_url, squad_value, budget")
     .order("name");
 
   if (takenIds.length > 0) {
