@@ -77,6 +77,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cod
   if ((tConf as any)?.slots_enabled === false) {
     return NextResponse.json({ error: "Los slots están desactivados para este torneo." }, { status: 403 });
   }
+
+  // Check all members have teams assigned
+  const { data: allMembers } = await supabase.from("members").select("id").eq("tournament_id", tournamentId);
+  const { data: allAssign } = await supabase.from("assignments").select("member_id").eq("tournament_id", tournamentId);
+  const assignedSet = new Set((allAssign ?? []).map((a: any) => a.member_id as string));
+  const allAssigned = (allMembers ?? []).every((m: any) => assignedSet.has(m.id));
+  if (!allAssigned) {
+    return NextResponse.json({ error: "Los slots solo funcionan cuando todos los participantes tienen equipo asignado." }, { status: 403 });
+  }
   const spinPrice = (tConf as any)?.slot_machine_price ?? 10_000;
 
   const freeSpinsHeader = req.headers.get("X-Free-Spins");

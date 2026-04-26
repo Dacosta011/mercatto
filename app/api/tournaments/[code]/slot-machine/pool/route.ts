@@ -46,27 +46,22 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ code
     .eq("pool_date", today)
     .limit(1);
 
+  // Check that all members have team assignments before allowing pool generation
+  const { data: allMembers } = await supabase.from("members").select("id").eq("tournament_id", tournamentId);
+  const { data: allAssignments } = await supabase.from("assignments").select("member_id").eq("tournament_id", tournamentId);
+  const assignedMemberIds = new Set((allAssignments ?? []).map((a: any) => a.member_id as string));
+  const allAssigned = (allMembers ?? []).every((m: any) => assignedMemberIds.has(m.id));
+
+  if (!allAssigned) {
+    return NextResponse.json({
+      error: "Los slots solo están disponibles cuando todos los participantes tienen equipo asignado.",
+      pool: [], poolDate: today, spinPrice: 10_000, slotsEnabled: true
+    });
+  }
+
   if (!existingPool || existingPool.length === 0) {
-    // Generate today's pool
+    // Generate today's pool — all teams are assigned at this point
     await generatePool(supabase, tournamentId, today);
-  } else {
-    // Pool exists: clean up any entries that are now from assigned teams
-    // (teams may have been assigned after the pool was generated today)
-    const { data: currentAssign } = await supabase.from("assignments").select("team_id").eq("tournament_id", tournamentId);
-    const assignedIds = (currentAssign ?? []).map((a: any) => a.team_id as string);
-    if (assignedIds.length > 0) {
-      const { data: assignedPlayers } = await supabase.from("team_players").select("player_id").in("team_id", assignedIds);
-      const assignedPlayerIds = (assignedPlayers ?? []).map((tp: any) => tp.player_id as string);
-      if (assignedPlayerIds.length > 0) {
-        // Remove unclaimed pool slots for players now on assigned teams
-        await supabase.from("slot_machine_pool")
-          .delete()
-          .eq("tournament_id", tournamentId)
-          .eq("pool_date", today)
-          .eq("status", "available")
-          .in("player_id", assignedPlayerIds);
-      }
-    }
   }
 
   // Return pool with status
@@ -77,25 +72,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ code
     .eq("pool_date", today)
     .order("ovr", { ascending: false });
 
-  // Filter pool at display time — exclude players from CURRENTLY assigned teams
-  // (pool may have been generated before some teams were assigned)
-  const { data: currentAssignments } = await supabase.from("assignments").select("team_id").eq("tournament_id", tournamentId);
-  const currentTeamIds = (currentAssignments ?? []).map((a: any) => a.team_id as string);
-  let excludedPlayerIds = new Set<string>();
-  if (currentTeamIds.length > 0) {
-    const { data: currentTeamPlayers } = await supabase.from("team_players").select("player_id").in("team_id", currentTeamIds);
-    excludedPlayerIds = new Set((currentTeamPlayers ?? []).map((tp: any) => tp.player_id as string));
-  }
-  const filteredPool = (pool ?? []).filter((slot: any) =>
-    slot.status === "claimed" || !excludedPlayerIds.has(slot.player_id)
-  );
-
-  // Also return spin price for frontend display
+  // Return spin price for frontend display
   const { data: tData } = await supabase.from("tournaments").select("slot_machine_price, slots_enabled").eq("id", tournamentId).single();
   const spinPrice = (tData as any)?.slot_machine_price ?? 10_000;
   const slotsEnabled = (tData as any)?.slots_enabled !== false;  // default true
 
-  return NextResponse.json({ pool: filteredPool, poolDate: today, spinPrice, slotsEnabled });
+  return NextResponse.json({ pool: pool ?? [], poolDate: today, spinPrice, slotsEnabled });
 }
 
 async function generatePool(supabase: any, tournamentId: string, date: string) {
