@@ -17,11 +17,11 @@ function seededShuffle(arr: any[], rng: () => number): any[] {
 const POOL_RANGES = [
   { min: 70, max: 74, count: 25, premium: false },
   { min: 75, max: 79, count: 22, premium: false },
-  { min: 80, max: 83, count: 20, premium: false },
-  { min: 84, max: 86, count: 16, premium: true },
-  { min: 87, max: 89, count: 10, premium: true },
-  { min: 90, max: 99, count: 5,  premium: true },
-  { min: 87, max: 99, count: 2,  premium: true, iconsOnly: true },
+  { min: 80, max: 83, count: 8,  premium: false },
+  { min: 84, max: 86, count: 5,  premium: true },
+  { min: 87, max: 89, count: 3,  premium: true },
+  { min: 90, max: 99, count: 2,  premium: true },
+  { min: 87, max: 99, count: 1,  premium: true, iconsOnly: true },
 ] as const;
 
 function todayUTC() { return new Date().toISOString().slice(0, 10); }
