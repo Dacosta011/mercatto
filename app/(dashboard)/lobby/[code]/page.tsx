@@ -155,6 +155,7 @@ export default function LobbyPage() {
   const [savingSlotPrice, setSavingSlotPrice] = useState(false);
   const [slotsEnabled, setSlotsEnabled] = useState(true);
   const [togglingSlots, setTogglingSlots] = useState(false);
+  const [regeneratingPool, setRegeneratingPool] = useState(false);
   const [resettingLeague, setResettingLeague] = useState(false);
   const [confirmAction, setConfirmAction] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -864,6 +865,30 @@ export default function LobbyPage() {
                   }}
                 >
                   {togglingSlots ? "..." : slotsEnabled ? "🟢 Encendidos" : "🔴 Apagados"}
+                </button>
+              </div>
+              <div className="mt-3 flex items-center justify-between">
+                <p className="text-[#9CA3AF] text-xs">Pool de hoy</p>
+                <button
+                  onClick={async () => {
+                    if (!tournament) return;
+                    setRegeneratingPool(true);
+                    try {
+                      const token = getAdminToken(code);
+                      await fetch(`/api/tournaments/${code}/slot-machine/pool`, {
+                        method: "DELETE",
+                        headers: token ? { Authorization: `Bearer ${token}` } : {},
+                      });
+                    } finally { setRegeneratingPool(false); }
+                  }}
+                  disabled={regeneratingPool}
+                  style={{
+                    padding: "6px 16px", borderRadius: 10, border: "none", cursor: regeneratingPool ? "not-allowed" : "pointer",
+                    background: "linear-gradient(135deg,#F59E0B,#D97706)",
+                    color: "#fff", fontWeight: 900, fontSize: 12, opacity: regeneratingPool ? 0.5 : 1
+                  }}
+                >
+                  {regeneratingPool ? "..." : "🔄 Regenerar pool"}
                 </button>
               </div>
           </div>

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerClient, verifyMemberToken } from "@/lib/supabase";
+import { createServerClient, verifyMemberToken, verifyAdminToken } from "@/lib/supabase";
 
 // ── Seeded RNG (same seed = same pool) ──────────────────────────────────────
 function makeRng(seed: string) {
@@ -78,6 +78,35 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ code
   const slotsEnabled = (tData as any)?.slots_enabled !== false;  // default true
 
   return NextResponse.json({ pool: pool ?? [], poolDate: today, spinPrice, slotsEnabled });
+}
+
+// DELETE /api/tournaments/[code]/slot-machine/pool — admin: purge today's pool and regenerate
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ code: string }> }) {
+  const { code } = await params;
+  const supabase = createServerClient();
+
+  const auth = await verifyAdminToken(req, code);
+  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
+
+  const { tournamentId } = auth;
+  const today = todayUTC();
+
+  await supabase
+    .from("slot_machine_pool")
+    .delete()
+    .eq("tournament_id", tournamentId)
+    .eq("pool_date", today);
+
+  await generatePool(supabase, tournamentId, today);
+
+  const { data: pool } = await supabase
+    .from("slot_machine_pool")
+    .select("id, player_id, ovr, is_premium, status, claimed_by_name, claimed_at, players(id, name, ovr, price, clause, position, headshot_url, is_icon)")
+    .eq("tournament_id", tournamentId)
+    .eq("pool_date", today)
+    .order("ovr", { ascending: false });
+
+  return NextResponse.json({ ok: true, pool: pool ?? [], poolDate: today });
 }
 
 async function generatePool(supabase: any, tournamentId: string, date: string) {
