@@ -112,36 +112,50 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ c
 
 async function getUnassignedTeamPlayers(supabase: any, tournamentId: string) {
   // Teams assigned to a member in this tournament
-  const { data: assignments } = await supabase
+  const { data: assignments, error: aErr } = await supabase
     .from("assignments")
     .select("team_id")
     .eq("tournament_id", tournamentId);
+  if (aErr) { console.error("[pool] assignments query error:", aErr.message); return []; }
   const assignedTeamIds = new Set((assignments ?? []).map((a: any) => a.team_id as string));
 
   // All active teams
-  const { data: allTeams } = await supabase.from("teams").select("id").eq("active", true);
+  const { data: allTeams, error: tErr } = await supabase.from("teams").select("id").eq("active", true);
+  if (tErr) { console.error("[pool] teams query error:", tErr.message); return []; }
   const unassignedTeamIds = (allTeams ?? [])
     .map((t: any) => t.id as string)
     .filter((id: string) => !assignedTeamIds.has(id));
 
+  console.log(`[pool] assignedTeams=${assignedTeamIds.size} activeteams=${(allTeams ?? []).length} unassigned=${unassignedTeamIds.length}`);
   if (unassignedTeamIds.length === 0) return [];
 
-  // Players from those unassigned teams (joined with player data)
-  const { data: rows } = await supabase
+  // Get player_ids from those unassigned teams (separate query, no PostgREST join)
+  const { data: teamPlayerRows, error: tpErr } = await supabase
     .from("team_players")
-    .select("player_id, players(id, ovr, is_icon)")
-    .in("team_id", unassignedTeamIds);
+    .select("player_id")
+    .in("team_id", unassignedTeamIds)
+    .limit(5000);
+  if (tpErr) { console.error("[pool] team_players query error:", tpErr.message); return []; }
 
-  // Deduplicate by player_id — same player can appear in multiple rosters
-  const seen = new Set<string>();
-  const players: any[] = [];
-  for (const row of rows ?? []) {
-    if (!row.players) continue;
-    if (seen.has(row.player_id)) continue;
-    seen.add(row.player_id);
-    players.push(row.players);
+  const playerIds = [...new Set((teamPlayerRows ?? []).map((r: any) => r.player_id as string))];
+  console.log(`[pool] unique playerIds from unassigned teams: ${playerIds.length}`);
+  if (playerIds.length === 0) return [];
+
+  // Fetch player data in chunks to avoid URL length limits
+  const CHUNK = 80;
+  const allPlayers: any[] = [];
+  for (let i = 0; i < playerIds.length; i += CHUNK) {
+    const chunk = playerIds.slice(i, i + CHUNK);
+    const { data: chunk_rows, error: pErr } = await supabase
+      .from("players")
+      .select("id, ovr, is_icon")
+      .in("id", chunk);
+    if (pErr) { console.error("[pool] players chunk query error:", pErr.message); continue; }
+    allPlayers.push(...(chunk_rows ?? []));
   }
-  return players;
+
+  console.log(`[pool] players fetched: ${allPlayers.length}`);
+  return allPlayers;
 }
 
 async function generatePool(supabase: any, tournamentId: string, date: string, seed?: string) {
@@ -166,5 +180,12 @@ async function generatePool(supabase: any, tournamentId: string, date: string, s
     }
   }
 
-  if (rows.length > 0) await supabase.from("slot_machine_pool").insert(rows);
+  console.log(`[pool] generated ${rows.length} pool rows, inserting...`);
+  if (rows.length > 0) {
+    const { error: insertErr } = await supabase
+      .from("slot_machine_pool")
+      .upsert(rows, { onConflict: "tournament_id,pool_date,player_id", ignoreDuplicates: true });
+    if (insertErr) console.error("[pool] insert error:", insertErr.message);
+    else console.log("[pool] insert success");
+  }
 }
