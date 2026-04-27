@@ -139,20 +139,32 @@ async function addReplacement(supabase: any, tournamentId: string, date: string,
 
   if (unassignedTeamIds.length === 0) return;
 
+  // Get player_ids from unassigned teams (no PostgREST join)
   const { data: teamPlayerRows } = await supabase
     .from("team_players")
-    .select("player_id, players(id, ovr, is_icon)")
-    .in("team_id", unassignedTeamIds);
+    .select("player_id")
+    .in("team_id", unassignedTeamIds)
+    .limit(5000);
 
-  // Deduplicate and exclude what's already in the pool
-  const seen = new Set<string>();
-  const available: any[] = [];
-  for (const row of teamPlayerRows ?? []) {
-    if (!row.players || row.players.is_icon) continue;
-    if (seen.has(row.player_id) || inPool.has(row.player_id)) continue;
-    seen.add(row.player_id);
-    available.push(row.players);
+  const uniquePlayerIds = [...new Set(
+    (teamPlayerRows ?? []).map((r: any) => r.player_id as string).filter((id: string) => !inPool.has(id))
+  )];
+  if (uniquePlayerIds.length === 0) return;
+
+  // Fetch in chunks to avoid URL length limits
+  const CHUNK = 80;
+  const allPlayers: any[] = [];
+  for (let i = 0; i < uniquePlayerIds.length; i += CHUNK) {
+    const chunk = uniquePlayerIds.slice(i, i + CHUNK);
+    const { data: chunkRows } = await supabase
+      .from("players")
+      .select("id, ovr, is_icon")
+      .in("id", chunk)
+      .eq("is_icon", false);
+    allPlayers.push(...(chunkRows ?? []));
   }
+
+  const available: any[] = allPlayers;
 
   if (available.length === 0) return;
 
