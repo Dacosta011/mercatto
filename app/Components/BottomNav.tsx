@@ -598,15 +598,15 @@ export default function BottomNav() {
       });
     }
     // Slots always visible when user has a team
-    if (nav.hasTeam && !nav.guest) {
-      tabs.push({
-        id: "slots",
-        href: "/tragaperras",
-        label: "Slots",
-        icon: IconSlots,
-        matchPaths: ["/tragaperras"],
-      });
-    }
+    // if (nav.hasTeam && !nav.guest) {
+    //   tabs.push({
+    //     id: "slots",
+    //     href: "/tragaperras",
+    //     label: "Slots",
+    //     icon: IconSlots,
+    //     matchPaths: ["/tragaperras"],
+    //   });
+    // }
   }
 
   const moreMatchPaths = ["/magic-link", "/rejoin"];
