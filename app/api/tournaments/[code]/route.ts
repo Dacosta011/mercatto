@@ -12,7 +12,7 @@ export async function GET(req: NextRequest, { params }: Params) {
   // 1. Buscar el torneo
   const { data: tournament, error: tournamentError } = await supabase
     .from("tournaments")
-    .select("id, name, code, status, created_at, max_transfers, clause_protection_limit, current_season, slot_machine_price, slots_enabled")
+    .select("id, name, code, status, created_at, max_transfers, clause_protection_limit, current_season")
     .eq("code", code.toUpperCase())
     .single();
 
@@ -108,7 +108,14 @@ export async function GET(req: NextRequest, { params }: Params) {
     .eq("tournament_id", tournament.id)
     .maybeSingle();
 
-  // 7. Identify the calling user from their member token (if present), so the
+  // 7. Slot machine config — separate query so missing columns don't break the main response
+  const { data: slotConf } = await supabase
+    .from("tournaments")
+    .select("slot_machine_price, slots_enabled")
+    .eq("id", tournament.id)
+    .maybeSingle();
+
+  // 8. Identify the calling user from their member token (if present), so the
   //    client doesn't have to rely on a memberId previously cached in
   //    localStorage. Returns null if no Bearer token or it doesn't match a
   //    member of this tournament.
@@ -139,8 +146,8 @@ export async function GET(req: NextRequest, { params }: Params) {
     members: membersWithTeams,
     marketOpen: !!activeMarketSession,
     myMemberId,
-    slotMachinePrice: (tournament as any).slot_machine_price ?? 100_000,
-    slotsEnabled: (tournament as any).slots_enabled !== false,
+    slotMachinePrice: (slotConf as any)?.slot_machine_price ?? 100_000,
+    slotsEnabled: (slotConf as any)?.slots_enabled !== false,
   });
 }
 
