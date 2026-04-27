@@ -55,7 +55,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ code
   if (!allAssigned) {
     return NextResponse.json({
       error: "Los slots solo están disponibles cuando todos los participantes tienen equipo asignado.",
-      pool: [], poolDate: today, spinPrice: 10_000, slotsEnabled: true
+      pool: [], poolDate: today, spinPrice: 100_000, slotsEnabled: true
     });
   }
 
@@ -74,7 +74,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ code
 
   // Return spin price for frontend display
   const { data: tData } = await supabase.from("tournaments").select("slot_machine_price, slots_enabled").eq("id", tournamentId).single();
-  const spinPrice = (tData as any)?.slot_machine_price ?? 10_000;
+  const spinPrice = (tData as any)?.slot_machine_price ?? 100_000;
   const slotsEnabled = (tData as any)?.slots_enabled !== false;  // default true
 
   return NextResponse.json({ pool: pool ?? [], poolDate: today, spinPrice, slotsEnabled });
@@ -100,13 +100,13 @@ async function generatePool(supabase: any, tournamentId: string, date: string) {
 
   for (const range of POOL_RANGES) {
     if ((range as any).iconsOnly) {
-      const eligible = (allIcons ?? []);
+      const eligible = (allIcons ?? []).filter((p: any) => !inTeamIds.has(p.id));
       const shuffled = seededShuffle(eligible, rng);
       for (const p of shuffled.slice(0, range.count)) {
         rows.push({ tournament_id: tournamentId, pool_date: date, player_id: p.id, ovr: p.ovr, is_premium: true, status: "available" });
       }
     } else {
-      const eligible = (allPlayers ?? []).filter((p: any) => p.ovr >= range.min && p.ovr <= range.max);
+      const eligible = (allPlayers ?? []).filter((p: any) => p.ovr >= range.min && p.ovr <= range.max && !inTeamIds.has(p.id));
       const shuffled = seededShuffle(eligible, rng);
       for (const p of shuffled.slice(0, range.count)) {
         rows.push({ tournament_id: tournamentId, pool_date: date, player_id: p.id, ovr: p.ovr, is_premium: range.premium, status: "available" });

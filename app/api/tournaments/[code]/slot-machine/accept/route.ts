@@ -66,10 +66,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cod
     }, { status: 429 });
   }
 
-  // Get the pool slot
+  // Get the pool slot (include status to check for race conditions)
   const { data: slot } = await supabase
     .from("slot_machine_pool")
-    .select("id, ovr, is_premium")
+    .select("id, ovr, is_premium, status")
     .eq("id", spin.pool_slot_id)
     .single();
 
@@ -89,8 +89,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cod
   // Mark spin as accepted
   await supabase.from("slot_machine_spins").update({ status: "accepted" }).eq("id", spinId);
 
-  // If OVR <= 80 (non-premium): add a replacement from unselected players
-  if (slot && !(slot as any).is_premium) {
+  // Always add a replacement to maintain pool at 100 (for all player types)
+  if (slot) {
     await addReplacement(supabase, tournamentId, today, (slot as any).ovr);
   }
 
@@ -117,11 +117,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cod
 }
 
 async function addReplacement(supabase: any, tournamentId: string, date: string, targetOvr: number) {
-  // Find the OVR range bucket
-  const minOvr = targetOvr <= 74 ? 70 : targetOvr <= 79 ? 75 : 80;
-  const maxOvr = targetOvr <= 74 ? 74 : targetOvr <= 79 ? 79 : 83;
-
-  // Get players already in today's pool
+  // Get players already in today's pool (to avoid duplicates)
   const { data: poolPlayers } = await supabase
     .from("slot_machine_pool")
     .select("player_id")
@@ -129,24 +125,64 @@ async function addReplacement(supabase: any, tournamentId: string, date: string,
     .eq("pool_date", date);
   const inPool = new Set((poolPlayers ?? []).map((p: any) => p.player_id));
 
-  // Find a replacement not already in pool
+  // Get players already assigned to tournament teams (must exclude these)
+  const { data: assignments } = await supabase
+    .from("assignments")
+    .select("team_id")
+    .eq("tournament_id", tournamentId);
+  const assignedTeamIds = (assignments ?? []).map((a: any) => a.team_id);
+  const { data: teamPlayers } = await supabase
+    .from("team_players")
+    .select("player_id")
+    .in("team_id", assignedTeamIds.length ? assignedTeamIds : ["none"]);
+  const inTeamIds = new Set((teamPlayers ?? []).map((tp: any) => tp.player_id));
+
+  const getRangeFor = (ovr: number) => {
+    if (ovr <= 74) return { min: 70, max: 74, premium: false };
+    if (ovr <= 79) return { min: 75, max: 79, premium: false };
+    if (ovr <= 83) return { min: 80, max: 83, premium: false };
+    if (ovr <= 86) return { min: 84, max: 86, premium: true };
+    if (ovr <= 89) return { min: 87, max: 89, premium: true };
+    return { min: 90, max: 99, premium: true };
+  };
+
+  const excludeIds = [...new Set([...inPool, ...inTeamIds])];
+  const excludeClause = excludeIds.length ? `(${excludeIds.join(",")})` : "(00000000-0000-0000-0000-000000000000)";
+
+  const range = getRangeFor(targetOvr);
+
+  // Try same OVR range first
   const { data: candidates } = await supabase
     .from("players")
     .select("id, ovr")
     .eq("is_icon", false)
-    .gte("ovr", minOvr)
-    .lte("ovr", maxOvr)
-    .not("id", "in", `(${[...inPool].join(",")})`);
+    .gte("ovr", range.min)
+    .lte("ovr", range.max)
+    .not("id", "in", excludeClause);
 
   if (candidates && candidates.length > 0) {
     const pick = candidates[Math.floor(Math.random() * candidates.length)];
     await supabase.from("slot_machine_pool").insert({
-      tournament_id: tournamentId,
-      pool_date: date,
-      player_id: pick.id,
-      ovr: pick.ovr,
-      is_premium: false,
-      status: "available",
+      tournament_id: tournamentId, pool_date: date,
+      player_id: pick.id, ovr: pick.ovr, is_premium: range.premium, status: "available",
+    });
+    return;
+  }
+
+  // Fallback: any available player not in pool or assigned teams (OVR 70+)
+  const { data: fallback } = await supabase
+    .from("players")
+    .select("id, ovr")
+    .eq("is_icon", false)
+    .gte("ovr", 70)
+    .not("id", "in", excludeClause)
+    .limit(50);
+
+  if (fallback && fallback.length > 0) {
+    const pick = fallback[Math.floor(Math.random() * fallback.length)];
+    await supabase.from("slot_machine_pool").insert({
+      tournament_id: tournamentId, pool_date: date,
+      player_id: pick.id, ovr: pick.ovr, is_premium: pick.ovr > 83, status: "available",
     });
   }
 }

@@ -3,11 +3,11 @@ import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import SlotReel from "./SlotReel";
 import type { SlotPrize } from "@/app/api/slot-machine/prizes/route";
 
-const DEFAULT_SPIN_PRICE = 10_000;  // fallback, overridden by tournament config
+const DEFAULT_SPIN_PRICE = 100_000;  // fallback, overridden by tournament config
 const FREE_SPINS_GRANT = 10;
 const FREE_SPINS_ID    = "__free_spins__";
-const WIN_CHANCE       = 0.40;
-const NEAR_WIN_CHANCE  = 0.30;
+const WIN_CHANCE       = 0.20;
+const NEAR_WIN_CHANCE  = 0.25;
 
 const FREE_SPINS_PRIZE: SlotPrize = {
   id: FREE_SPINS_ID, name: "10 Tiros Gratis", ovr: 0,

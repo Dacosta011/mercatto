@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient, verifyMemberToken } from "@/lib/supabase";
 import { salaryPerMatch } from "@/lib/expenses";
 
-const WIN_CHANCE = 0.40;
-const NEAR_WIN_CHANCE = 0.30;
+const WIN_CHANCE = 0.20;
+const NEAR_WIN_CHANCE = 0.25;
 
 // Fixed range weights — probability per OVR range stays CONSTANT
 // regardless of how many players are available in each range.
@@ -86,7 +86,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cod
   if (!allAssigned) {
     return NextResponse.json({ error: "Los slots solo funcionan cuando todos los participantes tienen equipo asignado." }, { status: 403 });
   }
-  const spinPrice = (tConf as any)?.slot_machine_price ?? 10_000;
+  const spinPrice = (tConf as any)?.slot_machine_price ?? 100_000;
 
   const freeSpinsHeader = req.headers.get("X-Free-Spins");
   const hasFreeSpins = freeSpinsHeader && parseInt(freeSpinsHeader) > 0;
