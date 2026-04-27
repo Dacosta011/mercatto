@@ -8,6 +8,7 @@ import {
   isMarketActive,
   isLeagueActive,
   isGuest,
+  getRole,
   subscribeToStore,
 } from "@/lib/tokenStorage";
 
@@ -32,6 +33,7 @@ export default function RouteGuard({ children }: { children: React.ReactNode }) 
     if (!code) { router.replace("/"); return; }
 
     const guest = isGuest(code);
+    const isAdmin = getRole(code) === "admin";
     const hasTeam = hasTeamAssignment(code);
     const fallback = FALLBACK(code);
     const mActive = isMarketActive(code);
@@ -47,7 +49,7 @@ export default function RouteGuard({ children }: { children: React.ReactNode }) 
       setAllowed(true); return;
     }
 
-    if ((pathname === "/squad" || pathname.startsWith("/squad/")) && !hasTeam) {
+    if ((pathname === "/squad" || pathname.startsWith("/squad/")) && !hasTeam && !isAdmin) {
       router.replace(fallback); return;
     }
 
