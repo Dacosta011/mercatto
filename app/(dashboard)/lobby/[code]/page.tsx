@@ -875,10 +875,18 @@ export default function LobbyPage() {
                     setRegeneratingPool(true);
                     try {
                       const token = getAdminToken(code);
-                      await fetch(`/api/tournaments/${code}/slot-machine/pool`, {
+                      const res = await fetch(`/api/tournaments/${code}/slot-machine/pool`, {
                         method: "DELETE",
                         headers: token ? { Authorization: `Bearer ${token}` } : {},
                       });
+                      if (!res.ok) {
+                        const body = await res.json().catch(() => ({}));
+                        alert(body.error ?? `Error ${res.status} al regenerar el pool`);
+                      } else {
+                        alert("Pool regenerado correctamente. Refresca la página de Tragaperras para ver los cambios.");
+                      }
+                    } catch (e) {
+                      alert("Error de red al regenerar el pool.");
                     } finally { setRegeneratingPool(false); }
                   }}
                   disabled={regeneratingPool}

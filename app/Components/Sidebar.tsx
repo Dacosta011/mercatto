@@ -381,7 +381,7 @@ export default function Sidebar() {
           href: "/squad",
           label: "Equipo",
           icon: icons.equipo,
-          locked: !session.hasTeam,
+          locked: !session.hasTeam && session.role !== "admin",
           lockReason: "Debes girar la ruleta primero",
         },
         {
@@ -389,7 +389,7 @@ export default function Sidebar() {
           label: "Feed",
           icon: icons.feed,
           badge: session.feedBadge,
-          locked: !session.hasTeam,
+          locked: !session.hasTeam && session.role !== "admin",
           lockReason: "Disponible tras el draft",
         },
       ];

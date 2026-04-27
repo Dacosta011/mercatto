@@ -97,7 +97,8 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ c
     .eq("tournament_id", tournamentId)
     .eq("pool_date", today);
 
-  await generatePool(supabase, tournamentId, today);
+  // Use a timestamp-based seed so forced regeneration produces a different pool
+  await generatePool(supabase, tournamentId, today, `${tournamentId}-${Date.now()}`);
 
   const { data: pool } = await supabase
     .from("slot_machine_pool")
@@ -109,8 +110,8 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ c
   return NextResponse.json({ ok: true, pool: pool ?? [], poolDate: today });
 }
 
-async function generatePool(supabase: any, tournamentId: string, date: string) {
-  const rng = makeRng(`${tournamentId}-${date}`);
+async function generatePool(supabase: any, tournamentId: string, date: string, seed?: string) {
+  const rng = makeRng(seed ?? `${tournamentId}-${date}`);
 
   // Get assigned teams for this tournament
   const { data: assignments } = await supabase.from("assignments").select("team_id").eq("tournament_id", tournamentId);
