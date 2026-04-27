@@ -110,39 +110,61 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ c
   return NextResponse.json({ ok: true, pool: pool ?? [], poolDate: today });
 }
 
+async function getUnassignedTeamPlayers(supabase: any, tournamentId: string) {
+  // Teams assigned to a member in this tournament
+  const { data: assignments } = await supabase
+    .from("assignments")
+    .select("team_id")
+    .eq("tournament_id", tournamentId);
+  const assignedTeamIds = new Set((assignments ?? []).map((a: any) => a.team_id as string));
+
+  // All active teams
+  const { data: allTeams } = await supabase.from("teams").select("id").eq("active", true);
+  const unassignedTeamIds = (allTeams ?? [])
+    .map((t: any) => t.id as string)
+    .filter((id: string) => !assignedTeamIds.has(id));
+
+  if (unassignedTeamIds.length === 0) return [];
+
+  // Players from those unassigned teams (joined with player data)
+  const { data: rows } = await supabase
+    .from("team_players")
+    .select("player_id, players(id, ovr, is_icon)")
+    .in("team_id", unassignedTeamIds);
+
+  // Deduplicate by player_id — same player can appear in multiple rosters
+  const seen = new Set<string>();
+  const players: any[] = [];
+  for (const row of rows ?? []) {
+    if (!row.players) continue;
+    if (seen.has(row.player_id)) continue;
+    seen.add(row.player_id);
+    players.push(row.players);
+  }
+  return players;
+}
+
 async function generatePool(supabase: any, tournamentId: string, date: string, seed?: string) {
   const rng = makeRng(seed ?? `${tournamentId}-${date}`);
 
-  // Get assigned teams for this tournament
-  const { data: assignments } = await supabase.from("assignments").select("team_id").eq("tournament_id", tournamentId);
-  const assignedTeamIds = (assignments ?? []).map((a: any) => a.team_id);
-
-  // Get players already in assigned teams
-  const { data: teamPlayers } = await supabase.from("team_players").select("player_id").in("team_id", assignedTeamIds.length ? assignedTeamIds : ["none"]);
-  const inTeamIds = new Set((teamPlayers ?? []).map((tp: any) => tp.player_id));
-
-  // Get all non-icon players
-  const { data: allPlayers } = await supabase.from("players").select("id, ovr, is_icon").eq("is_icon", false);
-  // Get all icons
-  const { data: allIcons } = await supabase.from("players").select("id, ovr, is_icon").eq("is_icon", true);
+  // Source: players from teams NOT assigned to any member in this tournament
+  const eligible = await getUnassignedTeamPlayers(supabase, tournamentId);
+  if (eligible.length === 0) return;
 
   const rows: any[] = [];
 
   for (const range of POOL_RANGES) {
+    let candidates: any[];
     if ((range as any).iconsOnly) {
-      const eligible = (allIcons ?? []).filter((p: any) => !inTeamIds.has(p.id));
-      const shuffled = seededShuffle(eligible, rng);
-      for (const p of shuffled.slice(0, range.count)) {
-        rows.push({ tournament_id: tournamentId, pool_date: date, player_id: p.id, ovr: p.ovr, is_premium: true, status: "available" });
-      }
+      candidates = eligible.filter((p: any) => p.is_icon);
     } else {
-      const eligible = (allPlayers ?? []).filter((p: any) => p.ovr >= range.min && p.ovr <= range.max && !inTeamIds.has(p.id));
-      const shuffled = seededShuffle(eligible, rng);
-      for (const p of shuffled.slice(0, range.count)) {
-        rows.push({ tournament_id: tournamentId, pool_date: date, player_id: p.id, ovr: p.ovr, is_premium: range.premium, status: "available" });
-      }
+      candidates = eligible.filter((p: any) => !p.is_icon && p.ovr >= range.min && p.ovr <= range.max);
+    }
+    const shuffled = seededShuffle(candidates, rng);
+    for (const p of shuffled.slice(0, range.count)) {
+      rows.push({ tournament_id: tournamentId, pool_date: date, player_id: p.id, ovr: p.ovr, is_premium: range.premium, status: "available" });
     }
   }
 
-  await supabase.from("slot_machine_pool").insert(rows);
+  if (rows.length > 0) await supabase.from("slot_machine_pool").insert(rows);
 }
