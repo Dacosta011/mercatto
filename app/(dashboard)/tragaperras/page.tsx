@@ -28,7 +28,7 @@ export default function SlotsPage() {
   const [code, setCode] = useState("");
   const [memberToken, setMemberToken] = useState("");
   const [freeSpins, setFreeSpins] = useState(0);
-  const [spinPrice, setSpinPrice] = useState(10_000);
+  const [spinPrice, setSpinPrice] = useState(100_000);
 
   const fetchPool = useCallback(async (tournamentCode: string, token: string) => {
     const res = await fetch(`/api/tournaments/${tournamentCode}/slot-machine/pool`, {

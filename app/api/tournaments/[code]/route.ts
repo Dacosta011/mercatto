@@ -12,7 +12,7 @@ export async function GET(req: NextRequest, { params }: Params) {
   // 1. Buscar el torneo
   const { data: tournament, error: tournamentError } = await supabase
     .from("tournaments")
-    .select("id, name, code, status, created_at, max_transfers, clause_protection_limit, current_season")
+    .select("id, name, code, status, created_at, max_transfers, clause_protection_limit, current_season, slot_machine_price, slots_enabled")
     .eq("code", code.toUpperCase())
     .single();
 
@@ -139,6 +139,8 @@ export async function GET(req: NextRequest, { params }: Params) {
     members: membersWithTeams,
     marketOpen: !!activeMarketSession,
     myMemberId,
+    slotMachinePrice: (tournament as any).slot_machine_price ?? 100_000,
+    slotsEnabled: (tournament as any).slots_enabled !== false,
   });
 }
 

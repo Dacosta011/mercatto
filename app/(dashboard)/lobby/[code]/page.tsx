@@ -151,7 +151,7 @@ export default function LobbyPage() {
     clauseProtection: 1,
   });
   const [resettingMarket, setResettingMarket] = useState(false);
-  const [slotPrice, setSlotPrice] = useState<number>(10_000);
+  const [slotPrice, setSlotPrice] = useState<number>(100_000);
   const [savingSlotPrice, setSavingSlotPrice] = useState(false);
   const [slotsEnabled, setSlotsEnabled] = useState(true);
   const [togglingSlots, setTogglingSlots] = useState(false);
@@ -183,6 +183,8 @@ export default function LobbyPage() {
 
         setTournament(data);
         if (data.myMemberId) setMyMemberId(data.myMemberId as string);
+        if (typeof data.slotMachinePrice === "number") setSlotPrice(data.slotMachinePrice);
+        if (typeof data.slotsEnabled === "boolean") setSlotsEnabled(data.slotsEnabled);
         setError("");
 
         if (data.status) {
