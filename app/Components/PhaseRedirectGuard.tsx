@@ -69,13 +69,19 @@ export default function PhaseRedirectGuard() {
       router.push(dest);
     }
 
-    // ── Initial fetch: seed with current status ─────────────────────────
+    // ── Initial fetch: seed cached status only, never redirect ──────────
+    // Redirects only fire on realtime status changes, not on page load.
+    // This prevents the guard from bouncing the admin back to lobby when
+    // they manually navigate to /squad or /feed.
     async function fetchStatus() {
       try {
         const res = await fetch(`/api/tournaments/${code}`);
         if (!res.ok) return;
         const data = await res.json();
-        if (data.status) maybeRedirect(data.status as TournamentStatus);
+        if (data.status) {
+          prevStatusRef.current = data.status as TournamentStatus;
+          saveTournamentStatus(code!, data.status as TournamentStatus);
+        }
         if (typeof data.marketOpen === "boolean") {
           saveMarketOpen(code!, data.marketOpen);
         }
