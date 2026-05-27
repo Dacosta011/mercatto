@@ -376,12 +376,14 @@ export async function GET(request: NextRequest, { params }: Params) {
         "id, buyer_id, seller_id, seller_team_id, player_id, transfer_type, amount, created_at"
       )
       .eq("session_id", s.id)
+      .gte("created_at", s.started_at)
       .order("created_at", { ascending: false })
       .limit(isFinished ? 1000 : 40),
     supabase
       .from("market_offers")
       .select("id, buyer_id, seller_id, player_id, amount, responded_at")
       .eq("session_id", s.id)
+      .gte("created_at", s.started_at)
       .eq("status", "rejected")
       .order("responded_at", { ascending: false })
       .limit(30),
