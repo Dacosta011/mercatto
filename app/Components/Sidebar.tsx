@@ -397,12 +397,12 @@ export default function Sidebar() {
           locked: !session.hasTeam && session.role !== "admin",
           lockReason: "Disponible tras el draft",
         },
+        { href: "/market-history", label: "Historial", icon: icons.historial },
       ];
 
   const mercadoItems: NavItem[] = [
     { href: "/market", label: "Mercado", icon: icons.mercado, badge: session.marketBadge },
     { href: "/subastas", label: "Subastas", icon: icons.subastas },
-    { href: "/market-history", label: "Historial", icon: icons.historial },
   ];
 
   const torneoItems: NavItem[] = [
