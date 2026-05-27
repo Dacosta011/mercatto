@@ -105,7 +105,7 @@ export default function MarketHistoryPage() {
   useEffect(() => {
     async function load() {
       const code = getLastTournamentCode();
-      const token = getMemberToken();
+      const token = code ? getMemberToken(code) : null;
       if (!code || !token) { setError("No hay torneo activo."); setLoading(false); return; }
 
       const res = await fetch(`/api/tournaments/${code}/market/history`, {
@@ -128,7 +128,7 @@ export default function MarketHistoryPage() {
       setLoadingDetail(true);
       setDetail(null);
       const code = getLastTournamentCode();
-      const token = getMemberToken();
+      const token = code ? getMemberToken(code) : null;
       if (!code || !token) return;
 
       const res = await fetch(
