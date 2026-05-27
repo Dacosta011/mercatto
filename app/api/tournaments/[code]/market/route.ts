@@ -377,7 +377,7 @@ export async function GET(request: NextRequest, { params }: Params) {
       )
       .eq("session_id", s.id)
       .order("created_at", { ascending: false })
-      .limit(isFinished ? 200 : 40),
+      .limit(isFinished ? 1000 : 40),
     supabase
       .from("market_offers")
       .select("id, buyer_id, seller_id, player_id, amount, responded_at")
@@ -448,16 +448,19 @@ export async function GET(request: NextRequest, { params }: Params) {
     };
   });
 
-  const recentTransfers = [
+  const recentTransfersSorted = [
     ...completedTransfers,
     ...rejectedOffers,
     ...pendingOfferEntries,
-  ]
-    .sort(
-      (a, b) =>
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    )
-    .slice(0, 50);
+  ].sort(
+    (a, b) =>
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+  // When the market is finished we need ALL transfers for the summary screen
+  // (per-manager breakdown). When active, cap at 50 to keep the payload small.
+  const recentTransfers = isFinished
+    ? recentTransfersSorted
+    : recentTransfersSorted.slice(0, 50);
 
   // ── 9. Unread notification count ──────────────────────────────────────────
   const { count: unreadNotifications } = await supabase
