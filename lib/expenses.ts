@@ -117,23 +117,31 @@ export async function getMemberSquad(
       .in("transfer_type", ["clause", "offer", "icon_auction", "auto_release"])
       .order("created_at", { ascending: true });
 
-    // Latest-wins per player
-    const latest: Record<string, any> = {};
+    // Build the effective current owner for each transferred player.
+    // Iterating ASC means the last write wins — exactly what we want.
+    // This handles multi-hop chains (M0→M1→M2→M3) correctly: even if the
+    // original seller (M0) is not buyer/seller in the *latest* transfer, their
+    // player will still be removed from their squad because baseIds contains it
+    // and the current owner is someone else.
+    const effectiveOwner: Record<string, string | null> = {};
     for (const t of transfers ?? []) {
-      latest[(t as any).player_id] = t;
-    }
-    for (const t of Object.values(latest)) {
-      const tt = (t as any).transfer_type as string;
       const pid = (t as any).player_id as string;
       const buyer = (t as any).buyer_id as string | null;
-      const seller = (t as any).seller_id as string | null;
-      if (tt === "auto_release") {
+      const tt = (t as any).transfer_type as string;
+      effectiveOwner[pid] = tt === "auto_release" ? null : buyer;
+    }
+    for (const [pid, currentOwner] of Object.entries(effectiveOwner)) {
+      if (currentOwner === null) {
+        // Player was auto-released — remove from anyone's squad
         releasedIds.add(pid);
-        if (seller === memberId) outboundIds.add(pid);
-        continue;
+      } else if (currentOwner === memberId) {
+        // This member is the current owner (bought mid-market)
+        inboundIds.add(pid);
+      } else if (baseIds.has(pid)) {
+        // Player was in this team's base roster but has since been sold
+        outboundIds.add(pid);
       }
-      if (buyer === memberId) inboundIds.add(pid);
-      else if (seller === memberId) outboundIds.add(pid);
+      // else: transfer between other members — doesn't affect this member
     }
   }
 
