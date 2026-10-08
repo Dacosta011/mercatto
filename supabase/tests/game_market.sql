@@ -62,6 +62,11 @@ DROP TRIGGER injected_failure ON game.contracts;
 SET LOCAL ROLE service_role;
 SELECT public.game_market_command(:'code','b4000000-0000-0000-0000-000000000002',gen_random_uuid(),'cancel',NULL,(:'failing_offer'::jsonb->>'offerId')::uuid);
 SELECT public.game_market_command(:'code','b4000000-0000-0000-0000-000000000002',gen_random_uuid(),'sign','f2000000-0000-0000-0000-000000000005');
+-- A free signing must also lock the player against another acquisition this session.
+SELECT pg_temp.must_fail(format('SELECT public.game_market_command(%L,%L,gen_random_uuid(),%L,%L,NULL,5000000)',:'code','b4000000-0000-0000-0000-000000000003','offer','f2000000-0000-0000-0000-000000000005'),'GM001');
+SELECT pg_temp.must_fail(format('SELECT public.game_pay_clause(%L,%L,gen_random_uuid(),%L)',:'code','b4000000-0000-0000-0000-000000000003','f2000000-0000-0000-0000-000000000005'),'GM001');
+SELECT pg_temp.assert((SELECT count(*)=1 FROM game.transfers WHERE window_id=:'window' AND player_id='f2000000-0000-0000-0000-000000000005'),'blocked acquisitions leave one transfer');
+
 SELECT pg_temp.assert((SELECT balance=128000000 AND reserved=0 FROM game.accounts WHERE club_id=:'north'),'free player price charged');
 SELECT pg_temp.must_fail(format('SELECT public.game_market_command(%L,%L,gen_random_uuid(),%L,%L)',:'code','b4000000-0000-0000-0000-000000000004','sign','f2000000-0000-0000-0000-000000000005'),'GM001');
 SELECT pg_temp.must_fail(format('SELECT public.game_market_command(%L,%L,gen_random_uuid(),%L,%L,NULL,129000000)',:'code','b4000000-0000-0000-0000-000000000002','offer','f2000000-0000-0000-0000-000000000004'),'GM001');
@@ -78,6 +83,8 @@ SELECT pg_temp.assert(NOT EXISTS(SELECT 1 FROM game.accounts WHERE tournament_id
 SELECT pg_temp.assert(NOT EXISTS(SELECT 1 FROM game.market_limits WHERE window_id=:'window' AND purchases_held<>0),'market closure releases held slots');
 SELECT public.game_market_command(:'code','b4000000-0000-0000-0000-000000000001',gen_random_uuid(),'open',NULL,NULL,NULL,'winter',60) AS winter \gset
 SELECT pg_temp.assert((SELECT purchases_used=0 FROM game.market_limits WHERE club_id=:'north' AND window_id=(:'winter'::jsonb->>'windowId')::uuid),'winter has new quota');
+SELECT public.game_market_command(:'code','b4000000-0000-0000-0000-000000000003',gen_random_uuid(),'offer','f2000000-0000-0000-0000-000000000005',NULL,5000000);
+
 SELECT public.game_market_command(:'code','b4000000-0000-0000-0000-000000000003',gen_random_uuid(),'offer','f2000000-0000-0000-0000-000000000001',NULL,5000000) AS expired_offer \gset
 UPDATE game.market_windows SET opens_at=clock_timestamp()-interval '2 minutes',closes_at=clock_timestamp()-interval '1 minute' WHERE id=(:'winter'::jsonb->>'windowId')::uuid;
 SELECT pg_temp.must_fail(format('SELECT public.game_market_command(%L,%L,gen_random_uuid(),%L,NULL,%L)',:'code','b4000000-0000-0000-0000-000000000002','accept',:'expired_offer'::jsonb->>'offerId'),'GM001');

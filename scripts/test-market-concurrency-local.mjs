@@ -39,7 +39,7 @@ SELECT public.game_choose_club('${created.code}','${seller}','${clubB}','${rando
     query(command(admin,randomUUID(),'open','NULL','NULL','NULL',"'summer'",'60'));
     const race=await Promise.all([buyer,seller].map(token=>connection(`SET ROLE service_role; BEGIN; ${command(token,randomUUID(),'sign',"'f2000000-0000-0000-0000-000000000005'")} SELECT pg_sleep(0.1); COMMIT;`)));
     assert.equal(race.filter(r=>r.code===0).length,1,'Exactly one concurrent free-agent purchase must succeed');
-    assert(race.some(r=>r.output.includes('Player is no longer free')));
+    assert(race.some(r=>r.output.includes('Player already transferred in this window')));
     assert.equal(value('SELECT count(*) FROM game.transfers;'),'1');
     const purchases=await Promise.all([6,7].map(n=>connection(`SET ROLE service_role; BEGIN; ${command(buyer,randomUUID(),'sign',`'f2000000-0000-0000-0000-${String(n).padStart(12,'0')}'`)} SELECT pg_sleep(0.1); COMMIT;`)));
     assert.equal(purchases.filter(r=>r.code===0).length,1,'Only one of two 100M purchases can fit');

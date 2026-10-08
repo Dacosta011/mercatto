@@ -24,6 +24,7 @@ console.log(sql(readFileSync(new URL('../supabase/tests/game_counter.sql', impor
 console.log(sql(readFileSync(new URL('../supabase/tests/game_clause.sql', import.meta.url), 'utf8').replace('-- CATALOG_FIXTURES', catalogue), database));
 console.log(sql(readFileSync(new URL('../supabase/tests/game_auction.sql', import.meta.url), 'utf8').replace('-- CATALOG_FIXTURES', catalogue), database));
 console.log(sql(readFileSync(new URL('../supabase/tests/game_competition.sql', import.meta.url), 'utf8').replace('-- CATALOG_FIXTURES', catalogue), database));
+console.log(sql(readFileSync(new URL('../supabase/tests/game_ballot_candidates.sql', import.meta.url), 'utf8').replace('-- CATALOG_FIXTURES', catalogue), database));
 console.log(sql(readFileSync(new URL('../supabase/tests/game_competition_edges.sql', import.meta.url), 'utf8').replace('-- CATALOG_FIXTURES', catalogue), database));
 console.log(sql(readFileSync(new URL('../supabase/tests/game_pool_social.sql', import.meta.url), 'utf8').replace('-- CATALOG_FIXTURES', catalogue), database));
 console.log(sql(readFileSync(new URL('../supabase/tests/game_ui_mutations.sql', import.meta.url), 'utf8').replace('-- CATALOG_FIXTURES', catalogue), database));
