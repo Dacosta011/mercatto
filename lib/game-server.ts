@@ -1,6 +1,8 @@
 import 'server-only';
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import {after} from 'next/server';
+import {flushGamePush} from './game-push';
 
 export function localGameClient() {
   const mode = process.env.MERCATTO_GAME_MODEL;
@@ -119,7 +121,9 @@ export function gameError(error: unknown) {
   return NextResponse.json({ error: 'No se pudo completar la operación.' }, { status: 500 });
 }
 export async function gameRpc(name: string, args: Record<string, unknown>) {
-  const { data, error } = await localGameClient().rpc(name, args);
+  const db=localGameClient();
+  const { data, error } = await db.rpc(name, args);
   if (error) throw error;
+  if(process.env.MERCATTO_GAME_MODEL==='clubs')after(()=>flushGamePush(db));
   return data;
 }

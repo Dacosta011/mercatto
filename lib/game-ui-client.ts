@@ -21,7 +21,7 @@ export async function gamePost(path: string, body: object, token?: string) {
 export function syncGameNavigation(state: GameState, competition: GameCompetition, market: GameMarket) {
   const code = state.code;
   saveMemberId(code, state.memberId);
-  saveUserProfile(code, state.members.find(m => m.id === state.memberId)?.name || 'Participante', getAdminToken(code) ? 'admin' : 'member');
+  saveUserProfile(code, state.members.find(m => m.id === state.memberId)?.name || 'Participante', state.isGuest ? 'guest' : getAdminToken(code) ? 'admin' : 'member');
   const club = state.clubs.find(c => c.memberId === state.memberId);
   if (club) saveTeamAssignment(code, club.name);
   else {

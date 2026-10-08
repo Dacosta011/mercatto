@@ -14,7 +14,12 @@ export async function POST(request: Request) {
       if(data?.length!==selected.length)throw new Error('LOCAL_GAME_CONFIG');
       teams=data.map(t=>t.id);
     }
-    const freePlayers = process.env.MERCATTO_GAME_FREE_PLAYER_IDS?.split(',').filter(Boolean) || [];
+    let freePlayers = process.env.MERCATTO_GAME_FREE_PLAYER_IDS?.split(',').filter(Boolean) || [];
+    if(freePlayers.length===0){
+      const {data,error}=await localGameClient().from('players').select('id').eq('is_icon',true);
+      if(error)throw error;
+      freePlayers=(data||[]).map(p=>p.id);
+    }
     if (teams.length === 0 || [...teams, ...freePlayers].some(id => !UUID.test(id))) throw new Error('LOCAL_GAME_CONFIG');
     if (typeof body.name !== 'string' || typeof body.displayName !== 'string') throw new Error('INVALID_BODY');
     if ('complete' in body && typeof body.complete !== 'boolean') throw new Error('INVALID_BODY');

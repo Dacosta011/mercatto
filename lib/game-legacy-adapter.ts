@@ -1,4 +1,6 @@
 import 'server-only';
+import {randomUUID} from 'node:crypto';
+import {gameNotificationRoute} from './game-notifications';
 import { NextResponse } from 'next/server';
 import { gameRpc, gameError, bearer, requestKey, localGameClient, UUID } from './game-server';
 import type { GameState, GameMarket, GameCompetition, GameClub } from './game-types';
@@ -48,7 +50,7 @@ export function legacyView(d:Snapshot){
  const auctions:any[]=m.auctions.map(a=>({id:a.id,phase:['active','expired'].includes(a.status)?'active':'finished',startsAt:d.windows.find(w=>w.id===a.windowId)?.opens_at||null,endsAt:a.endsAt,voteEndsAt:null,minBid:a.minBid,highestBid:a.highestBid,highestBidderId:a.highestClubId?manager(a.highestClubId).id:null,highestBidderName:a.highestClubId?manager(a.highestClubId).displayName:null,winnerId:a.status==='settled'&&a.highestClubId?manager(a.highestClubId).id:null,winnerName:a.status==='settled'?a.highestClub:null,finalAmount:a.status==='settled'?a.highestBid:null,icon:icon(a.playerId),candidates:[],voteCounts:{},myVoteIconId:null,totalMembers:s.clubs.filter(cl=>cl.memberId).length,totalVotes:0,isMyBid:a.highestClubId===mine?.id,timeRemainingMs:Math.max(0,Date.parse(a.endsAt)-Date.now()),voteTimeRemainingMs:null}));
  for(const b of c.ballots.filter(b=>b.status==='open'))auctions.unshift({id:b.id,phase:'voting',startsAt:null,endsAt:null,voteEndsAt:b.endsAt,minBid:5000000,highestBid:0,highestBidderId:null,highestBidderName:null,winnerId:null,winnerName:null,finalAmount:null,icon:null,candidates:b.options.map(o=>icon(o.playerId)),voteCounts:Object.fromEntries(b.options.map(o=>[o.playerId,o.votes])),myVoteIconId:d.votes.find(v=>v.ballot_id===b.id)?.player_id||null,totalMembers:b.electorate,totalVotes:b.votedClubs.length,isMyBid:false,timeRemainingMs:null,voteTimeRemainingMs:Math.max(0,Date.parse(b.endsAt)-Date.now())});
  return {s,m,c,mine,asset,club,crest,team,manager,player,fixtures,current,currentFixtures,round,window,transfer,standings,auctions,icon,status,limit,
- tournament:{id:s.id,name:s.name,code:s.code,status,createdAt:d.meta.createdAt,currentSeason:s.season,lastLeagueFinished:c.phase==='finished',maxTransfers:d.meta.maxTransfers,clauseProtection:d.meta.clauseProtection,slotMachinePrice:c.rules?.spin_fee,slotsEnabled:d.meta.slotsEnabled,myMemberId:s.memberId,marketOpen:m.window?.status==='open',members:s.members.filter(mm=>!c.departures.includes(mm.id)).map(mm=>{const cl=s.clubs.find(cl=>cl.memberId===mm.id);return{id:mm.id,displayName:mm.name,budget:cl?.budget??null,team:cl?team(cl):null};})},
+ tournament:{id:s.id,name:s.name,code:s.code,status,createdAt:d.meta.createdAt,currentSeason:s.season,lastLeagueFinished:c.phase==='finished',maxTransfers:d.meta.maxTransfers,clauseProtection:d.meta.clauseProtection,slotMachinePrice:c.rules?.spin_fee,slotsEnabled:d.meta.slotsEnabled,myMemberId:s.memberId,marketOpen:m.window?.status==='open',members:s.members.filter(mm=>!c.departures.includes(mm.id)&&!s.guestIds?.includes(mm.id)).map(mm=>{const cl=s.clubs.find(cl=>cl.memberId===mm.id);return{id:mm.id,displayName:mm.name,budget:cl?.budget??null,team:cl?team(cl):null};})},
  league:{status:c.phase==='assignment'?'pending':c.phase==='finished'?'finished':'active',session:current.length?{id:c.seasonId,currentMatchday:round,totalMatchdays:Math.max(...current.map(f=>f.matchday))}:null,tournamentName:s.name,isAdmin:d.meta.isAdmin,myMemberId:s.memberId,currentFixtures,allFixtures:current,restMember:s.clubs.filter(cl=>current.some(f=>[f.homeMember.id,f.awayMember.id].includes(manager(cl.id).id))).filter(cl=>!currentFixtures.some(f=>[f.homeMember.id,f.awayMember.id].includes(manager(cl.id).id))).map(cl=>manager(cl.id))[0]||null,myDiscipline:{yellows:0,reds:0,suspended:false,yellowsToSuspension:3,suspendedPlayers:mine?.squad.filter(p=>remaining(p.id)>0).map(p=>({playerName:p.name,reason:'Sanción pendiente',matchesRemaining:remaining(p.id)}))||[]},currentMatchdayFinished:currentFixtures.every(f=>f.status==='finished'),table:standings(c.seasonId),discipline:s.clubs.flatMap(cl=>cl.squad.map(p=>{const pp=player(p),member=manager(cl.id);return{playerId:p.id,playerName:p.name,memberId:member.id,displayName:member.displayName,teamName:cl.name,yellows:pp.yellowCards,reds:c.fixtures.filter(f=>f.seasonId===c.seasonId).flatMap(f=>f.cards).filter(card=>card.playerId===p.id&&card.kind==='red').length,suspended:pp.suspended>0,yellowsToSuspension:3-pp.yellowCards%3};})).filter(p=>p.yellows||p.reds||p.suspended)},
  market:{status:m.window?(m.window.status==='open'?'active':'finished'):'pending',session:d.windows[0]?window(d.windows[0]):null,timer:{closesAt:m.window?.closesAt||null,timeRemainingMs:m.window?Math.max(0,Date.parse(m.window.closesAt)-Date.now()):null,isClosingSoon:false,isUrgent:false},myStatus:{memberId:s.memberId,budget:mine?.budget||0,budgetReserved:mine?.reserved||0,purchasesUsed:limit?.used??(mine?purchases(mine.id):0),maxPurchases:limit?.limit||d.meta.maxTransfers,iconSlotUsed:!!limit?.iconsUsed,myTeamId:mine?.teamId||null,myTeamName:mine?.name||null,myTeamCrestUrl:mine?crest(mine.id):null,pendingIncoming:offers.filter(o=>o.responder===s.memberId).length,pendingOutgoing:offers.filter(o=>o.buyerId===s.memberId&&o.responder!==s.memberId).length},availablePlayers:s.clubs.filter(cl=>cl.id!==mine?.id&&cl.memberId).flatMap(cl=>cl.squad.filter(p=>!asset(p.id)?.is_icon).map(p=>({playerId:p.id,playerName:p.name,headshotUrl:asset(p.id)?.headshot_url||null,ovr:p.ovr,position:p.position||'',price:p.price,clause:p.clause||0,isIcon:asset(p.id)?.is_icon||false,teamId:cl.teamId,teamName:cl.name,teamCrestUrl:crest(cl.id),ownerId:cl.memberId,ownerName:cl.manager,clauseProtected:!!m.window?.clauseProtectionLimit&&m.clauseAttempts.filter(a=>a.windowId===m.window?.id&&a.seller===cl.name&&a.outcome==='accepted').length>=m.window.clauseProtectionLimit,rejectedByMe:m.clauseAttempts.some(a=>a.playerId===p.id&&a.buyerClubId===mine?.id&&a.windowId===m.window?.id&&a.outcome==='rejected'),inNegotiation:m.offers.some(o=>o.playerId===p.id&&o.status==='pending')}))),myIncomingOffers:offers.filter(o=>o.responder===s.memberId),myOutgoingOffers:offers.filter(o=>o.buyerId===s.memberId&&o.responder!==s.memberId),recentTransfers:d.transfers.filter(t=>t.window_id===m.window?.id).map(transfer),clauseProtectionEnabled:m.window?.clauseProtectionLimit??d.meta.clauseProtection,unreadNotifications:0,league:{totalMatchdays:c.rounds.length},allMembers:s.clubs.filter(cl=>cl.memberId).map(cl=>({id:cl.memberId,displayName:cl.manager,teamName:cl.name,teamCrestUrl:crest(cl.id),purchasesUsed:m.limits.find(l=>l.clubId===cl.id)?.used??purchases(cl.id),clausesUsed:m.clauseAttempts.filter(a=>a.buyerClubId===cl.id&&a.windowId===m.window?.id&&a.outcome==='accepted').length}))}
  };
@@ -57,10 +59,15 @@ export function legacyView(d:Snapshot){
 export async function handleLegacyGame(request:Request,parts:string[]){
  try{
  const [code,...tail]=parts,route=tail.join('/'),method=request.method,url=new URL(request.url);
- const token=bearer(request),member=request.headers.get('X-Mercatto-Member')||token;
- const snapshot=()=>gameRpc('game_ui_snapshot',{p_code:code,p_token:member,p_admin_token:request.headers.get('X-Mercatto-Admin')});
  const body=method==='GET'||method==='HEAD'?{}:await request.json().catch(()=>({}));
  const key=method==='GET'?null:requestKey(request);
+ if(route==='guest'&&method==='POST'){
+  if(typeof body.displayName!=='string'||!body.displayName.trim()||body.displayName.trim().length>40)throw new Error('INVALID_NAME');
+  return json(await gameRpc('game_join_guest',{p_code:code,p_name:body.displayName.trim(),p_token:randomUUID(),p_key:key}),201);
+ }
+ const token=bearer(request),member=request.headers.get('X-Mercatto-Member')||token;
+ const snapshot=()=>gameRpc('game_ui_snapshot',{p_code:code,p_token:member,p_admin_token:request.headers.get('X-Mercatto-Admin')});
+ if(route==='push/subscribe'||route==='notifications')return await gameNotificationRoute(request,code,token,body);
  const competition=(action:string,payload:any={})=>gameRpc('game_competition_command',{p_code:code,p_token:token,p_key:key,p_action:action,p_body:payload});
  const activity=(action:string,payload:any={})=>gameRpc('game_activity_command',{p_code:code,p_token:token,p_key:key,p_action:action,p_body:payload});
  const ui=(action:string,payload:any={})=>gameRpc('game_ui_command',{p_code:code,p_token:token,p_key:key,p_action:action,p_body:payload});
@@ -68,7 +75,7 @@ export async function handleLegacyGame(request:Request,parts:string[]){
  if(method!=='GET'){
   if(route==='market/start')return json(await ui('market_open',body));
   if(route==='market/close')return json(await market('close'));
-  if(route==='market/clause'){const result=await gameRpc('game_pay_clause',{p_code:code,p_token:token,p_key:key,p_player:id(body.playerId)});return json({...result,rejected:result.outcome==='rejected'});}
+  if(route==='market/clause')return json(await gameRpc('game_pay_clause',{p_code:code,p_token:token,p_key:key,p_player:id(body.playerId)}));
   if(route==='market/offer')return json(await market('offer',{p_player:id(body.playerId),p_amount:number(body.amount)}));
   if(tail[0]==='market'&&tail[1]==='offer'&&tail[2]){const action=method==='DELETE'?'cancel':body.action;if(!['accept','reject','counter','cancel'].includes(action))throw new Error('INVALID_ACTION');return json(await market(action,{p_offer:id(tail[2]),...(action==='counter'?{p_amount:number(body.counterAmount)}:{})}));}
   if(tail[0]==='league'&&tail[1]==='fixtures'&&['postpone','reactivate'].includes(tail[3])&&['POST','DELETE'].includes(method))return json(await gameRpc('game_fixture_schedule',{p_code:code,p_token:token,p_key:key,p_fixture:id(tail[2]),p_action:tail[3],p_cancel:method==='DELETE',p_force:body.force===true}));
@@ -90,7 +97,6 @@ export async function handleLegacyGame(request:Request,parts:string[]){
   if(tail[0]==='auctions'&&tail[2]==='bid')return json(await gameRpc('game_auction_command',{p_code:code,p_token:token,p_key:key,p_action:'auction_bid',p_auction:id(tail[1]),p_amount:number(body.amount)}));
   if(tail[0]==='members'&&method==='DELETE')return json(await ui('remove_member',{memberId:id(tail[1])}));
   if(route==='settings')return json(await ui('settings',body));
-  if(route==='notifications')return json({ok:true});
   if(route.endsWith('/reset'))return reject('El historial y el patrimonio se conservan. Finaliza la temporada para comenzar otra.');
   if(route===''||route==='league/finish'){const d=await snapshot();return d.competition.phase==='finished'?json({ok:true}):reject('Completa y cierra las jornadas pendientes antes de finalizar.');}
   if (!route.startsWith('social/')) return reject('Esta acción todavía no está conectada al modelo local.');
@@ -112,7 +118,6 @@ export async function handleLegacyGame(request:Request,parts:string[]){
  if(route==='auctions')return json({auctions:v.auctions,myBudget:mine?.budget||0,myBudgetReserved:mine?.reserved||0,myIconSlotUsed:!!v.limit?.iconsUsed});
  if(tail[0]==='auctions'&&tail.length===2){const a=v.auctions.find(a=>a.id===tail[1]);if(!a)return reject('Subasta no encontrada.',404);return json({auction:a,bids:(m.auctions.find(a=>a.id===tail[1])?.bids||[]).map(b=>({id:String(b.id),memberId:v.manager(b.clubId).id,memberName:v.manager(b.clubId).displayName,amount:b.amount,createdAt:b.createdAt,isMe:b.clubId===mine?.id}))});}
  if(route==='icons')return json({icons:m.auctionIcons.map(p=>({...v.icon(p.id),minBid:p.minBid}))});
- if(route==='notifications')return json({notifications:[],unreadCount:0});
  if(route==='market/history'){
   const wid=url.searchParams.get('sessionId');if(!wid)return json({sessions:d.windows.map(w=>({...v.window(w),transferCount:d.transfers.filter(t=>t.window_id===w.id).length}))});
   const w=d.windows.find(w=>w.id===wid);if(!w)return reject('Mercado no encontrado.',404);
@@ -142,8 +147,9 @@ async function social(request:Request,route:string,body:any,key:string,d:Snapsho
   const {data,error}=await db.from('social_profiles').upsert({tournament_id:s.id,member_id:s.memberId,username:body.username.trim(),photo_url:body.photo_url||null},{onConflict:'member_id,tournament_id'}).select('id,username,photo_url').single();if(error)throw error;return json({profile:data,profiles:[data]});
  }
  if(route==='social/posts'&&request.method!=='GET'){
-  if(body.image_url) return reject('Las imágenes todavía no están conectadas al entorno local.');
-  const result=await gameRpc('game_social_command',{p_code:s.code,p_token:token,p_key:key,p_action:'post',p_content:body.content,p_post:body.parent_id||null});return json({post:{id:result.postId,content:body.content,parent_id:body.parent_id||null,created_at:new Date().toISOString(),image_url:null,isMe:true,author:profile,likeCount:0,likedByMe:false,replyCount:0}},201);
+  if(body.content!=null&&typeof body.content!=='string')throw new Error('INVALID_CONTENT');
+  if(body.image_url!=null&&(typeof body.image_url!=='string'||body.image_url.length>2800000||!/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(body.image_url)))throw new Error('INVALID_IMAGE');
+  const result=await gameRpc('game_social_post',{p_code:s.code,p_token:token,p_key:key,p_content:body.content||null,p_image:body.image_url||null,p_parent:body.parent_id?id(body.parent_id):null});return json({post:{id:result.postId,content:body.content,parent_id:body.parent_id||null,created_at:new Date().toISOString(),image_url:body.image_url||null,isMe:true,author:profile,likeCount:0,likedByMe:false,replyCount:0}},201);
  }
  if(route.endsWith('/like'))return json(await gameRpc('game_social_command',{p_code:s.code,p_token:token,p_key:key,p_action:request.method==='DELETE'?'unlike':'like',p_post:id(route.split('/')[2])}));
  if(route!=='social/posts'||request.method!=='GET') return reject('Esta acción todavía no está conectada al modelo local.');

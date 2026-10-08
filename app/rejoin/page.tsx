@@ -54,7 +54,7 @@ function RejoinContent() {
           saveUserProfile(data.code, data.displayName, "admin");
         } else {
           clearAdminToken(data.code);
-          saveUserProfile(data.code, data.displayName, "member");
+          saveUserProfile(data.code, data.displayName, data.isGuest ? "guest" : "member");
         }
         saveMemberToken(data.code, t.trim());
         saveMemberId(data.code, data.memberId);

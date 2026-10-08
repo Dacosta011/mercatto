@@ -9,6 +9,8 @@ export interface GameClub {
   squad: { id: string; name: string; ovr: number; position: string | null; price: number; clause: number | null }[];
 }
 export interface GameState {
+  isGuest?: boolean;
+  guestIds?: string[];
   id: string;
   name: string;
   code: string;
