@@ -1,4 +1,6 @@
 "use client";
+import { legacyGameFetch as fetch } from '@/lib/legacy-game-fetch';
+import { localRefresh } from '@/lib/game-local-refresh';
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
@@ -9,6 +11,7 @@ import {
   getMemberId,
   saveMemberId,
   saveTournamentStatus,
+  saveMarketOpen,
 } from "@/lib/tokenStorage";
 import { getBrowserClient } from "@/lib/supabase-browser";
 import type { RealtimeChannel } from "@supabase/supabase-js";
@@ -471,7 +474,10 @@ export default function MarketPage() {
           setLiveTimer(d.timer.timeRemainingMs);
         }
 
-        if (code) saveTournamentStatus(code, "market");
+        if (code) {
+          saveMarketOpen(code, d.status === 'active');
+          saveTournamentStatus(code, d.session?.marketType === 'winter' ? 'league' : d.status === 'active' ? 'market' : 'lobby');
+        }
         if (code && d.myStatus?.memberId) {
           saveMemberId(code, d.myStatus.memberId);
         }
@@ -507,6 +513,8 @@ export default function MarketPage() {
   // Realtime subscription
   useEffect(() => {
     if (!code || !token) return;
+    const cleanup = localRefresh(() => fetchData(true));
+    if (cleanup) { void fetchData(false); return cleanup; }
 
     const supabase = getBrowserClient();
     const setupChannel = (sessionId: string) => {
@@ -689,7 +697,7 @@ export default function MarketPage() {
     if (!code || !token || respondingOfferId) return;
     setRespondingOfferId(offerId);
     try {
-      await fetch(`/api/tournaments/${code}/market/offer/${offerId}`, {
+      const response = await fetch(`/api/tournaments/${code}/market/offer/${offerId}`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -702,6 +710,7 @@ export default function MarketPage() {
             : {}),
         }),
       });
+      if (!response.ok) { pushToast('warning', (await response.json()).error || 'No se pudo responder la oferta.'); return; }
       setModal(null);
       setCounterMode(null);
       setCounterAmount("");
@@ -715,10 +724,11 @@ export default function MarketPage() {
     if (!code || !token || respondingOfferId) return;
     setRespondingOfferId(offerId);
     try {
-      await fetch(`/api/tournaments/${code}/market/offer/${offerId}`, {
+      const response = await fetch(`/api/tournaments/${code}/market/offer/${offerId}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
+      if (!response.ok) { pushToast('warning', (await response.json()).error || 'No se pudo cancelar la oferta.'); return; }
       fetchData(true);
     } finally {
       setRespondingOfferId(null);
@@ -2615,7 +2625,8 @@ function MarketFinished({
       setClosing(false);
       return;
     }
-    saveTournamentStatus(code, "lobby");
+    saveMarketOpen(code, false);
+    saveTournamentStatus(code, data.session?.marketType === 'winter' ? 'league' : 'lobby');
     window.location.href = `/lobby/${code}`;
   };
 

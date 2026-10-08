@@ -1,4 +1,6 @@
 "use client";
+import { localGameUI } from '@/lib/game-local-mode';
+import { gamePost } from '@/lib/game-ui-client';
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -89,7 +91,9 @@ export default function CreateTournamentPage() {
     setLoading(true);
 
     try {
-      const res = await fetch("/api/tournaments", {
+      const payload = {name: name.trim(),displayName: displayName.trim(),rerolls,maxTransfers,clauseProtection};
+      const localData = localGameUI ? await gamePost('/api/game/tournaments',payload) : null;
+      const res = localGameUI ? new Response(JSON.stringify(localData)) : await fetch("/api/tournaments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -244,7 +248,7 @@ export default function CreateTournamentPage() {
                       </div>
                     </div>
                     <p className="text-[#9CA3AF] text-xs">
-                      El presupuesto exacto se asigna al girar la ruleta.
+                      El presupuesto y la plantilla pertenecen al equipo que recibas.
                     </p>
                   </div>
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase";
 import { createNotification, createBulkNotifications } from "@/lib/notifications";
+import { gameRpc, gameError } from "@/lib/game-server";
 
 // ─── GET /api/cron/market ─────────────────────────────────────────────────────
 // Called periodically (every 1-2 min) to handle:
@@ -10,9 +11,14 @@ import { createNotification, createBulkNotifications } from "@/lib/notifications
 // Protected by CRON_SECRET header.
 
 export async function GET(request: NextRequest) {
-  const secret = request.headers.get("x-cron-secret");
-  if (secret !== process.env.CRON_SECRET) {
+  const secret = process.env.CRON_SECRET;
+  if (!secret || (request.headers.get('Authorization') !== `Bearer ${secret}` && request.headers.get('x-cron-secret') !== secret)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  if (['local','clubs'].includes(process.env.MERCATTO_GAME_MODEL || '')) {
+    try { return NextResponse.json(await gameRpc('game_expire_markets',{p_limit:100}),{headers:{'Cache-Control':'no-store'}}); }
+    catch(error) { return gameError(error); }
   }
 
   const supabase = createServerClient();

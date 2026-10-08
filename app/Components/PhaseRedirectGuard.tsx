@@ -1,4 +1,6 @@
 "use client";
+import { legacyGameFetch as fetch } from '@/lib/legacy-game-fetch';
+import { localGameUI } from '@/lib/game-local-mode';
 
 import { useEffect, useRef } from "react";
 import { useRouter, usePathname } from "next/navigation";
@@ -6,6 +8,8 @@ import { getBrowserClient } from "@/lib/supabase-browser";
 import {
   getLastTournamentCode,
   getMemberId,
+  saveTeamAssignment,
+  clearTeamAssignment,
   clearTournamentTokens,
   saveTournamentStatus,
   saveMarketOpen,
@@ -73,14 +77,23 @@ export default function PhaseRedirectGuard() {
     // Redirects only fire on realtime status changes, not on page load.
     // This prevents the guard from bouncing the admin back to lobby when
     // they manually navigate to /squad or /feed.
-    async function fetchStatus() {
+    async function fetchStatus(redirect = false) {
       try {
         const res = await fetch(`/api/tournaments/${code}`);
         if (!res.ok) return;
         const data = await res.json();
+        if (cancelled) return;
+        if (localGameUI && Array.isArray(data.members)) {
+          const me = data.members.find((member: { id: string }) => member.id === data.myMemberId);
+          if (me?.team) saveTeamAssignment(code!, me.team.name, me.team.crestUrl);
+          else clearTeamAssignment(code!);
+        }
         if (data.status) {
-          prevStatusRef.current = data.status as TournamentStatus;
-          saveTournamentStatus(code!, data.status as TournamentStatus);
+          if (redirect) maybeRedirect(data.status as TournamentStatus);
+          else {
+            prevStatusRef.current = data.status as TournamentStatus;
+            saveTournamentStatus(code!, data.status as TournamentStatus);
+          }
         }
         if (typeof data.marketOpen === "boolean") {
           saveMarketOpen(code!, data.marketOpen);
@@ -88,6 +101,12 @@ export default function PhaseRedirectGuard() {
       } catch { /* non-blocking */ }
     }
     fetchStatus();
+    if (localGameUI) {
+      const refresh = () => { void fetchStatus(true); };
+      const timer = window.setInterval(refresh, 10000);
+      window.addEventListener('mercatto:game-change', refresh);
+      return () => { cancelled = true; clearInterval(timer); window.removeEventListener('mercatto:game-change', refresh); };
+    }
 
     // ── Realtime: instant phase changes ─────────────────────────────────
     const phaseChannel = supabase
@@ -148,7 +167,7 @@ export default function PhaseRedirectGuard() {
       if (kickChannel) supabase.removeChannel(kickChannel);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [pathname]);
 
   return null;
 }

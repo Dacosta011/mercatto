@@ -1,4 +1,6 @@
 "use client";
+import { localRefresh } from "@/lib/game-local-refresh";
+import { legacyGameFetch as fetch } from '@/lib/legacy-game-fetch';
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
@@ -154,6 +156,8 @@ export default function SubastasPage() {
   // Realtime subscription
   useEffect(() => {
     if (!code || !token) return;
+    const localCleanup = localRefresh(fetchAuctions);
+    if (localCleanup) return localCleanup;
     const sb = getBrowserClient();
 
     channelRef.current = sb
@@ -1173,6 +1177,8 @@ function AuctionDetailModal({
 
   useEffect(() => {
     if (detail.phase === "finished") return;
+    const cleanup = localRefresh(fetchDetail);
+    if (cleanup) return cleanup;
     const sb = getBrowserClient();
     const ch = sb
       .channel(`auction-detail:${auction.id}`)

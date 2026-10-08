@@ -1,0 +1,124 @@
+import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
+import { sql } from './db-local.mjs';
+import { expireLocalMarkets } from './run-game-worker-local.mjs';
+
+// Fixed loopback endpoint; cannot send credentials or mutations to a remote server.
+const base = 'http://127.0.0.1:3100';
+async function request(path, { body, token, key, expected = 200 } = {}) {
+  if(path==='/api/game/tournaments' && body)body={...body,complete:false};
+  const response = await fetch(`${base}${path}`, {
+    method: body === undefined ? 'GET' : 'POST',
+    headers: { ...(body === undefined ? {} : { 'Content-Type': 'application/json', 'Idempotency-Key': key || randomUUID() }), ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    signal: AbortSignal.timeout(120000),
+  });
+  const data = await response.json();
+  assert.equal(response.status, expected, JSON.stringify(data));
+  return data;
+}
+const createKey = randomUUID();
+const body = { name: 'Prueba HTTP A', displayName: 'Admin' };
+const a = await request('/api/game/tournaments', { body, key: createKey, expected: 201 });
+const retry = await request('/api/game/tournaments', { body, key: createKey, expected: 201 });
+assert.deepEqual(retry, a, 'Creation retry must recover same tournament and credentials');
+await request('/api/game/tournaments', { body: { ...body, name: 'Changed' }, key: createKey, expected: 409 });
+const b = await request('/api/game/tournaments', { body: { name: 'Prueba HTTP B', displayName: 'Admin' }, expected: 201 });
+const prefix = `/api/game/tournaments/${a.code}`;
+let state = await request(prefix, { token: a.memberToken });
+assert.equal(state.clubs.length, 3);
+const north = state.clubs.find(c=>c.name==='Prueba Norte');
+assert.equal(north.budget, 160000000);
+assert.equal(north.squad.length, 2);
+await request(prefix, { token: b.memberToken, expected: 403 });
+await request(`${prefix}/club`, { body: { clubId: north.id }, token: a.memberToken });
+const joinKey = randomUUID();
+const join = await request(`${prefix}/join`, { body: { displayName: 'Other' }, key: joinKey, expected: 201 });
+assert.deepEqual(await request(`${prefix}/join`, { body: { displayName: 'Other' }, key: joinKey, expected: 201 }),join);
+await request(`${prefix}/club`, { body: { clubId: north.id }, token: join.memberToken, expected: 409 });
+await request(`${prefix}/season`, { body: {}, token: join.memberToken, expected: 403 });
+const seasonKey = randomUUID();
+const next = await request(`${prefix}/season`, { body: {}, token: a.adminToken, key: seasonKey });
+assert.deepEqual(await request(`${prefix}/season`, { body: {}, token: a.adminToken, key: seasonKey }), next);
+await request(`${prefix}/club`, { body: { clubId: north.id }, token: join.memberToken });
+state = await request(prefix, { token: join.memberToken });
+assert.equal(state.season, 2);
+const inherited = state.clubs.find(c=>c.id===north.id);
+assert.equal(inherited.memberId,join.memberId);
+assert.equal(inherited.budget,north.budget);
+assert.deepEqual(inherited.squad,north.squad);
+const otherState = await request(`/api/game/tournaments/${b.code}`, { token: b.memberToken });
+assert.equal(otherState.season,1);
+assert(otherState.clubs.every(c=>c.memberId===null));
+await request(`/api/tournaments/${a.code}/spin`, { body: { teamId: north.teamId }, token: a.memberToken, expected: 410 });
+await request(`/api/tournaments/${a.code}/season/next`, { body: {}, token: a.adminToken, expected: 410 });
+// Exercise the complete new market flow through Next and PostgREST.
+const south=state.clubs.find(c=>c.name==='Prueba Sur');
+await request(`${prefix}/club`, { body: { clubId: south.id }, token: a.memberToken });
+await request(`${prefix}/market`, { body: { action:'open',kind:'summer',minutes:60 }, token: join.memberToken, expected:403 });
+const openKey=randomUUID();
+const openBody={ action:'open',kind:'summer',minutes:60 };
+const opened=await request(`${prefix}/market`, { body:openBody,token:a.adminToken,key:openKey });
+assert.deepEqual(await request(`${prefix}/market`, { body:openBody,token:a.adminToken,key:openKey }),opened);
+const player=south.squad[0];
+const offerKey=randomUUID();
+const offerBody={action:'offer',playerId:player.id,amount:20000000};
+const offer=await request(`${prefix}/market`,{body:offerBody,token:join.memberToken,key:offerKey});
+assert.deepEqual(await request(`${prefix}/market`,{body:offerBody,token:join.memberToken,key:offerKey}),offer);
+const withHold=await request(prefix,{token:join.memberToken});
+assert.equal(withHold.clubs.find(c=>c.id===north.id).reserved,20000000);
+await request(`${prefix}/market`,{body:{action:'accept',offerId:offer.offerId},token:join.memberToken,expected:403});
+const acceptKey=randomUUID();
+const accepted=await request(`${prefix}/market`,{body:{action:'accept',offerId:offer.offerId},token:a.memberToken,key:acceptKey});
+assert.deepEqual(await request(`${prefix}/market`,{body:{action:'accept',offerId:offer.offerId},token:a.memberToken,key:acceptKey}),accepted);
+state=await request(prefix,{token:join.memberToken});
+assert.equal(state.clubs.find(c=>c.id===north.id).budget,140000000);
+assert.equal(state.clubs.find(c=>c.id===south.id).budget,280000000);
+assert(state.clubs.find(c=>c.id===north.id).squad.some(p=>p.id===player.id));
+assert(!state.clubs.find(c=>c.id===south.id).squad.some(p=>p.id===player.id));
+let market=await request(`${prefix}/market`,{token:join.memberToken});
+const free=market.freePlayers[0];
+const signKey=randomUUID();
+const signed=await request(`${prefix}/market`,{body:{action:'sign',playerId:free.id,amount:1},token:join.memberToken,key:signKey});
+assert.equal(signed.amount,free.price,'Client price cannot override free-agent price');
+assert.deepEqual(await request(`${prefix}/market`,{body:{action:'sign',playerId:free.id},token:join.memberToken,key:signKey}),signed);
+await request(`${prefix}/market`,{body:{action:'sign',playerId:free.id},token:a.memberToken,expected:409});
+await request(`${prefix}/market`,{body:{action:'offer',playerId:south.squad.find(p=>p.id!==player.id).id,amount:500000000},token:join.memberToken,expected:409});
+await request(`${prefix}/season`,{body:{},token:a.adminToken,expected:409});
+market=await request(`${prefix}/market`,{token:join.memberToken});
+assert.equal(market.transfers.length,2);
+await request(`${prefix}/market`,{body:{action:'close'},token:a.adminToken});
+await request(`${prefix}/market`,{body:{action:'sign',playerId:free.id},token:a.memberToken,expected:409});
+await request(`${prefix}/market`,{body:{action:'open',kind:'winter',minutes:60},token:a.adminToken});
+market=await request(`${prefix}/market`,{token:join.memberToken});
+assert(market.limits.every(l=>l.used===0 && l.held===0));
+const remaining=south.squad.find(p=>p.id!==player.id);
+const negotiated=await request(`${prefix}/market`,{body:{action:'offer',playerId:remaining.id,amount:10000000},token:join.memberToken});
+const counterKey=randomUUID(), counterBody={action:'counter',offerId:negotiated.offerId,amount:20000000};
+const counter=await request(`${prefix}/market`,{body:counterBody,token:a.memberToken,key:counterKey});
+assert.deepEqual(await request(`${prefix}/market`,{body:counterBody,token:a.memberToken,key:counterKey}),counter);
+await request(`${prefix}/market`,{body:{action:'accept',offerId:negotiated.offerId},token:a.memberToken,expected:403});
+state=await request(prefix,{token:join.memberToken});
+assert.equal(state.clubs.find(c=>c.id===north.id).reserved,10000000);
+await request(`${prefix}/market`,{body:{action:'counter',offerId:negotiated.offerId,amount:15000000},token:join.memberToken});
+await request(`${prefix}/market`,{body:{action:'accept',offerId:negotiated.offerId},token:a.memberToken});
+state=await request(prefix,{token:join.memberToken});
+assert.equal(state.clubs.find(c=>c.id===north.id).budget,113000000);
+assert.equal(state.clubs.find(c=>c.id===south.id).budget,295000000);
+market=await request(`${prefix}/market`,{token:join.memberToken});
+assert.equal(market.offers.find(o=>o.id===negotiated.offerId).revisions.length,3);
+const pendingExpiration=await request(`${prefix}/market`,{body:{action:'offer',playerId:north.squad[0].id,amount:10000000},token:a.memberToken});
+// Advance only this disposable HTTP fixture's deadline; no real tournament is modified.
+assert.match(a.id,/^[0-9a-f-]{36}$/);
+sql(`UPDATE game.market_windows SET opens_at=clock_timestamp()-interval '2 minutes',closes_at=clock_timestamp()-interval '1 minute' WHERE tournament_id='${a.id}' AND status='open';`);
+await expireLocalMarkets();
+market=await request(`${prefix}/market`,{token:join.memberToken});
+assert.equal(market.window.status,'closed');
+assert.equal(market.offers.find(o=>o.id===pendingExpiration.offerId).status,'expired');
+state=await request(prefix,{token:a.memberToken});
+assert(state.clubs.every(c=>c.reserved===0));
+await request(`${prefix}/season`,{body:{},token:a.adminToken});
+console.log('Local counter HTTP tests passed: alternating responses, reservations, history and actual worker RPC expiration.');
+console.log('Local market HTTP tests passed: offers/consent, holds, atomic payment/ownership, server prices, quotas and window closure.');
+console.log('Local HTTP tests passed: atomic creation/retries, authentication, assignment, season continuity and legacy isolation.');
+console.log('Two local prototype tournaments retained as test data. No credentials printed.');

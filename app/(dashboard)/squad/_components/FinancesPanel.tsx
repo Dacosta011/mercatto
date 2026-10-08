@@ -1,4 +1,5 @@
 "use client";
+import { legacyGameFetch as fetch } from '@/lib/legacy-game-fetch';
 
 import { useEffect, useState, type ReactNode } from "react";
 import { motion, AnimatePresence } from "motion/react";
@@ -130,7 +131,7 @@ export default function FinancesPanel({ code, token, onClose }: Props) {
   }, [code, token]);
 
   const inDebt = data ? data.budget < 0 : false;
-  const matchesPlayed = data ? Math.max(0, data.league.currentMatchday - 1) : 0;
+  const matchesPlayed = data ? (data.league.status === 'finished' ? data.league.totalMatchdays : Math.max(0, data.league.currentMatchday - 1)) : 0;
   const matchesRemaining = data ? Math.max(0, data.league.totalMatchdays - matchesPlayed) : 0;
 
   return (

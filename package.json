@@ -3,10 +3,25 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "catalog:sofifa:browser": "node scripts/sync-sofifa-browser-local.mjs --apply",
+    "catalog:sofifa:preview": "node scripts/sync-sofifa-local.mjs",
+    "catalog:sofifa:sync": "node scripts/sync-sofifa-local.mjs --apply",
+    "test:sofifa:local": "node scripts/test-sofifa-import-local.mjs",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:local:status": "node scripts/db-local.mjs status",
+    "db:local:backup": "node scripts/db-local.mjs backup",
+    "db:local:migrate": "node scripts/db-local.mjs migrate",
+    "test:db:local": "node scripts/test-db-local.mjs",
+    "game:local:setup": "node scripts/setup-game-local.mjs",
+    "test:game:local": "node scripts/test-game-http-local.mjs",
+    "game:local:worker": "node scripts/run-game-worker-local.mjs",
+    "test:clause:local": "node scripts/test-clause-http-local.mjs",
+    "test:auction:local": "node scripts/test-auction-http-local.mjs",
+    "test:competition:local": "node scripts/test-competition-http-local.mjs",
+    "audit:game:local": "node scripts/audit-game-local.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

@@ -1,4 +1,4 @@
-const CACHE_NAME = "mercatto-v1";
+const CACHE_NAME = "mercatto-v2";
 const OFFLINE_URL = "/offline.html";
 
 const PRECACHE = [OFFLINE_URL, "/icon.svg"];
@@ -34,6 +34,8 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET") return;
 
   const url = new URL(request.url);
+  // Development chunks have reusable URLs; caching them can revive obsolete UI code.
+  if (["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)) return;
 
   // API requests — always network, never cache
   if (url.pathname.startsWith("/api/")) return;

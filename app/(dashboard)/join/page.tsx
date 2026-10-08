@@ -1,4 +1,7 @@
 "use client";
+import { legacyGameFetch as fetch } from '@/lib/legacy-game-fetch';
+import { localGameUI } from '@/lib/game-local-mode';
+import { gamePost } from '@/lib/game-ui-client';
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -7,6 +10,7 @@ import { motion, AnimatePresence } from "motion/react";
 import Link from "next/link";
 import FormInput from "../../Components/FormInput";
 import {
+  clearAdminToken,
   saveMemberToken,
   saveMemberId,
   saveUserProfile,
@@ -207,7 +211,8 @@ function JoinForm() {
     setLoading(true);
 
     try {
-      const res = await fetch(`/api/tournaments/${code.trim()}/join`, {
+      const localData = localGameUI ? await gamePost(`/api/game/tournaments/${encodeURIComponent(code.trim())}/join`,{displayName:displayName.trim()}) : null;
+      const res = localGameUI ? new Response(JSON.stringify({...localData,displayName:displayName.trim()})) : await fetch(`/api/tournaments/${code.trim()}/join`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ displayName: displayName.trim() }),
@@ -220,6 +225,7 @@ function JoinForm() {
         return;
       }
 
+      if(localGameUI) clearAdminToken(data.code);
       saveMemberToken(data.code, data.memberToken);
       if (data.memberId) saveMemberId(data.code, data.memberId);
       saveUserProfile(data.code, displayName.trim(), "member");

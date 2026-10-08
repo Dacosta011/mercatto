@@ -1,4 +1,6 @@
 "use client";
+import { legacyGameFetch as fetch } from '@/lib/legacy-game-fetch';
+import { localGameUI } from '@/lib/game-local-mode';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -37,6 +39,7 @@ export default function RoulettePage() {
   const [pendingTeam, setPendingTeam] = useState<Team & { budget?: number } | null>(null);
   const [errorMsg,    setErrorMsg]    = useState("");
   const [isSpinning,  setIsSpinning]  = useState(false);
+  const [serverWinner, setServerWinner] = useState<Team | null>(null);
 
   // Reroll state — `rerollsUsedInDB` is the single source of truth. Each reroll
   // is PATCHed to the server before the animation starts, so reload no longer
@@ -80,6 +83,7 @@ export default function RoulettePage() {
 
     const res  = await fetch(`/api/tournaments/${code}/spin`, { headers: { Authorization: `Bearer ${token}` } });
     const data = await res.json();
+    if (!res.ok) { setErrorMsg(data.error || 'No se pudo cargar la asignación.'); setPhase('error'); return; }
 
     const allowed   = data.rerollsAllowed ?? 0;
     const usedInDB  = data.rerollsUsed    ?? 0;
@@ -100,6 +104,7 @@ export default function RoulettePage() {
     try {
       const r     = await fetch(`/api/tournaments/${code}/teams`);
       const teamsData = await r.json();
+      if (!r.ok) throw new Error(teamsData.error || 'No se pudieron cargar los equipos.');
       let teams: Team[] = Array.isArray(teamsData) ? teamsData : [];
 
       if (data.assigned && data.team && !teams.find((t: Team) => t.id === data.team.id)) {
@@ -136,6 +141,7 @@ export default function RoulettePage() {
 
   // Realtime: listen for ALL assignment changes (INSERT, UPDATE, DELETE)
   useEffect(() => {
+    if (localGameUI) return;
     const supabase = getBrowserClient();
 
     supabase
@@ -179,10 +185,29 @@ export default function RoulettePage() {
     setPhase("spinning");
   };
 
-  const handleFirstSpin = () => startSpin(availableTeams);
+  const serverSpin = async () => {
+    if (spinning.current) return;
+    spinning.current = true;
+    try {
+      const res = await fetch(`/api/tournaments/${code}/spin`, { method: 'PATCH' });
+      const data = await res.json();
+      if (!res.ok || !data.team) throw new Error(data.error || 'No se pudo asignar el equipo.');
+      setServerWinner(data.team);
+      setRerollsUsedInDB(data.rerollsUsed);
+      setIsSpinning(true);
+      setPhase('spinning');
+    } catch (error) {
+      spinning.current = false;
+      setErrorMsg(error instanceof Error ? error.message : 'Error de conexión.');
+      setPhase('error');
+    }
+  };
+
+  const handleFirstSpin = () => localGameUI ? serverSpin() : startSpin(availableTeams);
 
   const handleReroll = async () => {
     if (rerollsRemaining <= 0 || spinning.current) return;
+    if (localGameUI) return serverSpin();
     const token = getToken();
     if (!token) return;
 
@@ -356,7 +381,7 @@ export default function RoulettePage() {
             )}
             <SlotStrip
               teams={availableTeams}
-              availableTeams={availableTeams}
+              availableTeams={localGameUI && serverWinner ? [serverWinner] : availableTeams}
               spinning={isSpinning}
               onTeamSelected={handleTeamSelected}
             />

@@ -1,4 +1,5 @@
 "use client";
+import { legacyGameFetch as fetch } from '@/lib/legacy-game-fetch';
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import SlotReel from "./SlotReel";
 import type { SlotPrize } from "@/app/api/slot-machine/prizes/route";

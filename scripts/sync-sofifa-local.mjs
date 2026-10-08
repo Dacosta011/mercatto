@@ -1,0 +1,20 @@
+import {spawnSync} from 'node:child_process';
+import {existsSync,mkdirSync,readFileSync} from 'node:fs';
+import {homedir} from 'node:os';
+import {resolve} from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {assertLocal} from './db-local.mjs';
+import {importSnapshot,configureLocalCatalogue} from './import-sofifa-local.mjs';
+
+if(process.argv.slice(2).some(a=>a!=='--apply'))throw new Error('Usage: node scripts/sync-sofifa-local.mjs [--apply]');
+assertLocal();
+const root=fileURLToPath(new URL('../',import.meta.url));
+const bundled=resolve(homedir(),'.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe');
+const python=process.env.MERCATTO_PYTHON||(existsSync(bundled)?bundled:process.platform==='win32'?'py':'python3');
+mkdirSync(resolve(root,'.local-db/sofifa'),{recursive:true});
+const snapshot=resolve(root,`.local-db/sofifa/latest-${Date.now()}.json`);
+const run=spawnSync(python,[resolve(root,'scripts/scrape_sofifa.py'),'--output',snapshot],{stdio:'inherit'});
+if(run.error)throw run.error;
+if(run.status!==0)throw new Error('SoFIFA download failed. Database unchanged; no previous snapshot was imported.');
+console.log(importSnapshot(JSON.parse(readFileSync(snapshot,'utf8')),{apply:process.argv.includes('--apply')}));
+if(process.argv.includes('--apply'))configureLocalCatalogue();

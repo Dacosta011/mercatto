@@ -1,4 +1,5 @@
 "use client";
+import { legacyGameFetch as fetch } from '@/lib/legacy-game-fetch';
 
 import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";

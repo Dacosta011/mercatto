@@ -1,4 +1,5 @@
 "use client";
+import { legacyGameFetch as fetch } from '@/lib/legacy-game-fetch';
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
@@ -847,7 +848,11 @@ export default function FeedPage() {
 
   const handleVerify = useCallback(async (postId: string) => {
     if (!code || !token || !activeProfile) return;
-    // Optimistic update
+    try {
+      const response = await fetch(`/api/tournaments/${code}/social/profile/verify`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) { alert((await response.json()).error || 'No se pudo verificar el perfil.'); return; }
     setActiveProfile((p) => p ? { ...p, verified: true } : p);
     setProfiles((prev) => prev.map((p) => p.id === activeProfile.id ? { ...p, verified: true } : p));
     setPosts((prev) =>
@@ -857,12 +862,8 @@ export default function FeedPage() {
           : p
       )
     );
-    try {
-      await fetch(`/api/tournaments/${code}/social/profile/verify`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-    } catch { /* silent fail — badge stays optimistic */ }
+    } catch { alert('No se pudo conectar con el servidor.'); }
+
   }, [code, token, activeProfile]);
 
   const handleNewPost = (post: Post) => { setPosts((prev) => [post, ...prev]); };

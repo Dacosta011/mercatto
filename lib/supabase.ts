@@ -106,12 +106,16 @@ export async function verifyMemberToken(
   // 2) Verificar que el torneo corresponde al code del URL
   const { data: tournament, error: tErr } = await supabase
     .from("tournaments")
-    .select("code")
+    .select("code, status")
     .eq("id", member.tournament_id)
     .single();
 
   if (tErr || !tournament) {
     return { ok: false, status: 403, error: "Torneo no encontrado." };
+  }
+
+  if (tournament.status === "prototype") {
+    return { ok: false, status: 409, error: "Este torneo utiliza el flujo local de clubes." };
   }
 
   if ((tournament.code as string).toUpperCase() !== tournamentCode.toUpperCase()) {
@@ -138,12 +142,16 @@ export async function verifyAdminToken(
   const supabase = createServerClient();
   const { data, error } = await supabase
     .from("tournaments")
-    .select("id, admin_token_hash")
+    .select("id, admin_token_hash, status")
     .eq("code", tournamentCode.toUpperCase())
     .single();
 
   if (error || !data) {
     return { ok: false, status: 404, error: "Torneo no encontrado." };
+  }
+
+  if (data.status === "prototype") {
+    return { ok: false, status: 409, error: "Este torneo utiliza el flujo local de clubes." };
   }
 
   const tokenHash = hashToken(token);

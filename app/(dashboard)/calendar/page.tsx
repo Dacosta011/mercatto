@@ -1,4 +1,6 @@
 "use client";
+import { localRefresh } from "@/lib/game-local-refresh";
+import { legacyGameFetch as fetch } from '@/lib/legacy-game-fetch';
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
@@ -170,6 +172,8 @@ export default function CalendarPage() {
 
   useEffect(() => {
     if (!code || !token) return;
+    const localCleanup = localRefresh(() => fetchData(true));
+    if (localCleanup) { void fetchData(false); return localCleanup; }
     const supabase = getBrowserClient();
 
     fetchData(false).then(() => {
@@ -196,9 +200,10 @@ export default function CalendarPage() {
     if (!code || !token) return;
     setSubmitting(true);
     try {
-      await fetch(`/api/tournaments/${code}/league/fixtures/${fixtureId}/confirm-start`, {
+      const actionResponse = await fetch(`/api/tournaments/${code}/league/fixtures/${fixtureId}/confirm-start`, {
         method: "POST", headers: { Authorization: `Bearer ${token}` },
       });
+      if (!actionResponse.ok) { setError((await actionResponse.json()).error || 'No se pudo completar la acción.'); return; }
       await fetchData(true);
     } finally { setSubmitting(false); }
   };
@@ -239,11 +244,12 @@ export default function CalendarPage() {
               awayGoals: Math.max(0, parseInt(form.awayGoals) || 0),
               cards: form.cards,
             };
-      await fetch(`/api/tournaments/${code}/league/fixtures/${fixtureId}/result`, {
+      const actionResponse = await fetch(`/api/tournaments/${code}/league/fixtures/${fixtureId}/result`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify(body),
       });
+      if (!actionResponse.ok) { setError((await actionResponse.json()).error || 'No se pudo completar la acción.'); return; }
       setActiveModal(null);
       await fetchData(true);
     } finally { setSubmitting(false); }
@@ -253,7 +259,7 @@ export default function CalendarPage() {
     if (!code || !adminToken) return;
     setSubmitting(true);
     try {
-      await fetch(`/api/tournaments/${code}/league/fixtures/${fixtureId}/result`, {
+      const actionResponse = await fetch(`/api/tournaments/${code}/league/fixtures/${fixtureId}/result`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
         body: JSON.stringify({
@@ -262,6 +268,7 @@ export default function CalendarPage() {
           cards: form.cards,
         }),
       });
+      if (!actionResponse.ok) { setError((await actionResponse.json()).error || 'No se pudo completar la acción.'); return; }
       setActiveModal(null);
       await fetchData(true);
     } finally { setSubmitting(false); }
@@ -271,9 +278,10 @@ export default function CalendarPage() {
     if (!code || !adminToken) return;
     setClosingMatchday(true);
     try {
-      await fetch(`/api/tournaments/${code}/league/close-matchday`, {
+      const actionResponse = await fetch(`/api/tournaments/${code}/league/close-matchday`, {
         method: "POST", headers: { Authorization: `Bearer ${adminToken}` },
       });
+      if (!actionResponse.ok) { setError((await actionResponse.json()).error || 'No se pudo completar la acción.'); return; }
       await fetchData(true);
     } finally { setClosingMatchday(false); }
   };
@@ -282,17 +290,19 @@ export default function CalendarPage() {
     if (!code) return;
     const authToken = force ? adminToken : token;
     if (!authToken) return;
-    await fetch(`/api/tournaments/${code}/league/fixtures/${fixtureId}/postpone`, {
-      method: "POST", headers: { Authorization: `Bearer ${authToken}` },
+    const actionResponse = await fetch(`/api/tournaments/${code}/league/fixtures/${fixtureId}/postpone`, {
+      method: "POST", headers: { Authorization: `Bearer ${authToken}`, "Content-Type": "application/json" }, body: JSON.stringify({ force }),
     });
+    if (!actionResponse.ok) { setError((await actionResponse.json()).error || 'No se pudo completar la acción.'); return; }
     await fetchData(true);
   };
 
   const cancelPostpone = async (fixtureId: string) => {
     if (!code || !token) return;
-    await fetch(`/api/tournaments/${code}/league/fixtures/${fixtureId}/postpone`, {
+    const actionResponse = await fetch(`/api/tournaments/${code}/league/fixtures/${fixtureId}/postpone`, {
       method: "DELETE", headers: { Authorization: `Bearer ${token}` },
     });
+    if (!actionResponse.ok) { setError((await actionResponse.json()).error || 'No se pudo completar la acción.'); return; }
     await fetchData(true);
   };
 
@@ -300,17 +310,19 @@ export default function CalendarPage() {
     if (!code) return;
     const authToken = force ? adminToken : token;
     if (!authToken) return;
-    await fetch(`/api/tournaments/${code}/league/fixtures/${fixtureId}/reactivate`, {
-      method: "POST", headers: { Authorization: `Bearer ${authToken}` },
+    const actionResponse = await fetch(`/api/tournaments/${code}/league/fixtures/${fixtureId}/reactivate`, {
+      method: "POST", headers: { Authorization: `Bearer ${authToken}`, "Content-Type": "application/json" }, body: JSON.stringify({ force }),
     });
+    if (!actionResponse.ok) { setError((await actionResponse.json()).error || 'No se pudo completar la acción.'); return; }
     await fetchData(true);
   };
 
   const cancelReactivate = async (fixtureId: string) => {
     if (!code || !token) return;
-    await fetch(`/api/tournaments/${code}/league/fixtures/${fixtureId}/reactivate`, {
+    const actionResponse = await fetch(`/api/tournaments/${code}/league/fixtures/${fixtureId}/reactivate`, {
       method: "DELETE", headers: { Authorization: `Bearer ${token}` },
     });
+    if (!actionResponse.ok) { setError((await actionResponse.json()).error || 'No se pudo completar la acción.'); return; }
     await fetchData(true);
   };
 
@@ -387,6 +399,7 @@ export default function CalendarPage() {
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}
       className="px-4 py-5 lg:p-8 max-w-5xl mx-auto">
+      {error && <p role="alert" className="text-[#EF4444] text-sm mb-4">{error}</p>}
 
       {/* Header */}
       <div className="flex flex-col gap-3 mb-5 lg:mb-8">

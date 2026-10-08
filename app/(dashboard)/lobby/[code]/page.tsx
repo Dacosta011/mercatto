@@ -1,4 +1,7 @@
 "use client";
+import { localRefresh } from "@/lib/game-local-refresh";
+import { localGameUI } from '@/lib/game-local-mode';
+import { legacyGameFetch as fetch } from '@/lib/legacy-game-fetch';
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -358,7 +361,7 @@ export default function LobbyPage() {
   };
 
   // Iniciar nueva temporada (mismo lobby, todos vuelven a spinear,
-  // los fichajes se materializan en team_players)
+  // cada club conserva sus contratos y presupuesto dentro del torneo).
   const handleStartNextSeason = async () => {
     if (!adminToken) return;
     setStartingNextSeason(true);
@@ -405,6 +408,8 @@ export default function LobbyPage() {
   useEffect(() => {
     if (!tournament?.id) return;
 
+    const localCleanup = localRefresh(() => fetchTournament(true));
+    if (localCleanup) return localCleanup;
     const supabase = getBrowserClient();
     const onDbChange = () => fetchTournament(true);
 
@@ -764,16 +769,16 @@ export default function LobbyPage() {
             <AdminAction
               icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v4"/><path d="M12 18v4"/><path d="M4.93 4.93l2.83 2.83"/><path d="M16.24 16.24l2.83 2.83"/><path d="M2 12h4"/><path d="M18 12h4"/><path d="M4.93 19.07l2.83-2.83"/><path d="M16.24 7.76l2.83-2.83"/></svg>}
               label="Nueva Temporada"
-              description="Archiva la temporada, materializa los fichajes y abre el lobby para volver a spinear"
+              description="Archiva la temporada y abre el lobby para volver a sortear; cada equipo conserva su plantilla y presupuesto"
               color="#22C55E"
               glow
               available={
                 tournament.lastLeagueFinished &&
-                (tournament.status === "lobby" || tournament.status === "league")
+                (tournament.status === "lobby" || tournament.status === "league" || (localGameUI && tournament.status === "complete"))
               }
               unavailableReason={
                 !tournament.lastLeagueFinished ? "Solo cuando la liga ha finalizado" :
-                tournament.status === "complete" ? "El torneo ya está cerrado" :
+                tournament.status === "complete" ? (localGameUI ? undefined : "El torneo ya está cerrado") :
                 tournament.status === "market" ? "Cierra el mercado primero" :
                 tournament.status !== "lobby" && tournament.status !== "league"
                   ? "El torneo debe estar en lobby"
@@ -831,6 +836,11 @@ export default function LobbyPage() {
                 if (!tournament) return;
                 setSavingSlotPrice(true);
                 try {
+                  if (localGameUI) {
+                    const res = await fetch(`/api/tournaments/${code}/settings`, {method:'PATCH',headers:{Authorization:`Bearer ${getAdminToken(code)}`,'Content-Type':'application/json'},body:JSON.stringify({slotMachinePrice:slotPrice})});
+                    if (!res.ok) setError((await res.json()).error);
+                    return;
+                  }
                   const { createClient } = await import("@supabase/supabase-js");
                   const sb = createClient(
                     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -851,6 +861,12 @@ export default function LobbyPage() {
                     if (!tournament) return;
                     setTogglingSlots(true);
                     try {
+                      if (localGameUI) {
+                        const res = await fetch(`/api/tournaments/${code}/settings`, {method:'PATCH',headers:{Authorization:`Bearer ${getAdminToken(code)}`,'Content-Type':'application/json'},body:JSON.stringify({slotsEnabled:!slotsEnabled})});
+                        if (res.ok) setSlotsEnabled(!slotsEnabled);
+                        else setError((await res.json()).error);
+                        return;
+                      }
                       const sb = (await import("@/lib/supabase-browser")).getBrowserClient();
                       const newVal = !slotsEnabled;
                       await sb.from("tournaments").update({ slots_enabled: newVal }).eq("id", tournament.id);

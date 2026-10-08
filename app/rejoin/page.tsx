@@ -15,6 +15,7 @@ import {
   clearAdminToken,
 } from "@/lib/tokenStorage";
 import type { TournamentStatus } from "@/lib/tokenStorage";
+import { localGameUI } from '@/lib/game-local-mode';
 
 function RejoinContent() {
   const router = useRouter();
@@ -32,7 +33,10 @@ function RejoinContent() {
       setError(null);
 
       try {
-        const res = await fetch(`/api/tournaments/${c.trim()}/rejoin`, {
+        const localResponse = localGameUI ? await fetch(`/api/game/tournaments/${encodeURIComponent(c.trim())}`,{headers:{Authorization:`Bearer ${t.trim()}`},cache:'no-store'}) : null;
+        const localState = localResponse ? await localResponse.json() : null;
+        const localData = localResponse?.ok ? {...localState,displayName:localState.members.find((m:{id:string})=>m.id===localState.memberId)?.name,team:localState.clubs.find((cl:{memberId:string})=>cl.memberId===localState.memberId)} : localState;
+        const res = localGameUI ? new Response(JSON.stringify(localData),{status:localResponse!.status}) : await fetch(`/api/tournaments/${c.trim()}/rejoin`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ token: t.trim() }),
@@ -56,6 +60,9 @@ function RejoinContent() {
         saveMemberId(data.code, data.memberId);
         if (data.team) {
           saveTeamAssignment(data.code, data.team.name, data.team.crestUrl);
+        } else {
+          localStorage.removeItem(`mercatto:team:${data.code}`);
+          localStorage.removeItem(`mercatto:teamCrest:${data.code}`);
         }
         if (data.tournamentStatus) {
           saveTournamentStatus(

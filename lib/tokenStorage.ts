@@ -30,6 +30,10 @@ export function clearAdminToken(tournamentCode: string) {
 // ─── Member token ─────────────────────────────────────────────────────────────
 
 export function saveMemberToken(tournamentCode: string, token: string) {
+  if (localStorage.getItem(MEMBER_KEY(tournamentCode)) !== token) {
+    localStorage.removeItem(TEAM_KEY(tournamentCode));
+    localStorage.removeItem(TEAM_CREST_KEY(tournamentCode));
+  }
   localStorage.setItem(MEMBER_KEY(tournamentCode), token);
   localStorage.setItem(LAST_TOURNAMENT_KEY, tournamentCode);
 }
@@ -48,10 +52,16 @@ const TEAM_CREST_KEY = (tournamentCode: string) =>
 export function saveTeamAssignment(tournamentCode: string, teamName: string, crestUrl?: string | null) {
   localStorage.setItem(TEAM_KEY(tournamentCode), teamName);
   if (crestUrl) localStorage.setItem(TEAM_CREST_KEY(tournamentCode), crestUrl);
+  else localStorage.removeItem(TEAM_CREST_KEY(tournamentCode));
 }
 
 export function getTeamAssignment(tournamentCode: string): string | null {
   return localStorage.getItem(TEAM_KEY(tournamentCode));
+}
+
+export function clearTeamAssignment(tournamentCode: string) {
+  localStorage.removeItem(TEAM_KEY(tournamentCode));
+  localStorage.removeItem(TEAM_CREST_KEY(tournamentCode));
 }
 
 export function getTeamCrest(tournamentCode: string): string | null {

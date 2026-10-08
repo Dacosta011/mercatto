@@ -1,4 +1,5 @@
 "use client";
+import { legacyGameFetch as fetch } from '@/lib/legacy-game-fetch';
 
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
@@ -123,7 +124,7 @@ export default function SquadPage() {
 
         if (lineupData.formation && lineupData.slots) {
           const savedFormation = lineupData.formation as string;
-          if (["4-3-3", "4-4-2", "4-2-3-1", "3-5-2"].includes(savedFormation)) {
+          if ((FORMATION_IDS as readonly string[]).includes(savedFormation)) {
             setFormationId(savedFormation as FormationId);
             const savedSlots = lineupData.slots as Record<string, string | null>;
             const playerMap = new Map(sq.players.map((p) => [p.id, p]));

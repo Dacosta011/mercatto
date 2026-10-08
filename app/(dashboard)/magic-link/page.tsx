@@ -1,4 +1,5 @@
 "use client";
+import { legacyGameFetch as fetch } from '@/lib/legacy-game-fetch';
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion } from "motion/react";
