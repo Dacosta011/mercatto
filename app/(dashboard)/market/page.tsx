@@ -838,7 +838,7 @@ export default function MarketPage() {
       p.teamName.toLowerCase().includes(searchQ.toLowerCase()) ||
       p.ownerName.toLowerCase().includes(searchQ.toLowerCase());
     return matchPos && matchTeam && matchSearch;
-  });
+  }).sort((a, b) => b.ovr - a.ovr);
 
   const isAdmin = !!adminToken;
   const canAct = data.myStatus.purchasesUsed < data.myStatus.maxPurchases;
